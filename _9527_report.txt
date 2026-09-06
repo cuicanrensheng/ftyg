@@ -1,0 +1,421 @@
+===== [00:26:03] (debug) <SourceHealthChecker> =====
+加载失败记录: 0 条
+
+===== [00:26:03] (info) <MyApplication> =====
+全局异常上报初始化完成（Bugly 已移除）
+
+===== [00:26:03] (warn) <EncryptedStorage> =====
+加密失败: Caller-provided IV not permitted
+
+===== [00:26:03] (warn) <EncryptedStorage> =====
+加密失败: Caller-provided IV not permitted
+
+===== [00:26:03] (warn) <EncryptedStorage> =====
+加密失败: Caller-provided IV not permitted
+
+===== [00:26:03] (info) <MyApplication> =====
+SSL 证书管理器初始化完成
+
+===== [00:26:03] (info) <SSLCertPinner> =====
+SSL证书管理器初始化完成，已存储 0 个域名证书
+
+===== [00:26:05] (warn) <ChannelPanel> =====
+SDK 固定分组预加载失败: SDK 未初始化完成（用户点击分组时仍会走单组拉取）
+
+===== [00:26:05] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:05] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:05] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:05] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=5
+
+===== [00:26:06] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+
+===== [00:26:06] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:06] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+
+===== [00:26:06] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:06] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:06] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+
+===== [00:26:06] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:06] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=8
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:06] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:06] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=8
+
+===== [00:26:06] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:07] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:07] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:07] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:07] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=9
+
+===== [00:26:07] (warn) <NetUtil> =====
+敏感请求异常响应: www.huya.com -> 503
+
+===== [00:26:07] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，响应码：503
+
+===== [00:26:07] (warn) <NetUtil> =====
+异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=9
+
+===== [00:26:07] (debug) <HuyaTogetherWatch> =====
+Cache API 请求失败，延迟后重试 (1/3)
+
+===== [00:26:07] (info) <HuyaSDKParser> =====
+✅ 虎牙 Mars 原生库预检通过
+
+===== [00:26:07] (debug) <HuyaSDKParser> =====
+  ✅ loadLibrary("marsstn") 成功
+
+===== [00:26:07] (info) <HuyaSDKParser> =====
+[设备指纹] UDB host 已改写指向 127.0.0.1 → udbdf.huya.com 等上报全部失效 ✅
+
+===== [00:26:07] (info) <HuyaSDKParser> =====
+  ✅ HuyaBerryConfig.Builder 链路构建完成（含官方精简开关）
+
+===== [00:26:07] (debug) <HuyaSDKParser> =====
+[1/4] 准备构建 HuyaBerryConfig.Builder
+
+===== [00:26:07] (info) <SdkCompatHook> =====
+✅ 已中和 BaseApi.crashIfDebug（sOnCrashListener=null），SDK init 不再因非致命错误抛异常
+
+===== [00:26:07] (debug) <HuyaSDKParser> =====
+[2/4] HuyaBerryConfig build 完成
+
+===== [00:26:07] (warn) <ChannelPanel> =====
+SDK 固定分组预加载失败: 正在获取中，请稍候（用户点击分组时仍会走单组拉取）
+
+===== [00:26:07] (info) <HuyaSDKParser> =====
+✅ HuyaBerry SDK 初始化 & 绑定完成
+
+===== [00:26:07] (info) <HuyaSDKParser> =====
+✅ HuyaBerry SDK 初始化成功 (init 无异常)
+
+===== [00:26:07] (network) <HuyaSDKParser> =====
+【App】✅ BerryEvent 事件代理已注册
+
+===== [00:26:07] (network) <HuyaSDKParser> =====
+【App】✅ BerryEvent 事件代理已注册
+
+===== [00:26:08] (debug) <HuyaSDKParser> =====
+V33DBG room=11342412 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@56b5711, com.huya.berry.module.Player.SMObject$BitRateInfo@b617076, com.huya.berry.module.Player.SMObject$BitRateInfo@a050677, com.huya.berry.module.Player.SMObject$BitRateInfo@32632e4]
+
+===== [00:26:08] (debug) <HuyaSDKParser> =====
+V33DBG room=11342412 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@56b5711, com.huya.berry.module.Player.SMObject$BitRateInfo@b617076, com.huya.berry.module.Player.SMObject$BitRateInfo@a050677, com.huya.berry.module.Player.SMObject$BitRateInfo@32632e4]
+
+===== [00:26:08] (debug) <HuyaSDKParser> =====
+V33DBG room=11342412 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@2069b38
+
+===== [00:26:09] (info) <HuyaSDKParser-DebugChecker> =====
+
+================ 🔬【自检结果汇总】✅ 通过（检查项 passed=3/3）================
+  ℹ️  检查项1【播放器类加载】：ClassNotFound 4/6（debug minifyEnabled=false 属正常，release 会全部消失）
+  ⚠️  CLASS 还能加载（debug 阶段正常，release R8 会剥离）：com.huya.berry.sdkplayer.SdkPlayerService
+  ⚠️  CLASS 还能加载（debug 阶段正常，release R8 会剥离）：com.huya.berry.sdkplayer.floats.view.PlayerActivity
+========================================================
+  🎉 豆包判断标准输出：✅ 正常：未检测到播放器模块
+     解释：方案1 官方开关 + 方案2 R8 播放器类 dontwarn 全部生效
+     Release 阶段 R8 会把未加载类全部剥离 dex，再省 ≈0....[已截断]
+
+===== [00:26:09] (info) <HuyaSDKParser-DebugChecker> =====
+  ✅ 检查项3【so 内存加载】：/proc/self/maps 中无 libberry_player/decoder/ijk 等 mmap 记录（运行内存真·省下）
+
+===== [00:26:09] (debug) <HuyaSDKParser> =====
+V33DBG room=11342421 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e1a0a5b, com.huya.berry.module.Player.SMObject$BitRateInfo@da052f8, com.huya.berry.module.Player.SMObject$BitRateInfo@a5b13d1]
+
+===== [00:26:09] (debug) <HuyaSDKParser> =====
+V33DBG room=11342421 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e1a0a5b, com.huya.berry.module.Player.SMObject$BitRateInfo@da052f8, com.huya.berry.module.Player.SMObject$BitRateInfo@a5b13d1]
+
+===== [00:26:09] (debug) <HuyaSDKParser> =====
+V33DBG room=11342421 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@a02456a
+
+===== [00:26:10] (debug) <HuyaSDKParser> =====
+V33DBG room=11601986 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@4311fc6]
+
+===== [00:26:10] (debug) <HuyaSDKParser> =====
+V33DBG room=11601986 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@4311fc6]
+
+===== [00:26:10] (debug) <HuyaSDKParser> =====
+V33DBG room=11601986 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@619f1a1
+
+===== [00:26:11] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): https://vip.ffzy-play7.com/20230112/11082_fde1a94d/index.m3u8 → unexpected end of stream on com.android.okhttp.Address@7a1558
+
+===== [00:26:12] (debug) <HuyaSDKParser> =====
+V33DBG room=21059607 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@96aa761]
+
+===== [00:26:12] (debug) <HuyaSDKParser> =====
+V33DBG room=21059607 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@96aa761]
+
+===== [00:26:12] (debug) <HuyaSDKParser> =====
+V33DBG room=21059607 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@e4abac8
+
+===== [00:26:13] (debug) <HuyaSDKParser> =====
+V33DBG room=11601968 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@cdf2cb3]
+
+===== [00:26:13] (debug) <HuyaSDKParser> =====
+V33DBG room=11601968 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@cdf2cb3]
+
+===== [00:26:13] (debug) <HuyaSDKParser> =====
+V33DBG room=11601968 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@5e79a22
+
+===== [00:26:15] (debug) <HuyaSDKParser> =====
+V33DBG room=880261 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@d92012e]
+
+===== [00:26:15] (debug) <HuyaSDKParser> =====
+V33DBG room=880261 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@d92012e]
+
+===== [00:26:15] (debug) <HuyaSDKParser> =====
+V33DBG room=880261 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@c6557a9
+
+===== [00:26:16] (debug) <HuyaSDKParser> =====
+V33DBG room=11342427 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@13a668d]
+
+===== [00:26:16] (debug) <HuyaSDKParser> =====
+V33DBG room=11342427 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@13a668d]
+
+===== [00:26:16] (debug) <HuyaSDKParser> =====
+V33DBG room=11342427 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@68a8b24
+
+===== [00:26:18] (debug) <HuyaSDKParser> =====
+V33DBG room=11336587 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@ef22f6d]
+
+===== [00:26:18] (debug) <HuyaSDKParser> =====
+V33DBG room=11336587 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@ef22f6d]
+
+===== [00:26:18] (debug) <HuyaSDKParser> =====
+V33DBG room=11336587 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@f526b84
+
+===== [00:26:19] (debug) <AppCoreManager> =====
+【加载】超时，自动隐藏加载动画
+
+===== [00:26:19] (debug) <HuyaSDKParser> =====
+V33DBG room=11602058 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3fbd176]
+
+===== [00:26:19] (debug) <HuyaSDKParser> =====
+V33DBG room=11602058 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3fbd176]
+
+===== [00:26:19] (debug) <HuyaSDKParser> =====
+V33DBG room=11602058 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3fbd176]
+
+===== [00:26:19] (debug) <HuyaSDKParser> =====
+V33DBG room=11602058 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@a5e9c11
+
+===== [00:26:20] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=29982675 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:20] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342412 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:20] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342386 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:20] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342390 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352876 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11601968 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059581 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342424 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <HuyaSDKParser> =====
+V33DBG room=11282233 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@825c875]
+
+===== [00:26:21] (debug) <HuyaSDKParser> =====
+V33DBG room=11282233 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@825c875]
+
+===== [00:26:21] (debug) <HuyaSDKParser> =====
+V33DBG room=11282233 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@4f023ac
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11602058 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342435 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342421 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:21] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342427 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352941 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11601986 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059577 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059574 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352935 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352962 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059585 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=30080229 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059579 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:22] (debug) <HuyaSDKParser> =====
+V33DBG room=11342386 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@dee80c]
+
+===== [00:26:22] (debug) <HuyaSDKParser> =====
+V33DBG room=11342386 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@dee80c]
+
+===== [00:26:22] (debug) <HuyaSDKParser> =====
+V33DBG room=11342386 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@c18373f
+
+===== [00:26:23] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342428 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:23] (debug) <SourceHealthChecker> =====
+检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342414 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+
+===== [00:26:24] (debug) <HuyaSDKParser> =====
+V33DBG room=10871113 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e9a8dc5]
+
+===== [00:26:24] (debug) <HuyaSDKParser> =====
+V33DBG room=10871113 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e9a8dc5]
+
+===== [00:26:24] (debug) <HuyaSDKParser> =====
+V33DBG room=10871113 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@8f26c3c
+
+===== [00:26:25] (debug) <HuyaSDKParser> =====
+V33DBG room=11601960 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@715fcb1]
+
+===== [00:26:25] (debug) <HuyaSDKParser> =====
+V33DBG room=11601960 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@715fcb1]
+
+===== [00:26:25] (debug) <HuyaSDKParser> =====
+V33DBG room=11601960 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@103d358
+
+===== [00:26:27] (debug) <HuyaSDKParser> =====
+V33DBG room=11352973 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@417f34]
+
+===== [00:26:27] (debug) <HuyaSDKParser> =====
+V33DBG room=11352973 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@417f34]
+
+===== [00:26:27] (debug) <HuyaSDKParser> =====
+V33DBG room=11352973 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@aa79207
+
+===== [00:26:28] (debug) <HuyaSDKParser> =====
+V33DBG room=11342399 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@582b7c9]
+
+===== [00:26:28] (debug) <HuyaSDKParser> =====
+V33DBG room=11342399 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@582b7c9]
+
+===== [00:26:28] (debug) <HuyaSDKParser> =====
+V33DBG room=11342399 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@1c35f93
+
+===== [00:26:30] (debug) <HuyaSDKParser> =====
+V33DBG room=11279251 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@a83cea9]
+
+===== [00:26:30] (debug) <HuyaSDKParser> =====
+V33DBG room=11279251 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@a83cea9]
+
+===== [00:26:30] (debug) <HuyaSDKParser> =====
+V33DBG room=11279251 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@74e5230
+
+===== [00:26:30] (debug) <AppCoreManager> =====
+【网络】直播源列表已更新（超时后补到数据）
+
+===== [00:26:31] (debug) <HuyaSDKParser> =====
+V33DBG room=11342387 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@7cd2ee2]
+
+===== [00:26:31] (debug) <HuyaSDKParser> =====
+V33DBG room=11342387 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@7cd2ee2]
+
+===== [00:26:31] (debug) <HuyaSDKParser> =====
+V33DBG room=11342387 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@7c69bad
+
+===== [00:26:33] (debug) <HuyaSDKParser> =====
+V33DBG room=11352950 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@560d86f]
+
+===== [00:26:33] (debug) <HuyaSDKParser> =====
+V33DBG room=11352950 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@560d86f]
+
+===== [00:26:33] (debug) <HuyaSDKParser> =====
+V33DBG room=11352950 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@c91ef4e
+
+===== [00:26:34] (debug) <HuyaSDKParser> =====
+V33DBG room=11352894 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@408699]
+
+===== [00:26:34] (debug) <HuyaSDKParser> =====
+V33DBG room=11352894 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@408699]
+
+===== [00:26:34] (debug) <HuyaSDKParser> =====
+V33DBG room=11352894 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@40c33e0

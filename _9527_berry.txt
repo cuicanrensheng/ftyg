@@ -1,0 +1,43 @@
+===== [21:31:03] (info) <HuyaSDKParser> =====
+  ✅ HuyaBerryConfig.Builder 链路构建完成（含官方精简开关）
+
+===== [21:31:03] (debug) <HuyaSDKParser> =====
+[1/4] 准备构建 HuyaBerryConfig.Builder
+
+===== [21:31:03] (debug) <HuyaSDKParser> =====
+[2/4] HuyaBerryConfig build 完成
+
+===== [21:31:03] (error) <HuyaBerry.init> =====
+java.lang.NoSuchMethodError: No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appears in /data/app/com.tv.live-1/base.apk:classes3.dex)
+	at com.huyaudbunify.HuyaAuth.init(SourceFile:150)
+	at com.huya.component.login.module.LoginModule.onCreate(SourceFile:124)
+	at com.huya.live.service.ServiceHelper.createService(SourceFile:7)
+	at com.huya.berry.cli...[已截断]
+
+===== [21:31:03] (error) <ExceptionReporter> =====
+[HuyaBerry.init] Context: java.lang.NoSuchMethodError: No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appears in /data/app/com.tv.live-1/base.apk:classes3.dex)
+	at com.huyaudbunify.HuyaAuth.init(SourceFile:150)
+	at com.huya.component.login.module.LoginModule.onCreate(SourceFile:124)
+	at com.huya.live.service.ServiceHelper.createService(SourceFile...[已截断]
+
+===== [21:31:03] (error) <ExceptionReporter> =====
+[HuyaBerry.init] Exception reported: java.lang.NoSuchMethodError: No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appears in /data/app/com.tv.live-1/base.apk:classes3.dex)
+	at com.huyaudbunify.HuyaAuth.init(SourceFile:150)
+	at com.huya.component.login.module.LoginModule.onCreate(SourceFile:124)
+	at com.huya.live.service.ServiceHelper.createService...[已截断]
+
+===== [21:31:03] (error) <HuyaBerry.init> =====
+java.lang.NoSuchMethodError: No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appears in /data/app/com.tv.live-1/base.apk:classes3.dex)
+	at com.huyaudbunify.HuyaAuth.init(SourceFile:150)
+	at com.huya.component.login.module.LoginModule.onCreate(SourceFile:124)
+	at com.huya.live.service.ServiceHelper.createService(SourceFile:7)
+	at com.huya.berry.cli...[已截断]
+
+===== [21:31:03] (error) <ExceptionReporter> =====
+[HuyaBerry.init] Exception reported: No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appears in /data/app/com.tv.live-1/base.apk:classes3.dex) : No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appea...[已截断]
+
+===== [21:31:03] (warn) <HuyaSDKParser> =====
+❌ HuyaBerry init 失败（需要修复才能触发SDK回调）: NoSuchMethodError: No static method getInstance()Lcom/huya/security/DeviceFingerprintSDK; in class Lcom/huya/security/DeviceFingerprintSDK; or its super classes (declaration of 'com.huya.security.DeviceFingerprintSDK' appears in /data/app/com.tv.live-1/base.apk:classes3.dex)
+  ↳ com.huyaudbunify.HuyaAuth.init(SourceFile:150)
+  ↳ com.huya.component.login.module.LoginModule.onCreate(SourceFile:124)
+  ↳ com.huya.live.service.ServiceHelper.createService(SourceFile...[已截断]

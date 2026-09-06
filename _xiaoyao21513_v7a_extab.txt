@@ -1,0 +1,1030 @@
+﻿15:48:04 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 397244
+15:48:04 [] RedirectHttp : [15:48:04] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 397244
+15:48:04 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/MP2T, Content-Length: 397244
+15:48:04 [] RedirectHttp : [15:48:04] ååº: HTTP 200, Content-Type: video/MP2T, Content-Length: 397244
+15:48:04 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989676.ts?EXTINF=2.794&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : [15:48:04] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989676.ts?EXTINF=2.794&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989676.ts?EXTINF=2.794&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : [15:48:04] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989676.ts?EXTINF=2.794&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1008 å­è (0 KB)
+15:48:04 [] RedirectHttp : [15:48:04] ä¼ è¾å®æï¼å±è¯»å 1008 å­è (0 KB)
+15:48:04 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1008
+15:48:04 [] RedirectHttp : [15:48:04] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1008
+15:48:04 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1008
+15:48:04 [] RedirectHttp : [15:48:04] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1008
+15:48:04 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : [15:48:04] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] RedirectHttp : [15:48:04] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:04 [] HuyaSDKParser : âãé¢è§£æãroomId=21059607 æå, streams=2
+15:48:04 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=21059607 ç­å¾è=1
+15:48:04 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=21059607 ç­å¾è=1
+15:48:04 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:48:04 [] HuyaSDKParser : ãAppãæ¿é´21059607 SDKè§£ææå: 2 æ¡æµ
+15:48:04 [] HuyaSDKParser : ãAppãæ¿é´21059607 SDKè§£ææå: 2 æ¡æµ
+15:48:04 [] HuyaSDKParser : æ¿é´21059607 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:48:04 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:48:04 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:48:04 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:48:04 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:48:04 [] HuyaSDKParser : V33DBG room=21059607 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1e345f2f]
+15:48:04 [] HuyaSDKParser : V33DBG room=21059607 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1e345f2f]
+15:48:04 [] HuyaSDKParser : V33DBG room=21059607 singleInfo.size=2
+15:48:04 [] HuyaSDKParser : V33DBG room=21059607 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@2dd0a309
+15:48:04 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:48:04 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:48:04 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=21059607
+15:48:04 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=21059607
+15:48:04 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:48:04 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=21059607
+15:48:04 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=21059607
+15:48:04 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=21059607
+15:48:04 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:48:04 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=21059607 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:48:04 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=21059607 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:48:04 [] HuyaSDKParser : ðãé¢è§£æã(14/53) roomId=21059607
+15:48:03 [] TVPlayerManager : æåæ­æ¾
+15:48:03 [] TVPlayerManager : [PLAY] æåæ­æ¾
+15:48:03 [] TVPlayerManager : ç¼å²ä¸­ (STATE_BUFFERING)
+15:48:03 [] TVPlayerManager : [PLAY] ç¼å²ä¸­ (STATE_BUFFERING)
+15:48:02 [] HuyaSDKParser : âãé¢è§£æãroomId=11352950 æå, streams=2
+15:48:02 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11352950 ç­å¾è=1
+15:48:02 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11352950 ç­å¾è=1
+15:48:02 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:48:02 [] HuyaSDKParser : ãAppãæ¿é´11352950 SDKè§£ææå: 2 æ¡æµ
+15:48:02 [] HuyaSDKParser : ãAppãæ¿é´11352950 SDKè§£ææå: 2 æ¡æµ
+15:48:02 [] HuyaSDKParser : æ¿é´11352950 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:48:02 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:48:02 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:48:02 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:48:02 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:48:02 [] HuyaSDKParser : V33DBG room=11352950 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1b6a29a4]
+15:48:02 [] HuyaSDKParser : V33DBG room=11352950 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1b6a29a4]
+15:48:02 [] HuyaSDKParser : V33DBG room=11352950 singleInfo.size=2
+15:48:02 [] HuyaSDKParser : V33DBG room=11352950 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@1117a037
+15:48:02 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:48:02 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:48:02 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11352950
+15:48:02 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11352950
+15:48:02 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:48:02 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11352950
+15:48:02 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11352950
+15:48:02 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11352950
+15:48:02 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:48:02 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11352950 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:48:02 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11352950 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:48:02 [] HuyaSDKParser : ðãé¢è§£æã(13/53) roomId=11352950
+15:48:01 [] ChannelList : getView(byGroup) pos:8, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:7, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:6, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:5, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:4, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:3, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:2, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:1, selectedPos:0, isSelected:false
+15:48:01 [] ChannelList : getView(byGroup) pos:0, selectedPos:0, isSelected:true
+15:48:01 [] HuyaSDKParser : âãé¢è§£æãroomId=11601960 æå, streams=2
+15:48:01 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11601960 ç­å¾è=1
+15:48:01 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11601960 ç­å¾è=1
+15:48:01 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:48:01 [] HuyaSDKParser : ãAppãæ¿é´11601960 SDKè§£ææå: 2 æ¡æµ
+15:48:01 [] HuyaSDKParser : ãAppãæ¿é´11601960 SDKè§£ææå: 2 æ¡æµ
+15:48:01 [] HuyaSDKParser : æ¿é´11601960 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:48:01 [] HuyaSDKParser :   â Stream[line#1(v=3) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:48:01 [] HuyaSDKParser : çº¿è·¯#1(v=3): 1 ä¸ªç ç
+15:48:01 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:48:01 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:48:01 [] HuyaSDKParser : V33DBG room=11601960 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@46ba06a]
+15:48:01 [] HuyaSDKParser : V33DBG room=11601960 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@46ba06a]
+15:48:01 [] HuyaSDKParser : V33DBG room=11601960 singleInfo.size=2
+15:48:01 [] HuyaSDKParser : V33DBG room=11601960 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@3fc93e55
+15:48:01 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:48:01 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:48:01 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11601960
+15:48:01 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11601960
+15:48:01 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:48:01 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11601960
+15:48:01 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11601960
+15:48:01 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11601960
+15:48:01 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:48:01 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11601960 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:48:01 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11601960 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:48:01 [] HuyaSDKParser : ðãé¢è§£æã(12/53) roomId=11601960
+15:48:00 [] TVPlayerManager : ç­æç¼å²æ¢å¤ï¼æ¶é¿ï¼1049ms
+15:48:00 [] TVPlayerManager : [PLAY] ç­æç¼å²æ¢å¤ï¼æ¶é¿ï¼1049ms
+15:48:00 [] TVPlayerManager : å¼å§æ­æ¾
+15:48:00 [] TVPlayerManager : [PLAY] å¼å§æ­æ¾
+15:48:00 [] TVPlayerManager : æ­æ¾å°±ç»ª (STATE_READY)
+15:48:00 [] TVPlayerManager : [PLAY] æ­æ¾å°±ç»ª (STATE_READY)
+15:48:00 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 206988 å­è (202 KB)
+15:48:00 [] RedirectHttp : [15:48:00] ä¼ è¾å®æï¼å±è¯»å 206988 å­è (202 KB)
+15:48:00 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 206988
+15:48:00 [] RedirectHttp : [15:48:00] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 206988
+15:48:00 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/MP2T, Content-Length: 206988
+15:48:00 [] RedirectHttp : [15:48:00] ååº: HTTP 200, Content-Type: video/MP2T, Content-Length: 206988
+15:48:00 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989675.ts?EXTINF=2.418&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : [15:48:00] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989675.ts?EXTINF=2.418&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989675.ts?EXTINF=2.418&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : [15:48:00] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989675.ts?EXTINF=2.418&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 707 å­è (0 KB)
+15:48:00 [] RedirectHttp : [15:48:00] ä¼ è¾å®æï¼å±è¯»å 707 å­è (0 KB)
+15:48:00 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 707
+15:48:00 [] RedirectHttp : [15:48:00] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 707
+15:48:00 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 707
+15:48:00 [] RedirectHttp : [15:48:00] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 707
+15:48:00 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : [15:48:00] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:48:00 [] RedirectHttp : [15:48:00] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:59 [] TVPlayerManager : æåæ­æ¾
+15:47:59 [] TVPlayerManager : [PLAY] æåæ­æ¾
+15:47:59 [] TVPlayerManager : ç¼å²ä¸­ (STATE_BUFFERING)
+15:47:59 [] TVPlayerManager : [PLAY] ç¼å²ä¸­ (STATE_BUFFERING)
+15:47:59 [] ChannelList : getView(byGroup) pos:8, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:7, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:6, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:5, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:4, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:3, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:2, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:1, selectedPos:0, isSelected:false
+15:47:59 [] ChannelList : getView(byGroup) pos:0, selectedPos:0, isSelected:true
+15:47:59 [] HuyaSDKParser : âãé¢è§£æãroomId=11336587 æå, streams=2
+15:47:59 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11336587 ç­å¾è=1
+15:47:59 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11336587 ç­å¾è=1
+15:47:59 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:59 [] HuyaSDKParser : ãAppãæ¿é´11336587 SDKè§£ææå: 2 æ¡æµ
+15:47:59 [] HuyaSDKParser : ãAppãæ¿é´11336587 SDKè§£ææå: 2 æ¡æµ
+15:47:59 [] HuyaSDKParser : æ¿é´11336587 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:59 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:59 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:47:59 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:59 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:59 [] HuyaSDKParser : V33DBG room=11336587 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1e705747]
+15:47:59 [] HuyaSDKParser : V33DBG room=11336587 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1e705747]
+15:47:59 [] HuyaSDKParser : V33DBG room=11336587 singleInfo.size=2
+15:47:59 [] HuyaSDKParser : V33DBG room=11336587 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@33374286
+15:47:59 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:59 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:59 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11336587
+15:47:59 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11336587
+15:47:59 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:59 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11336587
+15:47:59 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11336587
+15:47:59 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11336587
+15:47:59 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:59 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11336587 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:59 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11336587 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:59 [] HuyaSDKParser : ðãé¢è§£æã(11/53) roomId=11336587
+15:47:58 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 406 å­è (0 KB)
+15:47:58 [] RedirectHttp : [15:47:58] ä¼ è¾å®æï¼å±è¯»å 406 å­è (0 KB)
+15:47:58 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 406
+15:47:58 [] RedirectHttp : [15:47:58] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 406
+15:47:58 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 406
+15:47:58 [] RedirectHttp : [15:47:58] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 406
+15:47:58 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:58 [] RedirectHttp : [15:47:58] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:58 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:58 [] RedirectHttp : [15:47:58] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:58 [] HuyaSDKParser : âãé¢è§£æãroomId=10871113 æå, streams=2
+15:47:58 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=10871113 ç­å¾è=1
+15:47:58 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=10871113 ç­å¾è=1
+15:47:58 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:58 [] HuyaSDKParser : ãAppãæ¿é´10871113 SDKè§£ææå: 2 æ¡æµ
+15:47:58 [] HuyaSDKParser : ãAppãæ¿é´10871113 SDKè§£ææå: 2 æ¡æµ
+15:47:58 [] HuyaSDKParser : æ¿é´10871113 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:58 [] HuyaSDKParser :   â Stream[line#1(v=3) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:58 [] HuyaSDKParser : çº¿è·¯#1(v=3): 1 ä¸ªç ç
+15:47:58 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:58 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:58 [] HuyaSDKParser : V33DBG room=10871113 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@71711e5]
+15:47:58 [] HuyaSDKParser : V33DBG room=10871113 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@71711e5]
+15:47:58 [] HuyaSDKParser : V33DBG room=10871113 singleInfo.size=2
+15:47:58 [] HuyaSDKParser : V33DBG room=10871113 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@a7becdc
+15:47:58 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:58 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:58 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=10871113
+15:47:58 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=10871113
+15:47:58 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:58 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=10871113
+15:47:58 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=10871113
+15:47:58 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=10871113
+15:47:58 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:58 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=10871113 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:58 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=10871113 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:58 [] HuyaSDKParser : ðãé¢è§£æã(10/53) roomId=10871113
+15:47:56 [] HuyaSDKParser : âãé¢è§£æãroomId=11282233 æå, streams=2
+15:47:56 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11282233 ç­å¾è=1
+15:47:56 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11282233 ç­å¾è=1
+15:47:56 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:56 [] HuyaSDKParser : ãAppãæ¿é´11282233 SDKè§£ææå: 2 æ¡æµ
+15:47:56 [] HuyaSDKParser : ãAppãæ¿é´11282233 SDKè§£ææå: 2 æ¡æµ
+15:47:56 [] HuyaSDKParser : æ¿é´11282233 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:56 [] HuyaSDKParser :   â Stream[line#1(v=3) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:56 [] HuyaSDKParser : çº¿è·¯#1(v=3): 1 ä¸ªç ç
+15:47:56 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:56 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:56 [] HuyaSDKParser : V33DBG room=11282233 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@29b914f3]
+15:47:56 [] HuyaSDKParser : V33DBG room=11282233 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@29b914f3]
+15:47:56 [] HuyaSDKParser : V33DBG room=11282233 singleInfo.size=2
+15:47:56 [] HuyaSDKParser : V33DBG room=11282233 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@2652fb62
+15:47:56 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:56 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:56 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11282233
+15:47:56 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11282233
+15:47:56 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:56 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11282233
+15:47:56 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11282233
+15:47:56 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11282233
+15:47:56 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:56 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11282233 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:56 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11282233 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:56 [] HuyaSDKParser : ðãé¢è§£æã(9/53) roomId=11282233
+15:47:56 [] TVPlayerManager : ä¸¥éå¡é¡¿ç»æï¼æ¶é¿ï¼3939ms
+15:47:56 [] TVPlayerManager : ä¸¥éå¡é¡¿ç»æï¼æ¶é¿ï¼3939ms
+15:47:56 [] TVPlayerManager : å¼å§æ­æ¾
+15:47:56 [] TVPlayerManager : [PLAY] å¼å§æ­æ¾
+15:47:56 [] TVPlayerManager : æ­æ¾å°±ç»ª (STATE_READY)
+15:47:56 [] TVPlayerManager : [PLAY] æ­æ¾å°±ç»ª (STATE_READY)
+15:47:56 [] TVPlayerManager : è§é¢åè¾¨çååï¼1920Ã800
+15:47:56 [] TVPlayerManager : [PLAY] è§é¢åè¾¨çååï¼1920Ã800
+15:47:56 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 203792 å­è (199 KB)
+15:47:56 [] RedirectHttp : [15:47:56] ä¼ è¾å®æï¼å±è¯»å 203792 å­è (199 KB)
+15:47:56 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 203792
+15:47:56 [] RedirectHttp : [15:47:56] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 203792
+15:47:56 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/MP2T, Content-Length: 203792
+15:47:56 [] RedirectHttp : [15:47:56] ååº: HTTP 200, Content-Type: video/MP2T, Content-Length: 203792
+15:47:56 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989674.ts?EXTINF=3.378&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : [15:47:56] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989674.ts?EXTINF=3.378&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 406 å­è (0 KB)
+15:47:56 [] RedirectHttp : [15:47:56] ä¼ è¾å®æï¼å±è¯»å 406 å­è (0 KB)
+15:47:56 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 406
+15:47:56 [] RedirectHttp : [15:47:56] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 406
+15:47:56 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 406
+15:47:56 [] RedirectHttp : [15:47:56] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 406
+15:47:56 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : [15:47:56] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : [15:47:56] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989674.ts?EXTINF=3.378&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : [15:47:56] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000-1787989674.ts?EXTINF=3.378&wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 406 å­è (0 KB)
+15:47:56 [] RedirectHttp : [15:47:56] ä¼ è¾å®æï¼å±è¯»å 406 å­è (0 KB)
+15:47:56 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 406
+15:47:56 [] RedirectHttp : [15:47:56] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 406
+15:47:56 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 406
+15:47:56 [] RedirectHttp : [15:47:56] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 406
+15:47:56 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:56 [] RedirectHttp : [15:47:56] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±æå ç¶æç  200: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:55 [] HuyaSDKParser : âãé¢è§£æãroomId=11342427 æå, streams=2
+15:47:55 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342427 ç­å¾è=1
+15:47:55 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342427 ç­å¾è=1
+15:47:55 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:55 [] HuyaSDKParser : ãAppãæ¿é´11342427 SDKè§£ææå: 2 æ¡æµ
+15:47:55 [] HuyaSDKParser : ãAppãæ¿é´11342427 SDKè§£ææå: 2 æ¡æµ
+15:47:55 [] HuyaSDKParser : æ¿é´11342427 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:55 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:55 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:47:55 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:55 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:55 [] HuyaSDKParser : V33DBG room=11342427 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@8e100ac]
+15:47:55 [] HuyaSDKParser : V33DBG room=11342427 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@8e100ac]
+15:47:55 [] HuyaSDKParser : V33DBG room=11342427 singleInfo.size=2
+15:47:55 [] HuyaSDKParser : V33DBG room=11342427 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@2d26ce5f
+15:47:55 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:55 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:55 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342427
+15:47:55 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342427
+15:47:55 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:55 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342427
+15:47:55 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342427
+15:47:55 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11342427
+15:47:55 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:55 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342427 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:55 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342427 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:55 [] HuyaSDKParser : ðãé¢è§£æã(8/53) roomId=11342427
+15:47:53 [] HuyaSDKParser : âãé¢è§£æãroomId=11601986 æå, streams=2
+15:47:53 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11601986 ç­å¾è=1
+15:47:53 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11601986 ç­å¾è=1
+15:47:53 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:53 [] HuyaSDKParser : ãAppãæ¿é´11601986 SDKè§£ææå: 2 æ¡æµ
+15:47:53 [] HuyaSDKParser : ãAppãæ¿é´11601986 SDKè§£ææå: 2 æ¡æµ
+15:47:53 [] HuyaSDKParser : æ¿é´11601986 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:53 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:53 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:47:53 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:53 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:53 [] HuyaSDKParser : V33DBG room=11601986 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@158ac1b2]
+15:47:53 [] HuyaSDKParser : V33DBG room=11601986 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@158ac1b2]
+15:47:53 [] HuyaSDKParser : V33DBG room=11601986 singleInfo.size=2
+15:47:53 [] HuyaSDKParser : V33DBG room=11601986 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@11a677bd
+15:47:53 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:53 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:53 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11601986
+15:47:53 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11601986
+15:47:53 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:53 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11601986
+15:47:53 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11601986
+15:47:53 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11601986
+15:47:53 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:53 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11601986 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:53 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11601986 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:53 [] HuyaSDKParser : ðãé¢è§£æã(7/53) roomId=11601986
+15:47:52 [] RedirectHttp : ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:52 [] RedirectHttp : [15:47:52] ãå¨ææãæç·ç»å¸ä¸é´æ­ è¯·æ±é¾æ¥: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u8?wsSecret=4642122d8588e362efd38655958822fa&wsTime=6a93e020&u=0&seqid=17879896650680&ctype=huya_adr_game_sdk&txyp=o%3An4%3B&fs=bgct
+15:47:52 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 239264 å­è (233 KB)
+15:47:52 [] RedirectHttp : [15:47:52] ä¼ è¾å®æï¼å±è¯»å 239264 å­è (233 KB)
+15:47:52 [] TVPlayerManager : è§é¢åè¾¨çååï¼0Ã0
+15:47:52 [] TVPlayerManager : [PLAY] è§é¢åè¾¨çååï¼0Ã0
+15:47:52 [] TVPlayerManager : æåæ­æ¾
+15:47:52 [] TVPlayerManager : [PLAY] æåæ­æ¾
+15:47:52 [] TVPlayerManager : ç¼å²ä¸­ (STATE_BUFFERING)
+15:47:52 [] TVPlayerManager : [PLAY] ç¼å²ä¸­ (STATE_BUFFERING)
+15:47:52 [] TVPlayerManager : ãèçæºãmPendingPlaybackHeaders ä¸ºç©ºï¼èµ°é»è®¤èç headers
+15:47:52 [] TVPlayerManager : ãèçæºãå¼å§æ­æ¾: http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-
+15:47:52 [] TVPlayerManager : doPlay: url=http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u isHls=true isRealStream=true
+15:47:52 [] TVPlayerManager : ãèçãSDK å¨éè§£ææå, é»è®¤æµ=http://tx.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-
+15:47:52 [] TVPlayerManager : ãèçãæå¹³åçº¿è·¯: ä¸»æº + 7 ä¸ªå¤æº (æ»åä½æ°=8)
+15:47:52 [] TVPlayerManager :   çº¿è·¯1: èå4M èå6M è¶æ¸ æµç 
+15:47:52 [] TVPlayerManager :   çº¿è·¯0: èå6M èå4M è¶æ¸ æµç 
+15:47:52 [] TVPlayerManager : ãèçãvariantList å¡«å: å± 8 ä¸ªæ¸æ°åº¦ï¼åå¸å¨ 2 æ¡çº¿è·¯
+15:47:52 [] TVPlayerManager : ãèçãçº¿è·¯è½®è¯¢ï¼åæ¢å°çº¿è·¯ 1
+15:47:52 [] TVPlayerManager : ãç»è´¨éæ©ãé»è®¤æµå·²è°æ´: èå4M â èå6M (ç»ä¸æé«ç»è´¨)
+15:47:52 [] HuyaSDKParser : ãéééæ©ãéä¸­æµ: Stream[line#0(v=14) èå6M(6000bps) HLS=true FLV=true] (resolutionLabel=1080p, bitRate=6000bps)
+15:47:52 [] TVPlayerManager : â¡ãèçè§£æèæ¶ã0ms, roomId=11342412ï¼ç¼å­å½ä¸­=trueï¼æµæ°=8
+15:47:52 [] HuyaSDKParser : ãAppãå½ä¸­ç¼å­: roomId=11342412 streams=8
+15:47:52 [] HuyaSDKParser : ãAppãå½ä¸­ç¼å­: roomId=11342412 streams=8
+15:47:52 [] HuyaSDKParser : å½ä¸­æ¿é´11342412æµä¿¡æ¯ç¼å­ï¼7såï¼
+15:47:52 [] TVPlayerManager : ãèçãä½¿ç¨ SDK å¨éè§£æ, roomId=11342412
+15:47:52 [] TVPlayerManager : ðãèçå¹¶è¡å è½½ãå½ä¸­é¢è§£æç¼å­ï¼æ¿é´=11342412ï¼ç¼å­å¹´é¾=7sï¼æµæ°=8ï¼å³å°ç¬æ¶å¯å¨æ­æ¾ï¼è·³è¿å®æ¶SDKç­å¾ï¼
+15:47:52 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5334876
+15:47:52 [] RedirectHttp : [15:47:52] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5334876
+15:47:52 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5334876
+15:47:52 [] RedirectHttp : [15:47:52] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5334876
+15:47:52 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989629-1-1748675941.hls.ts?servicetype=1
+15:47:52 [] RedirectHttp : [15:47:52] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989629-1-1748675941.hls.ts?servicetype=1
+15:47:52 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989629-1-1748675941.hls.ts?servicetype=1
+15:47:52 [] RedirectHttp : [15:47:52] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989629-1-1748675941.hls.ts?servicetype=1
+15:47:52 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5185040 å­è (5063 KB)
+15:47:52 [] RedirectHttp : [15:47:52] ä¼ è¾å®æï¼å±è¯»å 5185040 å­è (5063 KB)
+15:47:52 [] HuyaSDKParser : âãé¢è§£æãroomId=11342386 æå, streams=2
+15:47:52 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342386 ç­å¾è=1
+15:47:52 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342386 ç­å¾è=1
+15:47:52 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:52 [] HuyaSDKParser : ãAppãæ¿é´11342386 SDKè§£ææå: 2 æ¡æµ
+15:47:52 [] HuyaSDKParser : ãAppãæ¿é´11342386 SDKè§£ææå: 2 æ¡æµ
+15:47:52 [] HuyaSDKParser : æ¿é´11342386 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:52 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:52 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:47:52 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:52 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:52 [] HuyaSDKParser : V33DBG room=11342386 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3c700549]
+15:47:52 [] HuyaSDKParser : V33DBG room=11342386 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3c700549]
+15:47:52 [] HuyaSDKParser : V33DBG room=11342386 singleInfo.size=2
+15:47:52 [] HuyaSDKParser : V33DBG room=11342386 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@1944bf50
+15:47:52 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:52 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:52 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342386
+15:47:52 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342386
+15:47:52 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:52 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342386
+15:47:52 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342386
+15:47:52 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11342386
+15:47:52 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:52 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342386 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:52 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342386 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:52 [] HuyaSDKParser : ðãé¢è§£æã(6/53) roomId=11342386
+15:47:52 [] SourceHealthChecker : å¨éæºæ£æµå®æ: æ£æµ 187 ä¸ªURL, åé¤ 0 ä¸ªå¤±ææº
+15:47:50 [] HuyaSDKParser : âãé¢è§£æãroomId=11601968 æå, streams=2
+15:47:50 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11601968 ç­å¾è=1
+15:47:50 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11601968 ç­å¾è=1
+15:47:50 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:50 [] HuyaSDKParser : ãAppãæ¿é´11601968 SDKè§£ææå: 2 æ¡æµ
+15:47:50 [] HuyaSDKParser : ãAppãæ¿é´11601968 SDKè§£ææå: 2 æ¡æµ
+15:47:50 [] HuyaSDKParser : æ¿é´11601968 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:50 [] HuyaSDKParser :   â Stream[line#1(v=3) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:50 [] HuyaSDKParser : çº¿è·¯#1(v=3): 1 ä¸ªç ç
+15:47:50 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:50 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:50 [] HuyaSDKParser : V33DBG room=11601968 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@19ed2477]
+15:47:50 [] HuyaSDKParser : V33DBG room=11601968 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@19ed2477]
+15:47:50 [] HuyaSDKParser : V33DBG room=11601968 singleInfo.size=2
+15:47:50 [] HuyaSDKParser : V33DBG room=11601968 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@237f4676
+15:47:50 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:50 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:50 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11601968
+15:47:50 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11601968
+15:47:50 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:50 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11601968
+15:47:50 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11601968
+15:47:50 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11601968
+15:47:50 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:50 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11601968 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:50 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11601968 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:50 [] HuyaSDKParser : ðãé¢è§£æã(5/53) roomId=11601968
+15:47:50 [] ChannelList : getView(byGroup) pos:8, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:7, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:6, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:5, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:4, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:3, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:2, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:1, selectedPos:0, isSelected:false
+15:47:50 [] ChannelList : getView(byGroup) pos:0, selectedPos:0, isSelected:true
+15:47:50 [] GroupList : getView pos:12, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:11, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:10, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:9, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:8, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:7, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:6, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:5, selectedPos:4, isSelected:false
+15:47:50 [] GroupList : getView pos:4, selectedPos:4, isSelected:true
+15:47:49 [] HuyaSDKParser : âãé¢è§£æãroomId=880261 æå, streams=2
+15:47:49 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=880261 ç­å¾è=1
+15:47:49 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=880261 ç­å¾è=1
+15:47:49 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:49 [] HuyaSDKParser : ãAppãæ¿é´880261 SDKè§£ææå: 2 æ¡æµ
+15:47:49 [] HuyaSDKParser : ãAppãæ¿é´880261 SDKè§£ææå: 2 æ¡æµ
+15:47:49 [] HuyaSDKParser : æ¿é´880261 æµä¿¡æ¯åå¥ç¼å­: 2 æ¡æµ
+15:47:49 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:49 [] HuyaSDKParser : çº¿è·¯#1(v=5): 1 ä¸ªç ç
+15:47:49 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:49 [] HuyaSDKParser : çº¿è·¯#0(v=14): 1 ä¸ªç ç
+15:47:49 [] HuyaSDKParser : V33DBG room=880261 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1fbd247f]
+15:47:49 [] HuyaSDKParser : V33DBG room=880261 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@1fbd247f]
+15:47:49 [] HuyaSDKParser : V33DBG room=880261 singleInfo.size=2
+15:47:49 [] HuyaSDKParser : V33DBG room=880261 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@145ea19e
+15:47:49 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:49 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:49 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=880261
+15:47:49 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=880261
+15:47:49 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:49 [] ChannelList : getView pos:8, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:7, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:6, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:5, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:4, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:3, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:2, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:1, selectedPos:0, isSelected:false
+15:47:49 [] ChannelList : getView pos:0, selectedPos:0, isSelected:true
+15:47:49 [] GroupList : getView pos:7, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:6, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:5, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:4, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:3, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:2, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:1, selectedPos:0, isSelected:false
+15:47:49 [] GroupList : getView pos:0, selectedPos:0, isSelected:true
+15:47:49 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=880261
+15:47:49 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=880261
+15:47:49 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=880261
+15:47:49 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:49 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=880261 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:49 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=880261 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:49 [] HuyaSDKParser : ðãé¢è§£æã(4/53) roomId=880261
+15:47:48 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5185040
+15:47:48 [] RedirectHttp : [15:47:48] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5185040
+15:47:48 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5185040
+15:47:48 [] RedirectHttp : [15:47:48] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5185040
+15:47:48 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989619-1-1748675940.hls.ts?servicetype=1
+15:47:48 [] RedirectHttp : [15:47:48] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989619-1-1748675940.hls.ts?servicetype=1
+15:47:48 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989619-1-1748675940.hls.ts?servicetype=1
+15:47:48 [] RedirectHttp : [15:47:48] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989619-1-1748675940.hls.ts?servicetype=1
+15:47:48 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5363640 å­è (5237 KB)
+15:47:48 [] RedirectHttp : [15:47:48] ä¼ è¾å®æï¼å±è¯»å 5363640 å­è (5237 KB)
+15:47:47 [] HuyaSDKParser : âãé¢è§£æãroomId=11602058 æå, streams=6
+15:47:47 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11602058 ç­å¾è=1
+15:47:47 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11602058 ç­å¾è=1
+15:47:47 [] HuyaSDKParser : SDK è§£æå®æ: 3 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) è¶æ¸(2000bps) HLS=true FLV=true]
+15:47:47 [] HuyaSDKParser : ãAppãæ¿é´11602058 SDKè§£ææå: 6 æ¡æµ
+15:47:47 [] HuyaSDKParser : ãAppãæ¿é´11602058 SDKè§£ææå: 6 æ¡æµ
+15:47:47 [] HuyaSDKParser : æ¿é´11602058 æµä¿¡æ¯åå¥ç¼å­: 6 æ¡æµ
+15:47:47 [] HuyaSDKParser :   â Stream[line#2(v=3) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:47 [] HuyaSDKParser :   â Stream[line#2(v=3) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:47 [] HuyaSDKParser : çº¿è·¯#2(v=3): 2 ä¸ªç ç
+15:47:47 [] HuyaSDKParser :   â Stream[line#1(v=5) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:47 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:47 [] HuyaSDKParser : çº¿è·¯#1(v=5): 2 ä¸ªç ç
+15:47:47 [] HuyaSDKParser :   â Stream[line#0(v=14) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:47 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:47 [] HuyaSDKParser : çº¿è·¯#0(v=14): 2 ä¸ªç ç
+15:47:47 [] HuyaSDKParser : V33DBG room=11602058 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3174b98f, com.huya.berry.module.Player.SMObject$BitRateInfo@32d6c41c]
+15:47:47 [] HuyaSDKParser : V33DBG room=11602058 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3174b98f, com.huya.berry.module.Player.SMObject$BitRateInfo@32d6c41c]
+15:47:47 [] HuyaSDKParser : V33DBG room=11602058 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3174b98f, com.huya.berry.module.Player.SMObject$BitRateInfo@32d6c41c]
+15:47:47 [] HuyaSDKParser : V33DBG room=11602058 singleInfo.size=3
+15:47:47 [] HuyaSDKParser : V33DBG room=11602058 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@303220ee
+15:47:47 [] HuyaSDKParser : getLines: 3 æ¡çº¿è·¯
+15:47:47 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:47 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11602058
+15:47:47 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11602058
+15:47:47 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:47 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11602058
+15:47:47 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11602058
+15:47:47 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11602058
+15:47:47 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:47 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11602058 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:47 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11602058 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:47 [] HuyaSDKParser : ðãé¢è§£æã(3/53) roomId=11602058
+15:47:46 [] HuyaSDKParser : ðãé¢è§£æãéåæ­£å¨è·ï¼è¿½å  23 ä¸ªæ°æ¿é´å°éå°¾ï¼æ»è®¡ 53 ä¸ªï¼
+15:47:46 [] ChannelPanel : â SDK 5 å¤§åºå®åç»é¢å è½½å®æï¼å±æ°å¢ 92 ä¸ªé¢éï¼æ»è®¡ 745ï¼èæ¶ 0ms
+15:47:46 [] ChannelPanel : SDK åç»[èçä¸èµ·ç]é¢å è½½å®æï¼æ°å¢ 16 ä¸ªé¢é
+15:47:46 [] ChannelPanel : SDK åç»[èçç»¼èº]é¢å è½½å®æï¼æ°å¢ 20 ä¸ªé¢é
+15:47:46 [] ChannelPanel : SDK åç»[èçå¨æ¼«]é¢å è½½å®æï¼æ°å¢ 20 ä¸ªé¢é
+15:47:46 [] ChannelPanel : SDK åç»[èççµè§å§]é¢å è½½å®æï¼æ°å¢ 14 ä¸ªé¢é
+15:47:46 [] ChannelPanel : SDK åç»[èççµå½±]é¢å è½½å®æï¼æ°å¢ 22 ä¸ªé¢é
+15:47:46 [] TogetherWatchGroup : ãtag=å¨é¨(gid-2135)ãè§£æé¢éæ°=20
+15:47:46 [] TogetherWatchGroup : ãtag=å¨é¨ãåå§åè¡¨=20
+15:47:46 [] TogetherWatchGroup : ãtag=å¨é¨ãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:46 [] TogetherWatchGroup : ãtag=ææ°(filterlib-2135-4531)ãè§£æé¢éæ°=14
+15:47:46 [] TogetherWatchGroup : ãtag=ææ°ãåå§åè¡¨=14
+15:47:46 [] TogetherWatchGroup : ãtag=ææ°ãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:46 [] HuyaSDKParser : âãé¢è§£æãroomId=11342421 æå, streams=6
+15:47:46 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342421 ç­å¾è=1
+15:47:46 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342421 ç­å¾è=1
+15:47:46 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:46 [] HuyaSDKParser : ãAppãæ¿é´11342421 SDKè§£ææå: 6 æ¡æµ
+15:47:46 [] HuyaSDKParser : ãAppãæ¿é´11342421 SDKè§£ææå: 6 æ¡æµ
+15:47:46 [] HuyaSDKParser : æ¿é´11342421 æµä¿¡æ¯åå¥ç¼å­: 6 æ¡æµ
+15:47:46 [] HuyaSDKParser :   â Stream[line#1(v=5) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:46 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:46 [] HuyaSDKParser :   â Stream[line#1(v=5) èå6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:46 [] HuyaSDKParser : çº¿è·¯#1(v=5): 3 ä¸ªç ç
+15:47:46 [] HuyaSDKParser :   â Stream[line#0(v=14) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:46 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:46 [] HuyaSDKParser :   â Stream[line#0(v=14) èå6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:46 [] HuyaSDKParser : çº¿è·¯#0(v=14): 3 ä¸ªç ç
+15:47:46 [] HuyaSDKParser : V33DBG room=11342421 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@2b92ce4a, com.huya.berry.module.Player.SMObject$BitRateInfo@1f9891bb, com.huya.berry.module.Player.SMObject$BitRateInfo@21ff36d8]
+15:47:46 [] HuyaSDKParser : V33DBG room=11342421 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@2b92ce4a, com.huya.berry.module.Player.SMObject$BitRateInfo@1f9891bb, com.huya.berry.module.Player.SMObject$BitRateInfo@21ff36d8]
+15:47:46 [] HuyaSDKParser : V33DBG room=11342421 singleInfo.size=2
+15:47:46 [] HuyaSDKParser : V33DBG room=11342421 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@103af7b5
+15:47:46 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:46 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342421
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342421
+15:47:46 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:46 [] TogetherWatchGroup : ãtag=UP(filterlib-2135-4537)ãè§£æé¢éæ°=20
+15:47:46 [] TogetherWatchGroup : ãtag=UPãåå§åè¡¨=20
+15:47:46 [] TogetherWatchGroup : ãtag=UPãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:46 [] TogetherWatchGroup : ãåºå®åç»ãèçä¸èµ·çååº é¢éæ°=19
+15:47:46 [] TogetherWatchGroup : ãtag=ç»¼èº(filterlib-2135-853)ãè§£æé¢éæ°=20
+15:47:46 [] TogetherWatchGroup : ãtag=ç»¼èºãåå§åè¡¨=20
+15:47:46 [] TogetherWatchGroup : ãtag=ç»¼èºãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:46 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342421
+15:47:46 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342421
+15:47:46 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11342421
+15:47:46 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:46 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342421 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:46 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342421 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:46 [] HuyaSDKParser : ðãé¢è§£æã(2/30) roomId=11342421
+15:47:46 [] TogetherWatchGroup : ãtag=ç»¼èº(filterlib-2135-853)ãè§£æé¢éæ°=20
+15:47:46 [] TogetherWatchGroup : ãtag=ç»¼èºãåå§åè¡¨=20
+15:47:46 [] TogetherWatchGroup : ãtag=ç»¼èºãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:46 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-853 size=20
+15:47:45 [] HuyaSDKParser-DebugChecker : 
+================ ð¬ãèªæ£ç»ææ±æ»ãâ éè¿ï¼æ£æ¥é¡¹ passed=3/3ï¼================
+  â¹ï¸  æ£æ¥é¡¹1ãæ­æ¾å¨ç±»å è½½ãï¼ClassNotFound 4/6ï¼debug minifyEnabled=false å±æ­£å¸¸ï¼release ä¼å¨é¨æ¶å¤±ï¼
+  â ï¸  CLASS è¿è½å è½½ï¼debug é¶æ®µæ­£å¸¸ï¼release R8 ä¼å¥ç¦»ï¼ï¼com.huya.berry.sdkplayer.SdkPlayerService
+  â ï¸  CLASS è¿è½å è½½ï¼debug é¶æ®µæ­£å¸¸ï¼release R8 ä¼å¥ç¦»ï¼ï¼com.huya.berry.sdkplayer.floats.view.PlayerActivity
+========================================================
+  ð è±åå¤æ­æ åè¾åºï¼â æ­£å¸¸ï¼æªæ£æµå°æ­æ¾å¨æ¨¡å
+     è§£éï¼æ¹æ¡1 å®æ¹å¼å³ + æ¹æ¡2 R8 æ­æ¾å¨ç±» dontwarn å¨é¨çæ
+     Release é¶æ®µ R8 ä¼ææªå è½½ç±»å¨é¨å¥ç¦» dexï¼åç â0....[å·²æªæ­]
+15:47:45 [] HuyaSDKParser-DebugChecker :   â æ£æ¥é¡¹3ãso åå­å è½½ãï¼/proc/self/maps ä¸­æ  libberry_player/decoder/ijk ç­ mmap è®°å½ï¼è¿è¡åå­çÂ·çä¸ï¼
+15:47:45 [] HuyaSDKParser-DebugChecker :   â¹ï¸  æ£æ¥é¡¹2ãæ¨¡åæ³¨åãï¼ModuleManager ç±»åæ æ³å®ä½ï¼çæ¬æ··æ·ï¼ï¼éçº§ä¸ºä¸å¤å®ï¼è·³è¿
+15:47:45 [] HuyaSDKParser-DebugChecker : ================ ð¬ãè±åæ¨èï¼æ­æ¾å¨æ¨¡åå¥ç¦»èªæ£ã================
+15:47:45 [] TogetherWatchGroup : ãtag=å¨é¨(gid-2135)ãè§£æé¢éæ°=20
+15:47:45 [] TogetherWatchGroup : ãtag=å¨é¨ãåå§åè¡¨=20
+15:47:45 [] TogetherWatchGroup : ãtag=å¨é¨ãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:45 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+15:47:45 [] RedirectHttp : [15:47:45] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+15:47:45 [] TogetherWatchGroup : ãtag=UP(filterlib-2135-4537)ãè§£æé¢éæ°=20
+15:47:45 [] TogetherWatchGroup : ãtag=UPãåå§åè¡¨=20
+15:47:45 [] TogetherWatchGroup : ãtag=UPãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:45 [] TogetherWatchGroup : ãtag=ææ°(filterlib-2135-4531)ãè§£æé¢éæ°=14
+15:47:45 [] TogetherWatchGroup : ãtag=ææ°ãåå§åè¡¨=14
+15:47:45 [] TogetherWatchGroup : ãtag=ææ°ãç¬¬2é¡µæ æ°é¢éï¼åæ­¢ç¿»é¡µ
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:45 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+15:47:45 [] RedirectHttp : [15:47:45] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+15:47:45 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+15:47:45 [] RedirectHttp : [15:47:45] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+15:47:45 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:45 [] RedirectHttp : [15:47:45] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:45 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:45 [] RedirectHttp : [15:47:45] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=gid-2135 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4537 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveListByTag-listãcode=0 tag=filterlib-2135-4531 size=14
+15:47:45 [] TogetherWatchGroup : ãæ¨èåè¡¨ãåç±»åé¢éæ°=40
+15:47:45 [] TogetherWatchGroup : ãæ¨èåè¡¨ãåå§é¢éæ°=40
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveList-listãcode=0 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveList-listãcode=0 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveList-listãcode=0 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveList-listãcode=0 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveList-listãcode=0 size=20
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:LiveList-listãcode=0 size=20
+15:47:45 [] TogetherWatchGroup : ãSDKâåç»ãåç±»åå¸: èççµå½±=1 èççµè§å§=1 èçå¨æ¼«=1 èçç»¼èº=1 èçä¸èµ·ç=0
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:TagList-listãcode=0 size=4
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:TagList-listãcode=0 size=4
+15:47:45 [] HuyaSDKParser : âãé¢è§£æãroomId=11342412 æå, streams=8
+15:47:45 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342412 ç­å¾è=1
+15:47:45 [] HuyaSDKParser : ãAppããå»éãå®æåå roomId=11342412 ç­å¾è=1
+15:47:45 [] HuyaSDKParser : SDK è§£æå®æ: 2 æ¡çº¿è·¯, é»è®¤ Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true]
+15:47:45 [] HuyaSDKParser : ãAppãæ¿é´11342412 SDKè§£ææå: 8 æ¡æµ
+15:47:45 [] HuyaSDKParser : ãAppãæ¿é´11342412 SDKè§£ææå: 8 æ¡æµ
+15:47:45 [] HuyaSDKParser : æ¿é´11342412 æµä¿¡æ¯åå¥ç¼å­: 8 æ¡æµ
+15:47:45 [] HuyaSDKParser :   â Stream[line#1(v=5) æµç(500bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser :   â Stream[line#1(v=5) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser :   â Stream[line#1(v=5) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser :   â Stream[line#1(v=5) èå6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser : çº¿è·¯#1(v=5): 4 ä¸ªç ç
+15:47:45 [] HuyaSDKParser :   â Stream[line#0(v=14) æµç(500bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser :   â Stream[line#0(v=14) è¶æ¸(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser :   â Stream[line#0(v=14) èå4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser :   â Stream[line#0(v=14) èå6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+15:47:45 [] HuyaSDKParser : çº¿è·¯#0(v=14): 4 ä¸ªç ç
+15:47:45 [] HuyaSDKParser : V33DBG room=11342412 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3b94e2e9, com.huya.berry.module.Player.SMObject$BitRateInfo@24bdcb6e, com.huya.berry.module.Player.SMObject$BitRateInfo@3ddf520f, com.huya.berry.module.Player.SMObject$BitRateInfo@29b0b29c]
+15:47:45 [] HuyaSDKParser : V33DBG room=11342412 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3b94e2e9, com.huya.berry.module.Player.SMObject$BitRateInfo@24bdcb6e, com.huya.berry.module.Player.SMObject$BitRateInfo@3ddf520f, com.huya.berry.module.Player.SMObject$BitRateInfo@29b0b29c]
+15:47:45 [] HuyaSDKParser : V33DBG room=11342412 singleInfo.size=2
+15:47:45 [] HuyaSDKParser : V33DBG room=11342412 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@2e20f70
+15:47:45 [] HuyaSDKParser : getLines: 2 æ¡çº¿è·¯
+15:47:45 [] HuyaSDKParser : SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342412
+15:47:45 [] CustomUI : ãCustomUICallbackããCustomUI:onResultCallbackãcode=0 dataType=LiveInfo roomId=11342412
+15:47:45 [] HuyaSDKParser : ðãSDKåè°è¿å¥ãonResultCallback(code=0, data=LiveInfo) from main
+15:47:44 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=494ï¼å­è=223292
+15:47:44 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 0 ä¸ªé¢éï¼æ»è®¡ 653
+15:47:44 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 31
+15:47:44 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 31 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 31 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+15:47:44 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 82
+15:47:44 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 45 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 82 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+15:47:44 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5363640
+15:47:44 [] RedirectHttp : [15:47:44] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5363640
+15:47:44 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5363640
+15:47:44 [] RedirectHttp : [15:47:44] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5363640
+15:47:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989609-1-1748675939.hls.ts?servicetype=1
+15:47:44 [] RedirectHttp : [15:47:44] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989609-1-1748675939.hls.ts?servicetype=1
+15:47:44 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+15:47:44 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+15:47:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989609-1-1748675939.hls.ts?servicetype=1
+15:47:44 [] RedirectHttp : [15:47:44] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989609-1-1748675939.hls.ts?servicetype=1
+15:47:44 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5449932 å­è (5322 KB)
+15:47:44 [] RedirectHttp : [15:47:44] ä¼ è¾å®æï¼å±è¯»å 5449932 å­è (5322 KB)
+15:47:44 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=494ï¼å­è=223292
+15:47:44 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342412
+15:47:44 [] HuyaSDKParser : ãAppãåèµ·SDKè§£æ: roomId=11342412
+15:47:44 [] HuyaSDKParser : è°ç¨ SDK getLiveDataByRoomId, roomId=11342412
+15:47:44 [] HuyaSDKParser : â CustomUICallback ç´æ¥å®ç°åå»ºæå (impl=com.tv.live.util.HuyaSDKParser$11)
+15:47:44 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+15:47:44 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+15:47:44 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 31 (å: 31)
+15:47:44 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 31 (å: 49)
+15:47:44 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 49 ä¸ªæ¿é´ï¼å»éåï¼
+15:47:44 [] HuyaTogetherWatch : cache API è¿å 834 ä¸ªæ¿é´ï¼è¿æ»¤åº 30 ä¸ªç»¼èºæ¿é´
+15:47:44 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342412 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:44 [] HuyaSDKParser : ãAppããå»éãæ°è¯·æ±å¥é roomId=11342412 inflight=1 çº¿ç¨=HuyaSDKParser-Preload
+15:47:44 [] HuyaSDKParser : ðãé¢è§£æã(1/30) roomId=11342412
+15:47:44 [] HuyaSDKParser : ðãé¢è§£æã(æ°æ¿é´å¥é) å¼å§, å± 30 ä¸ªèçæ¿é´ï¼æ¯ 1s è§£æä¸ä¸ª
+15:47:44 [] ChannelPanel : ð¢ãèçé¢è§£æã(ä¸èµ·ç) æ¶éå° 468 ä¸ªæ¿é´ï¼å¼å§åå°å¹¶è¡é¢è§£æ
+15:47:44 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 468 ä¸ªé¢éï¼æ»è®¡ 653
+15:47:44 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 31
+15:47:44 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 31 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 31 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+15:47:44 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 82
+15:47:44 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 45 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 82 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+15:47:44 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+15:47:44 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+15:47:44 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+15:47:44 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+15:47:44 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+15:47:44 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 31 (å: 31)
+15:47:44 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 31 (å: 49)
+15:47:44 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 49 ä¸ªæ¿é´ï¼å»éåï¼
+15:47:44 [] HuyaTogetherWatch : cache API è¿å 834 ä¸ªæ¿é´ï¼è¿æ»¤åº 30 ä¸ªç»¼èºæ¿é´
+15:47:44 [] MyApplication : èç SDK åå§åå®æ
+15:47:44 [] HuyaSDKParser : ãAppãâ BerryEvent äºä»¶ä»£çå·²æ³¨å
+15:47:44 [] HuyaSDKParser : ãAppãâ BerryEvent äºä»¶ä»£çå·²æ³¨å
+15:47:44 [] HuyaSDKParser : â å·²ç´æ¥å³é­ SDK ä¸æ¥: APM+ç»è®¡ééå¨é¨å³é­
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] ====== å¨é¨å³é­æå âââ ======
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ NSStatUtil.mEnabled=false â å·²å³é­(éè¯·æ±æ§è½ä¸æ¥)
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] [hyns ç½ç»è¯·æ±ç»è®¡]
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ setGameAccountID(æ¸¸æè´¦å·ç»å®) â å·²æ¸ç©ºä¸ç¦ç¨
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ sendPlayerData(æ­æ¾å¿è·³ä¸æ¥) â no-op ç¦ç¨
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] [æ­æ¾æ°æ®/æ¸¸æè´¦å·åéä¿é©]
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ debugMode/cameraMode/oneKeyGangUp/isNeedPlay/hidePauseBtn/landscapeMode=false â
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] [Builderç²¾ç®å¼å³]
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ HuyaStatisAgent.mApiâNoOp â æå(PV/initå·²æ¦æª)
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ ReportApiâNoOpReportApi â
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] [Hiidoè¿è¥ç»è®¡]
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯]   ââ stopReport             â
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] [ciku APM]
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] ====== SDKä¸æ¥å³é­æ±æ» ======
+15:47:44 [] HuyaBerryReportGuard : â sendPlayerData æ­æ¾æ°æ®ä¸æ¥å·²ç¦ç¨ï¼no-opï¼ä¸è§¦åä»»ä½ç½ç»è¯·æ±ï¼
+15:47:44 [] HuyaBerryReportGuard : â setGameAccountID("") å·²æ¸ç©ºæ¸¸æè´¦å·ç»å®ï¼ä¸å³èä»»ä½æ¸¸æè´¦å·ï¼
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] Step5 NSStat ç½ç»ç»è®¡: mEnabled=false â å·²å³é­
+15:47:44 [] HuyaSDKParser : [SDKä¸æ¥éªè¯] Step4 ç»è®¡éé: ReportApi=com.tv.live.util.NoOpReportApi â å·²æ¿æ¢ä¸ºNoOp
+15:47:44 [] HuyaSDKParser : â åç±»æ ¡éªæå: èçä¸èµ·ç(2135)
+15:47:44 [] CustomUI : ãCustomUICallbackããCustomUI:changeGameãcode=0 gameId=2135
+15:47:44 [] CustomUI : ãCustomUICallbackããCustomUI:changeGameãcode=0 gameId=2135
+15:47:44 [] HuyaSDKParser : å·²æ³¨å¥gameIdArræé: [2135_ä¸èµ·ç, 2336_çèè£è, 2633_äºæ¬¡å, 1663_æç§, 6861_åå]
+15:47:44 [] HuyaSDKParser : injectMultiGameIds: åægameIdArré¿åº¦=5
+15:47:44 [] HuyaSDKParser : injectMultiGameIds: å¼å§æ³¨å¥å¤gameIdæé...
+15:47:44 [] HuyaSDKParser : å·²æ³¨å¥gameIdArræé: [2135_ä¸èµ·ç, 2336_çèè£è, 2633_äºæ¬¡å, 1663_æç§, 6861_åå]
+15:47:44 [] HuyaSDKParser : injectMultiGameIds: åægameIdArrä¸ºç©º/ä¸å­å¨
+15:47:44 [] HuyaSDKParser : injectMultiGameIds: å¼å§æ³¨å¥å¤gameIdæé...
+15:47:44 [] HuyaSDKParser : â å¨å±å´©æºå¤çå¨å·²å¤ºåï¼èç CrashHandler å·²è¢«è¦çï¼
+15:47:44 [] CrashHandler : èªå¨éå¯ï¼å·²å³é­
+15:47:44 [] CrashHandler : å´©æºé¡µé¢æ¾ç¤ºæ¶é¿ï¼60 ç§
+15:47:44 [] CrashHandler : å´©æºæ¥å¿ä¿å­ç®å½ï¼/data/data/com.tv.live/files/crash_logs
+15:47:44 [] CrashHandler : å¨å±å´©æºæè·å¨å·²åå§å
+15:47:44 [] HuyaSDKParser : â HuyaBerry SDK åå§å & ç»å®å®æ
+15:47:44 [] ChannelPanel : ð SDK ç¬ç«çº¿è·¯åå°é¢å è½½èç 5 å¤§åºå®åç»â¦
+15:47:44 [] HuyaSDKParser : â HuyaBerry SDK åå§åæå (init æ å¼å¸¸)
+15:47:44 [] SecureDataStore : å®å¨å­å¨åå§åå¤±è´¥: KeyGenerator AES implementation not found
+15:47:44 [] MyApplication : å®å¨æ£æµåç°é£é©: æ£æµå°å®å¨å¨è:
+â ï¸ æ£æµå° Root æé
+
+15:47:44 [] SecurityGuard : å®å¨æ£æµå®æ: æ£æµå°å®å¨å¨è:
+â ï¸ æ£æµå° Root æé
+
+15:47:44 [] HuyaTogetherWatch : ä»Cache APIè·åå° 834 ä¸ªç»¼èºæ¿é´
+15:47:44 [] SecurityGuard : â ï¸ æ£æµå° Root ç¯å¢
+15:47:44 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@1074b15e
+15:47:44 [] SecurityGuard : å®å¨ç®¡çå¨åå§åå®æï¼ç­¾ååå¸: fcEvh0TosbkPDj65...
+15:47:44 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@85da7c8
+15:47:44 [] HuyaTogetherWatch : ä»Cache APIè·åå° 834 ä¸ªç»¼èºæ¿é´
+15:47:44 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@31f7706b
+15:47:44 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@1b2b5568
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@241ed08b
+15:47:43 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+15:47:43 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 165)
+15:47:43 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 165 ä¸ªæ¿é´ï¼å»éåï¼
+15:47:43 [] HuyaTogetherWatch : cache API è¿å 834 ä¸ªæ¿é´ï¼è¿æ»¤åº 72 ä¸ªå¨æ¼«æ¿é´
+15:47:43 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+15:47:43 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 165)
+15:47:43 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 165 ä¸ªæ¿é´ï¼å»éåï¼
+15:47:43 [] HuyaTogetherWatch : cache API è¿å 834 ä¸ªæ¿é´ï¼è¿æ»¤åº 72 ä¸ªå¨æ¼«æ¿é´
+15:47:43 [] HuyaTogetherWatch : ä»Cache APIè·åå° 834 ä¸ªå¨æ¼«æ¿é´
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3ce7957f
+15:47:43 [] HuyaTogetherWatch : ä»Cache APIè·åå° 834 ä¸ªå¨æ¼«æ¿é´
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@34d8369e
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@2c163cd9
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@20045125
+15:47:43 [] HuyaSDKParser : [hiidoç»è®¡] HuyaStatisAgent.mApi æ¿æ¢ä¸º NoOp: â æå(PV/init å·²æ¦æª)
+15:47:43 [] HuyaSDKParser : [2/4] HuyaBerryConfig build å®æ
+15:47:43 [] HuyaCacheGov : â SDK ç²¾ç®å¼å³å·²ç´æ¥è°ç¨ï¼isOpenBugly/debugMode/isNeedPlay/cameraMode/oneKeyGangUp/hidePauseBtn/landscapeMode = falseï¼
+15:47:43 [] HuyaCacheGov : â SDK æ ¹ç®å½éå®åè³: /data/data/com.tv.live/cache/huya_sdk
+15:47:43 [] HuyaSDKParser : [è®¾å¤æçº¹] UDB host å·²æ¹åæå 127.0.0.1 â udbdf.huya.com ç­ä¸æ¥å¨é¨å¤±æ â
+15:47:43 [] HuyaSDKParser :   â HuyaBerryConfig.Builder é¾è·¯æå»ºå®æï¼å«å®æ¹ç²¾ç®å¼å³ï¼
+15:47:43 [] HuyaSDKParser :   ð ä»å å¯å­å¨å è½½å­è¯: gameId=2135, appId=12***56, appKey=d8***dd
+15:47:43 [] HuyaSDKParser : [1/4] åå¤æå»º HuyaBerryConfig.Builder
+15:47:43 [] SdkCompatHook : â å·²ä¸­å BaseApi.crashIfDebugï¼sOnCrashListener=nullï¼ï¼SDK init ä¸åå éè´å½éè¯¯æå¼å¸¸
+15:47:43 [] HuyaSDKParser : â èç Mars åçåºé¢æ£éè¿
+15:47:43 [] HuyaSDKParser :   â StnLogic.startTask native æ³¨åæ£æ¥éè¿
+15:47:43 [] HuyaSDKParser :   â loadLibrary("marsstn") æå
+15:47:43 [] HuyaSDKParser :   â loadLibrary("stlport_shared") æå
+15:47:43 [] HuyaSDKParser :   â loadLibrary("c++_shared") æå
+15:47:43 [] HuyaSDKParser : â ï¸ Android 5.1.1(API 22) å®æ¹ä¸å¨ Mars STN æ¯æèå´ï¼ä»å°è¯å è½½éªè¯ v7a å¼å®¹æ§
+15:47:43 [] HuyaSDKParser : ãAppãå¼å§åå§åèç SDK...
+15:47:43 [] HuyaSDKParser : ãAppãå¼å§åå§åèç SDK...
+15:47:43 [] HuyaSDKLogger : â HuyaSDKLogger åå§åå®æï¼logcat çå¬ SDK æ¥å¿ï¼
+15:47:43 [] HuyaSDKLogger : â ï¸ æ  READ_LOGS æéï¼è·³è¿ logcat çå¬ï¼é¿åè§¦åç³»ç»æ¥å¿æéå¼¹çªï¼
+15:47:43 [] MyApplication : â ï¸ API <= 22ï¼Android 5.xï¼å°è¯åå§åèç SDKï¼useLegacyPackaging + v7a å¼å®¹éªè¯ï¼
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@1e65a11c
+15:47:43 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3ab0ea8f
+15:47:43 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+15:47:43 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+15:47:43 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=8
+15:47:43 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3eec75ee
+15:47:42 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+15:47:42 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+15:47:42 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+15:47:42 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@1d01a769
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@bad15f0
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@35549e33
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@30ede1a2
+15:47:42 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+15:47:42 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+15:47:42 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+15:47:42 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+15:47:42 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+15:47:42 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3b3f9f97
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3a303a16
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@24b6c331
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@1a29a3d8
+15:47:42 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+15:47:42 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+15:47:42 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+15:47:42 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+15:47:42 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+15:47:42 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3f6492bb
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@34fa334a
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@2cbcd0b5
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@f5924ec
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3613db9f
+15:47:42 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@14cf413e
+15:47:41 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: epg.catvod.com
+15:47:41 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: epg.catvod.com -> 3 ä¸ªpin
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3cee4df9
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@1f00fcc0
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@69f9e43
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@82397f2
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@28dfbefd
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@3be53f54
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@152567c1
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@124914bc
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@d3168af
+15:47:41 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$KeyIterator@2485988e
+15:47:41 [] HuyaCacheGov : â æ¸çå®æ: 37.38 KB â 37.38 KB  èç 0 B  èæ¶ 52ms
+15:47:41 [] HuyaCacheGov : Step1(æ¥å¿/å´©æº/è¿æ) æ¸ç: 0 B  å©ä½ 10 æä»¶ = 37.38 KB
+15:47:41 [] HuyaCacheGov : æ«æå° SDK åéç®å½ 9 ä¸ª, å± 10 ä¸ªæä»¶, å½åå ç¨ = 37.38 KB
+15:47:41 [] LogServer : HTTP Server listening on port 9527
+15:47:41 [] AppCacheInspector : â åºç¨ç¼å­å·¡æ£å®æ: 69.44 KB â 69.44 KB  éæ¾ 0 B  èæ¶ 3ms
+
+15:47:41 [] MyApplication : LogServer å¯å¨æå: 10.0.2.15:9527
+15:47:41 [] LogServer : LogServer starting on port 9527 (cleared 0 old connections)
+15:47:41 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: www.huya.com
+15:47:41 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: www.huya.com -> 4 ä¸ªpin
+15:47:41 [] TVPlayerManager : ç­æç¼å²æ¢å¤ï¼æ¶é¿ï¼680ms
+15:47:41 [] TVPlayerManager : [PLAY] ç­æç¼å²æ¢å¤ï¼æ¶é¿ï¼680ms
+15:47:41 [] TVPlayerManager : å¼å§æ­æ¾
+15:47:41 [] TVPlayerManager : [PLAY] å¼å§æ­æ¾
+15:47:41 [] HuyaSDKParser : ð¬ãé¢è§£æãé¦æ­å·²å°±ç»ªï¼STATE_READYï¼â éå³°å¯å¨é¢è§£æ
+15:47:41 [] TVPlayerManager : æ­æ¾å°±ç»ª (STATE_READY)
+15:47:41 [] TVPlayerManager : [PLAY] æ­æ¾å°±ç»ª (STATE_READY)
+15:47:41 [] MyApplication : å´©æºå¤çå¨åå§åå®æ
+15:47:41 [] CrashHandler : èªå¨éå¯ï¼å·²å³é­
+15:47:41 [] CrashHandler : å´©æºé¡µé¢æ¾ç¤ºæ¶é¿ï¼60 ç§
+15:47:41 [] CrashHandler : å´©æºæ¥å¿ä¿å­ç®å½ï¼/data/data/com.tv.live/files/crash_logs
+15:47:41 [] CrashHandler : å¨å±å´©æºæè·å¨å·²åå§å
+15:47:41 [] TVPlayerManager : è§é¢åè¾¨çååï¼1920Ã1080
+15:47:41 [] TVPlayerManager : [PLAY] è§é¢åè¾¨çååï¼1920Ã1080
+15:47:40 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+15:47:40 [] RedirectHttp : [15:47:40] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+15:47:40 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+15:47:40 [] RedirectHttp : [15:47:40] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+15:47:40 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+15:47:40 [] RedirectHttp : [15:47:40] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5449932
+15:47:40 [] RedirectHttp : [15:47:40] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5449932
+15:47:40 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5449932
+15:47:40 [] RedirectHttp : [15:47:40] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5449932
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989599-1-1748675938.hls.ts?servicetype=1
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989599-1-1748675938.hls.ts?servicetype=1
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989599-1-1748675938.hls.ts?servicetype=1
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787989599-1-1748675938.hls.ts?servicetype=1
+15:47:40 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+15:47:40 [] RedirectHttp : [15:47:40] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+15:47:40 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+15:47:40 [] RedirectHttp : [15:47:40] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+15:47:40 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+15:47:40 [] RedirectHttp : [15:47:40] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] TVPlayerManager : æªè§£æå°ä»»ä½æ¸æ°åº¦æµï¼å¯è½æ¯ç´æ­æºæ¬èº«ä¸æ¯æå¤ç çæç½ç»è¢«æ¦æª
+15:47:40 [] TVPlayerManager : ãæ®éæºãä¸»æ­æ¾åè¡¨é¿åº¦: 1028
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ éå®å1æ¬¡~ ç¶æç  302: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ éå®å1æ¬¡~ ç¶æç  302: http://117.169.31.36:8080/wh7f454c46tw3365137283_377525101/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787989660&from=79201&hms_devid=161&online=1787989660&vqe=3
+15:47:40 [] TVPlayerManager : ãæ®éæºãä¸»æ­æ¾åè¡¨ååºç : 200
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] play() åï¼state=2
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] play() åï¼state=2
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] prepare åï¼state=2
+15:47:40 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+15:47:40 [] RedirectHttp : [15:47:40] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+15:47:40 [] TVPlayerManager : ç¼å²ä¸­ (STATE_BUFFERING)
+15:47:40 [] TVPlayerManager : [PLAY] ç¼å²ä¸­ (STATE_BUFFERING)
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] prepare åï¼state=1
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] setMediaSource åï¼player state=1
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-3] sp ready, debugEnabled=false
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-2] åå¤åå»º SharedPreferences å httpFactory...(åå°)
+15:47:40 [] TVPlayerManager : ãæ®éæºãè§£æä¸»æ­æ¾åè¡¨: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+15:47:40 [] ChannelPanel : SDK åºå®åç»é¢å è½½å¤±è´¥: SDK æªåå§åå®æï¼ç¨æ·ç¹å»åç»æ¶ä»ä¼èµ°åç»æåï¼
+15:47:40 [] TVPlayerManager : ð´ [DEBUG-1] fetchAndParseMasterPlaylistNormal è¿åï¼ç»§ç»­æ§è¡
+15:47:40 [] TVPlayerManager : ãæ®éæºãå¼å§æ­æ¾: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+15:47:40 [] TVPlayerManager : doPlay: url=http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8 isHls=true isRealStream=true
+15:47:40 [] ChannelPanel : ð SDK ç¬ç«çº¿è·¯åå°é¢å è½½èç 5 å¤§åºå®åç»â¦
+15:47:40 [] ChannelPanel : setChannels: åå§é¢éæ°=185
+15:47:40 [] SourceHealthChecker : å¼å§å¨éæºæ£æµï¼é¢éæ°: 185
+15:47:40 [] AppCoreManager : ãEPGãå¼å§å è½½èç®å...
+15:47:40 [] AppCoreManager : ãå¥åº·æ£æµãå·²è§¦ååå°å¨éæºæ£æµ
+15:47:40 [] AppCoreManager : ð¡ãèçé¢è§£æã(ç½ç») æªè¯å«å°èçæ¿é´ï¼è·³è¿é¢è§£æï¼åè¡¨å± 185 ä¸ªé¢éï¼
+15:47:40 [] AppCoreManager : ãç½ç»ãç´æ­æºåè¡¨å·²æ´æ°
+15:47:40 [] AppCoreManager : ãç½ç»ãç´æ­æºå è½½æåï¼é¢éæ»æ°ï¼185
+15:47:40 [] LiveSourceLoader : LOAD: source #1 SUCCESS, channels=185
+15:47:40 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å è½½æåï¼å± 185 ä¸ªé¢é
+15:47:40 [] LiveSourceLoader : ãç½ç»ãæ°¸ä¹ååºå·²æ´æ°ï¼é¢éæ° 185
+15:47:40 [] LiveSourceLoader : ä¸è½½æå attempt=1 size=30134 url=https://gitee.com/qf_1111/iptv/raw/master/dfdvfaf.m3u
+15:47:40 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: raw.giteeusercontent.com
+15:47:40 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: raw.giteeusercontent.com -> 3 ä¸ªpin
+15:47:39 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: gitee.com
+15:47:39 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: gitee.com -> 3 ä¸ªpin
+15:47:39 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: live.cdn.huya.com
+15:47:39 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: live.cdn.huya.com -> 3 ä¸ªpin
+15:47:39 [] NetUtil : NetUtil åå§åå®æï¼å«å®å¨éç½®ï¼
+15:47:39 [] TVPlayerManager : Surfaceå·²éå»ºï¼æ­æ¾å·²æ¢å¤ï¼éè¯ç¬¬1æ¬¡ï¼
+15:47:39 [] TVPlayerManager : Surfaceå·²éå»ºï¼æ­æ¾å·²æ¢å¤ï¼éè¯ç¬¬1æ¬¡ï¼
+15:47:39 [] TVPlayerManager : Surfaceåå: 1280x720
+15:47:39 [] TVPlayerManager : Surfaceåå»ºæåï¼æ­æ¾å¨å·²ç»å®è§å¾å¹¶æç»­æ­æ¾
+15:47:39 [] ChannelPanel : setChannels: åå§é¢éæ°=0
+15:47:39 [] BootReceiver : ç¨æ·æªå¼å¯å¼æºèªå¯ï¼ä¸å¯å¨
+15:47:39 [] BootReceiver : å¼æºèªå¯å¼å³ç¶æï¼false
+15:47:39 [] BootReceiver : æ¶å°å¹¿æ­ï¼android.net.conn.CONNECTIVITY_CHANGE
+15:47:39 [] LiveSourceLoader : LOAD: source #1 downloading: https://gitee.com/qf_1111/iptv/raw/master/dfdvfaf.m3u
+15:47:39 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å¼å§å è½½ï¼https://gitee.com/qf_1111/iptv/raw/master/dfdvfaf.m3u
+15:47:39 [] LiveSourceLoader : LOAD: source count=2 LIVE_URL='https://gitee.com/qf_1111/iptv/raw/master/dfdvfaf.m3u' LIVE_URL_2='https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u'
+15:47:39 [] AppCoreManager : ãç½ç»ãåå°å è½½ææ°ç´æ­æº...
+15:47:39 [] AppCoreManager : ãç¼å­ãæ ç¼å­ï¼ç«å³æ¸²æç©ºUIï¼åå°ç»§ç»­ç½ç»å è½½
+15:47:39 [] AppCoreManager : ãç´æ­æºãå¼å§å è½½ç´æ­æº...
+15:47:39 [] MainActivity : SDK æ­æ¾å¨å®¹å¨æå¿çå¬å·²ç»å®
+15:47:39 [] MainActivity : PlayerView éå»ºå®æ
+15:47:39 [] MyApplication : TVPlayerManager é¢ç­å®æï¼åå°çº¿ç¨ï¼: 307ms
+15:47:39 [] SecChk : ð è°è¯çï¼è·³è¿ç­¾åæ ¡éª
+15:47:39 [] MyApplication : ç½ç»å·¥å·åå§åå®æ
+15:47:39 [] MyApplication : SSL è¯ä¹¦ç®¡çå¨åå§åå®æ
+15:47:39 [] SSLCertPinner : é¦æ¬¡å¯å¨ï¼å¯ç¨å­¦ä¹ æ¨¡å¼
+15:47:39 [] SSLCertPinner : SSLè¯ä¹¦ç®¡çå¨åå§åå®æï¼å·²å­å¨ 0 ä¸ªååè¯ä¹¦
+15:47:39 [] MyApplication : èç SDK å­è¯å è½½æå: gameId=2135, appId=12***56, appKey=d8***dd
+15:47:39 [] HYC : å­è¯åå§åå®æ
+15:47:39 [] HYC : é»è®¤å­è¯å·²å å¯å­å¨
+15:47:39 [] HYC : é¦æ¬¡åå§åå­è¯
+15:47:39 [] MyApplication : å å¯å­å¨åå§åæå
+15:47:39 [] EncryptedStorage : â EncryptedStorage åå§åæå
+15:47:39 [] EncryptedStorage : â ä½¿ç¨éçº§æ¹æ¡çæå¯é¥ï¼å®å¨æ§è¾ä½ï¼
+15:47:39 [] MyApplication : å®å¨å®å«åå§åå®æ
+15:47:39 [] SecurityGuard : å®å¨å®å«ï¼è°è¯æ¨¡å¼ï¼ä»è®°å½æ¥å¿
+15:47:39 [] TamperReporter : åç¼è¯æ£æµå¨ï¼è°è¯æ¨¡å¼ï¼ä»è®°å½æ¥å¿
+15:47:39 [] MyApplication : å­ç¬¦ä¸²ä¿æ¤åå§åå®æ
+15:47:39 [] StringProtector : å­ç¬¦ä¸²ä¿æ¤å·²ç¦ç¨ï¼è°è¯æ¨¡å¼ï¼
+15:47:39 [] MyApplication : DEX ä¿æ¤åå§åå®æ
+15:47:39 [] MyApplication : å®å¨æ£æ¥éè¿
+15:47:39 [] SecChk : ð è°è¯çï¼è·³è¿ç­¾åæ ¡éª
+15:47:39 [] MyApplication : URL éç½®è§£å¯å®æ
+15:47:39 [] UrlConfig : URL éç½®è§£å¯å®æï¼SecurityCore.isLoaded=true | RAW[L1=ok, L2=ok, E1=ok, E2=ok, L3=asset://live_source_3.txt]
+15:47:39 [] SecurityCore : DECRYPT: Native decrypted OK, len=27
+15:47:39 [] SecurityCore : DECRYPT: Native decrypted OK, len=30
+15:47:39 [] MyApplication : å¨å±å¼å¸¸ä¸æ¥åå§åå®æï¼Bugly å·²ç§»é¤ï¼
+15:47:39 [] ExceptionReporter : ExceptionReporter disabled
+15:47:39 [] ExceptionReporter : ExceptionReporter initialized (policy: throwable+events / biz-masked / tracking-on)
+15:47:39 [] TVPlayerManager : ðº å¯å¨æ¶è¯»åè§£ç å¨è®¾ç½®: decoder_mode=auto â mDecoderMode=0
+15:47:39 [] SourceHealthChecker : å è½½å¤±è´¥è®°å½: 0 æ¡
+15:47:39 [] UrlConfig : LIVE_URL_2(æº2): https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u
+15:47:39 [] UrlConfig : LIVE_URL(æº1): https://gitee.com/qf_1111/iptv/raw/master/dfdvfaf.m3u
+15:47:39 [] MyApplication : SecurityCore åå§åæå
+15:47:39 [] SecurityCore : SECURITY_INIT: Native SO loaded OK
+15:47:39 [] SecurityCore : libtvlive_security.so å è½½æå
+15:47:39 [] MyApplication : å­ç¬¦ä¸²æ··æ·æµè¯éè¿
+15:47:39 [] MyApplication : è°è¯çï¼è·³è¿åè°è¯æ£æµ
+15:47:39 [] AntiDebug : åè°è¯æ£æµå·²ç¦ç¨ï¼è°è¯æ¨¡å¼ï¼
+15:47:39 [] MyApplication : åºç¨å¯å¨å®æï¼å¿«éæ¨¡å¼ï¼
+15:47:39 [] BootReceiver : å¨æå¼æºååºçå¬å·²æ³¨åï¼è¦çå¿«éå¼æº/SCREEN_ON åºæ¯ï¼

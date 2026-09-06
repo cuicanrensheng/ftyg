@@ -1,0 +1,922 @@
+﻿20:41:19 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5208164
+20:41:19 [] RedirectHttp : [20:41:19] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5208164
+20:41:19 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5208164
+20:41:19 [] RedirectHttp : [20:41:19] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5208164
+20:41:19 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920836-1-1748669062.hls.ts?servicetype=1
+20:41:19 [] RedirectHttp : [20:41:19] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920836-1-1748669062.hls.ts?servicetype=1
+20:41:19 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920836-1-1748669062.hls.ts?servicetype=1
+20:41:19 [] RedirectHttp : [20:41:19] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920836-1-1748669062.hls.ts?servicetype=1
+20:41:19 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:41:19 [] RedirectHttp : [20:41:19] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:41:19 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:41:19 [] RedirectHttp : [20:41:19] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:41:19 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:41:19 [] RedirectHttp : [20:41:19] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:41:19 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:19 [] RedirectHttp : [20:41:19] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:19 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:19 [] RedirectHttp : [20:41:19] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:12 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5479072 å­è (5350 KB)
+20:41:12 [] RedirectHttp : [20:41:12] ä¼ è¾å®æï¼å±è¯»å 5479072 å­è (5350 KB)
+20:41:11 [] TVPlayerManager : ãèçãSDK å°æªå°±ç»ª, roomId=11282233 â ç­å¾ SDK åå§åå®æåèªå¨éè¯
+20:41:11 [] TVPlayerManager : ãèçãSDK ç­å¾è¶æ¶(15s), roomId=11342412
+20:41:09 [] TVPlayerManager : ãèçãSDK å°æªå°±ç»ª, roomId=11602058 â ç­å¾ SDK åå§åå®æåèªå¨éè¯
+20:41:09 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5479072
+20:41:09 [] RedirectHttp : [20:41:09] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5479072
+20:41:09 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5479072
+20:41:09 [] RedirectHttp : [20:41:09] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5479072
+20:41:09 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920826-1-1748669061.hls.ts?servicetype=1
+20:41:09 [] RedirectHttp : [20:41:09] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920826-1-1748669061.hls.ts?servicetype=1
+20:41:09 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920826-1-1748669061.hls.ts?servicetype=1
+20:41:09 [] RedirectHttp : [20:41:09] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920826-1-1748669061.hls.ts?servicetype=1
+20:41:09 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:41:09 [] RedirectHttp : [20:41:09] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:41:09 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:41:09 [] RedirectHttp : [20:41:09] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:41:09 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:41:09 [] RedirectHttp : [20:41:09] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:41:09 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:09 [] RedirectHttp : [20:41:09] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:09 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:09 [] RedirectHttp : [20:41:09] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:41:08 [] ChannelList : getView(byGroup) pos:11, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:10, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:9, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:8, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:7, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:6, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:5, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:4, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:3, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:2, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:1, selectedPos:0, isSelected:false
+20:41:08 [] ChannelList : getView(byGroup) pos:0, selectedPos:0, isSelected:true
+20:41:04 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5242756 å­è (5119 KB)
+20:41:04 [] RedirectHttp : [20:41:04] ä¼ è¾å®æï¼å±è¯»å 5242756 å­è (5119 KB)
+20:41:00 [] SourceHealthChecker : å¨éæºæ£æµå®æ: æ£æµ 210 ä¸ªURL, åé¤ 0 ä¸ªå¤±ææº
+20:41:00 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5242756
+20:41:00 [] RedirectHttp : [20:41:00] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5242756
+20:41:00 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5242756
+20:41:00 [] RedirectHttp : [20:41:00] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5242756
+20:41:00 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920816-1-1748669060.hls.ts?servicetype=1
+20:41:00 [] RedirectHttp : [20:41:00] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920816-1-1748669060.hls.ts?servicetype=1
+20:41:00 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920816-1-1748669060.hls.ts?servicetype=1
+20:41:00 [] RedirectHttp : [20:41:00] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920816-1-1748669060.hls.ts?servicetype=1
+20:41:00 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5356872 å­è (5231 KB)
+20:41:00 [] RedirectHttp : [20:41:00] ä¼ è¾å®æï¼å±è¯»å 5356872 å­è (5231 KB)
+20:40:59 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11602058 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:59 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:59 [] RedirectHttp : [20:40:59] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:59 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:59 [] RedirectHttp : [20:40:59] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:59 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:59 [] RedirectHttp : [20:40:59] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:59 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:59 [] RedirectHttp : [20:40:59] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:59 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:59 [] RedirectHttp : [20:40:59] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:59 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342427 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:59 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=21059585 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:59 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342428 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:59 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=30080229 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:58 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=21059579 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:58 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=21059574 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:58 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11352962 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:58 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342390 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:58 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=21059577 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:58 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342414 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11601986 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11352941 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=21059581 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11352876 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342435 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342412 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342421 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11601968 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11352935 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=29982675 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:57 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342424 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:56 [] SourceHealthChecker : æ£æµå¼å¸¸(ä¸è®¡å¥å¤±æ): http://cdn.jdshipin.com:8880/huya.php?id=11342386 â Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+20:40:56 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5356872
+20:40:56 [] RedirectHttp : [20:40:56] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5356872
+20:40:56 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5356872
+20:40:56 [] RedirectHttp : [20:40:56] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5356872
+20:40:56 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920806-1-1748669059.hls.ts?servicetype=1
+20:40:56 [] RedirectHttp : [20:40:56] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920806-1-1748669059.hls.ts?servicetype=1
+20:40:56 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920806-1-1748669059.hls.ts?servicetype=1
+20:40:56 [] RedirectHttp : [20:40:56] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920806-1-1748669059.hls.ts?servicetype=1
+20:40:56 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5280732 å­è (5156 KB)
+20:40:56 [] RedirectHttp : [20:40:56] ä¼ è¾å®æï¼å±è¯»å 5280732 å­è (5156 KB)
+20:40:56 [] TVPlayerManager : ãèçãSDK å°æªå°±ç»ª, roomId=11342412 â ç­å¾ SDK åå§åå®æåèªå¨éè¯
+20:40:55 [] ChannelList : getView(byGroup) pos:11, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:10, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:9, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:8, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:7, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:6, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:5, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:4, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:3, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:2, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:1, selectedPos:0, isSelected:false
+20:40:55 [] ChannelList : getView(byGroup) pos:0, selectedPos:0, isSelected:true
+20:40:55 [] GroupList : getView pos:15, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:14, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:13, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:12, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:11, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:10, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:9, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:8, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:7, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:6, selectedPos:5, isSelected:false
+20:40:55 [] GroupList : getView pos:5, selectedPos:5, isSelected:true
+20:40:52 [] TVPlayerManager : Surfaceæ¢å¤éè¯å·²è¾¾ä¸é(10æ¬¡)ï¼åæ­¢éè¯
+20:40:52 [] TVPlayerManager : Surfaceæ¢å¤éè¯å·²è¾¾ä¸é(10æ¬¡)ï¼åæ­¢éè¯
+20:40:52 [] TVPlayerManager : Surfaceæ¢å¤éè¯å·²è¾¾ä¸é(10æ¬¡)ï¼åæ­¢éè¯
+20:40:52 [] TVPlayerManager : Surfaceæ¢å¤éè¯å·²è¾¾ä¸é(10æ¬¡)ï¼åæ­¢éè¯
+20:40:52 [] ChannelList : getView(byGroup) pos:11, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:10, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:9, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:8, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:7, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:6, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:5, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:4, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:3, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:2, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:1, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView(byGroup) pos:0, selectedPos:0, isSelected:true
+20:40:52 [] GroupList : getView pos:14, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:13, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:12, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:11, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:10, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:9, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:8, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:7, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:6, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:5, selectedPos:4, isSelected:false
+20:40:52 [] GroupList : getView pos:4, selectedPos:4, isSelected:true
+20:40:52 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5280732
+20:40:52 [] RedirectHttp : [20:40:52] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5280732
+20:40:52 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5280732
+20:40:52 [] RedirectHttp : [20:40:52] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5280732
+20:40:52 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920796-1-1748669058.hls.ts?servicetype=1
+20:40:52 [] RedirectHttp : [20:40:52] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920796-1-1748669058.hls.ts?servicetype=1
+20:40:52 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920796-1-1748669058.hls.ts?servicetype=1
+20:40:52 [] RedirectHttp : [20:40:52] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920796-1-1748669058.hls.ts?servicetype=1
+20:40:52 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5447300 å­è (5319 KB)
+20:40:52 [] RedirectHttp : [20:40:52] ä¼ è¾å®æï¼å±è¯»å 5447300 å­è (5319 KB)
+20:40:52 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=496ï¼å­è=224336
+20:40:52 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=496ï¼å­è=224336
+20:40:52 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=496ï¼å­è=224336
+20:40:52 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 0 ä¸ªé¢éï¼æ»è®¡ 677
+20:40:52 [] ChannelList : getView pos:11, selectedPos:0, isSelected:false
+20:40:52 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=496ï¼å­è=224336
+20:40:52 [] ChannelList : getView pos:10, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:9, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:8, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:7, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:6, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:5, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:4, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:3, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:2, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:1, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:0, selectedPos:0, isSelected:true
+20:40:52 [] GroupList : getView pos:10, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:9, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:8, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:7, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:6, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:5, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:4, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:3, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:2, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:1, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:0, selectedPos:0, isSelected:true
+20:40:52 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 0 ä¸ªé¢éï¼æ»è®¡ 677
+20:40:52 [] ChannelList : getView pos:11, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:10, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:9, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:8, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:7, selectedPos:0, isSelected:false
+20:40:52 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 33
+20:40:52 [] ChannelList : getView pos:6, selectedPos:0, isSelected:false
+20:40:52 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 33 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 33 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+20:40:52 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 83
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 44 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 83 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+20:40:52 [] ChannelList : getView pos:5, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:4, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:3, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:2, selectedPos:0, isSelected:false
+20:40:52 [] ChannelList : getView pos:1, selectedPos:0, isSelected:false
+20:40:52 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=496ï¼å­è=224336
+20:40:52 [] ChannelList : getView pos:0, selectedPos:0, isSelected:true
+20:40:52 [] GroupList : getView pos:10, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:9, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:8, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:7, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:6, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:5, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:4, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:3, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:2, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:1, selectedPos:0, isSelected:false
+20:40:52 [] GroupList : getView pos:0, selectedPos:0, isSelected:true
+20:40:52 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 33
+20:40:52 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 33 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 33 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+20:40:52 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 83
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 44 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 83 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+20:40:52 [] HuyaSDKParser : ðãé¢è§£æãæ æ°å¢æ¿é´ï¼åå·²å¨éåæå·²æææç¼å­ï¼ï¼è·³è¿
+20:40:52 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+20:40:52 [] ChannelPanel : ð¢ãèçé¢è§£æã(ä¸èµ·ç) æ¶éå° 469 ä¸ªæ¿é´ï¼å¼å§åå°å¹¶è¡é¢è§£æ
+20:40:52 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 469 ä¸ªé¢éï¼æ»è®¡ 677
+20:40:52 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+20:40:52 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 33
+20:40:52 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 33 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 33 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+20:40:52 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 83
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 44 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 83 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+20:40:52 [] HuyaSDKParser : ðãé¢è§£æãæ æ°å¢æ¿é´ï¼åå·²å¨éåæå·²æææç¼å­ï¼ï¼è·³è¿
+20:40:52 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+20:40:52 [] ChannelPanel : ð¢ãèçé¢è§£æã(ä¸èµ·ç) æ¶éå° 469 ä¸ªæ¿é´ï¼å¼å§åå°å¹¶è¡é¢è§£æ
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+20:40:52 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 469 ä¸ªé¢éï¼æ»è®¡ 677
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+20:40:52 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 33
+20:40:52 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 33 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 33 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+20:40:52 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 83
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 44 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 83 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+20:40:52 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+20:40:52 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+20:40:52 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+20:40:52 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+20:40:52 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 166)
+20:40:52 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+20:40:52 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+20:40:52 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 33 (å: 33)
+20:40:52 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 33 (å: 52)
+20:40:52 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+20:40:52 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 52 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:52 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 166 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:52 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 73 ä¸ªå¨æ¼«æ¿é´
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+20:40:52 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 33 ä¸ªç»¼èºæ¿é´
+20:40:52 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 33 (å: 33)
+20:40:52 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 33 (å: 52)
+20:40:52 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 52 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:52 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 33 ä¸ªç»¼èºæ¿é´
+20:40:52 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 33 (å: 33)
+20:40:52 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 33 (å: 52)
+20:40:52 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 52 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:52 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 33 ä¸ªç»¼èºæ¿é´
+20:40:52 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+20:40:52 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+20:40:52 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+20:40:52 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+20:40:52 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 166)
+20:40:52 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 166 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:52 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 73 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 0 ä¸ªé¢éï¼æ»è®¡ 677
+20:40:51 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 33
+20:40:51 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 33 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 33 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+20:40:51 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 83
+20:40:51 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 44 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+20:40:51 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 83 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 166)
+20:40:51 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+20:40:51 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 166 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:51 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 73 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+20:40:51 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 166)
+20:40:51 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 166 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:51 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 73 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 33 (å: 33)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 33 (å: 52)
+20:40:51 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 52 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:51 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 33 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@457333c
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d42f12f
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@83df30e
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@4246509
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@913c610
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9a57ad3
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªå¨æ¼«æ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@efbccc2
+20:40:51 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+20:40:51 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+20:40:51 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@ef7850d
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@7a713a4
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9edf237
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@6fb336
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 33 (å: 33)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 33 (å: 52)
+20:40:51 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 52 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:51 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 33 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@811ecd1
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@f6eff8
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@664fb5b
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@c7aa055
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d73ef0c
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@f50fa3f
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@6a9365e
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@106399
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@5ed64e0
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@49a12e3
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@ca27b12
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b8dba9d
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@7256574
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b2e2947
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@be11c86
+20:40:51 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªç»¼èºæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@24ce961
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@424c4c8
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@424e16b
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@a44ceba
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@3cbf3e5
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b4f16dc
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9a39f4f
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@f5a05ae
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@cf09e29
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@236afb0
+20:40:51 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@58186f3
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@f0df562
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d0c6c2d
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@c30a344
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@5ab7c57
+20:40:51 [] HuyaTogetherWatch : ãååºãå·²åå¥æ°¸ä¹ååºï¼æ¿é´æ°=496ï¼å­è=224336
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@2a0a1f1
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@fa8c598
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@248237b
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9628f0a
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@3e24375
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@e35aaac
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@99be05f
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@49560fe
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@6fe14b9
+20:40:51 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@36ca680
+20:40:51 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@e75cd14
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@fa6eb67
+20:40:51 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@2d91326
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b261681
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@a5ff268
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@4ffc18b
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@37c9b5a
+20:40:51 [] ChannelList : getView pos:11, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:10, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:9, selectedPos:0, isSelected:false
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@f468f05
+20:40:51 [] ChannelList : getView pos:8, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:7, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:6, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:5, selectedPos:0, isSelected:false
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@934aa7c
+20:40:51 [] ChannelList : getView pos:4, selectedPos:0, isSelected:false
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@25abd6f
+20:40:51 [] ChannelList : getView pos:3, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:2, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:1, selectedPos:0, isSelected:false
+20:40:51 [] ChannelList : getView pos:0, selectedPos:0, isSelected:true
+20:40:51 [] GroupList : getView pos:10, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:9, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:8, selectedPos:0, isSelected:false
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@82d0313
+20:40:51 [] GroupList : getView pos:7, selectedPos:0, isSelected:false
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+20:40:51 [] GroupList : getView pos:6, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:5, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:4, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:3, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:2, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:1, selectedPos:0, isSelected:false
+20:40:51 [] GroupList : getView pos:0, selectedPos:0, isSelected:true
+20:40:51 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d217677
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@69a076
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@5b64711
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9e74b38
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@23cbb9b
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@ba7f3aa
+20:40:51 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+20:40:51 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+20:40:51 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+20:40:51 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@441d695
+20:40:51 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+20:40:51 [] HuyaSDKParser : â³ãé¢è§£æãSDK å°æª initï¼å·²ç¼å­ 30 ä¸ªæ¿é´å·ï¼ç­ init å®æåèªå¨å¼å§
+20:40:51 [] ChannelPanel : ð¢ãèçé¢è§£æã(ä¸èµ·ç) æ¶éå° 469 ä¸ªæ¿é´ï¼å¼å§åå°å¹¶è¡é¢è§£æ
+20:40:51 [] ChannelPanel : èçä¸èµ·çå è½½å®æï¼æ°å¢ 469 ä¸ªé¢éï¼æ»è®¡ 677
+20:40:51 [] HuyaTogetherWatch :   ååº[ç»¼èºå¨±ä¹]é¢éæ°: 33
+20:40:51 [] HuyaTogetherWatch :   åç»[ç»¼èºå¨±ä¹] = 33 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 33 ä¸ªæ¿é´ï¼é»è®¤åç±»: ç»¼èºå¨±ä¹
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@219164c
+20:40:50 [] HuyaTogetherWatch :   ååº[å¨æ¼«å¨ç»]é¢éæ°: 83
+20:40:50 [] HuyaTogetherWatch :   åç»[æµ·å¤å¨æ¼«] = 44 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch :   åç»[å¨æ¼«å¨ç»] = 83 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 127 ä¸ªæ¿é´ï¼é»è®¤åç±»: å¨æ¼«å¨ç»
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@57fbb9e
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@244b5d9
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@c529820
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9d30b23
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@e3f2c52
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@c5568dd
+20:40:50 [] HuyaTogetherWatch :   ååº[å§éè¿½å§]é¢éæ°: 224
+20:40:50 [] HuyaTogetherWatch :   åç»[æµ·å¤è¿½å§] = 14 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch :   åç»[å§éè¿½å§] = 224 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 238 ä¸ªæ¿é´ï¼é»è®¤åç±»: å§éè¿½å§
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@f21e4b4
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@fdc1d87
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@5f939c6
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@3ea33a1
+20:40:50 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+20:40:50 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 166)
+20:40:50 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 166 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:50 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 73 ä¸ªå¨æ¼«æ¿é´
+20:40:50 [] TVPlayerManager : Surfaceéæ¯ï¼æ­æ¾å¨ä¿æè¿è¡ä¸è§£ç»
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@ee159b5
+20:40:50 [] HuyaTogetherWatch :   ååº[å½±è§ç­æ­]é¢éæ°: 45
+20:40:50 [] HuyaTogetherWatch :   åç»[å¤å½çµå½±] = 24 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch :   åç»[å½±è§ç­æ­] = 45 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch :   åç»[ææ§èç] = 29 ä¸ªé¢é
+20:40:50 [] HuyaTogetherWatch : æå³é®è¯åç±»å®æ: 98 ä¸ªæ¿é´ï¼é»è®¤åç±»: å½±è§ç­æ­
+20:40:50 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 127 (å: 127)
+20:40:50 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 127 (å: 166)
+20:40:50 [] HuyaTogetherWatch : å¨æ¼«ç±»æ»å±è·åå° 166 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:50 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 73 ä¸ªå¨æ¼«æ¿é´
+20:40:50 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªå¨æ¼«æ¿é´
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@a90463e
+20:40:50 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªå¨æ¼«æ¿é´
+20:40:50 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@38739c0
+20:40:50 [] ChannelPanel : SDK åºå®åç»é¢å è½½å¤±è´¥: SDK æªåå§åå®æï¼ç¨æ·ç¹å»åç»æ¶ä»ä¼èµ°åç»æåï¼
+20:40:50 [] ChannelPanel : ð SDK ç¬ç«çº¿è·¯åå°é¢å è½½èç 5 å¤§åºå®åç»â¦
+20:40:50 [] ChannelPanel : setChannels: åå§é¢éæ°=208
+20:40:50 [] AppCoreManager : ãEPGãå¼å§å è½½èç®å...
+20:40:50 [] AppCoreManager : ãå¥åº·æ£æµãå·²è§¦ååå°å¨éæºæ£æµ
+20:40:50 [] SourceHealthChecker : å¨éæ£æµå·²å¨è¿è¡ä¸­ï¼è·³è¿
+20:40:50 [] AppCoreManager : ð¡ãèçé¢è§£æã(ç½ç») æªè¯å«å°èçæ¿é´ï¼è·³è¿é¢è§£æï¼åè¡¨å± 208 ä¸ªé¢éï¼
+20:40:50 [] AppCoreManager : ãç½ç»ãç´æ­æºåè¡¨å·²æ´æ°
+20:40:50 [] AppCoreManager : ãç½ç»ãç´æ­æºå è½½æåï¼é¢éæ»æ°ï¼208
+20:40:50 [] LiveSourceLoader : LOAD: source #1 SUCCESS, channels=208
+20:40:50 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å è½½æåï¼å± 208 ä¸ªé¢é
+20:40:50 [] LiveSourceLoader : ãç½ç»ãæ°¸ä¹ååºå·²æ´æ°ï¼é¢éæ° 208
+20:40:50 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 33 (å: 33)
+20:40:50 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 33 (å: 52)
+20:40:50 [] HuyaTogetherWatch : ç»¼èºç±»æ»å±è·åå° 52 ä¸ªæ¿é´ï¼å»éåï¼
+20:40:50 [] HuyaTogetherWatch : cache API è¿å 875 ä¸ªæ¿é´ï¼è¿æ»¤åº 33 ä¸ªç»¼èºæ¿é´
+20:40:50 [] LiveSourceLoader : ä¸è½½æå attempt=1 size=33686 url=https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:49 [] ChannelPanel : SDK åºå®åç»é¢å è½½å¤±è´¥: SDK æªåå§åå®æï¼ç¨æ·ç¹å»åç»æ¶ä»ä¼èµ°åç»æåï¼
+20:40:49 [] ChannelPanel : ð SDK ç¬ç«çº¿è·¯åå°é¢å è½½èç 5 å¤§åºå®åç»â¦
+20:40:49 [] ChannelPanel : setChannels: åå§é¢éæ°=208
+20:40:49 [] AppCoreManager : ãEPGãå¼å§å è½½èç®å...
+20:40:49 [] AppCoreManager : ãå¥åº·æ£æµãå·²è§¦ååå°å¨éæºæ£æµ
+20:40:49 [] SourceHealthChecker : å¨éæ£æµå·²å¨è¿è¡ä¸­ï¼è·³è¿
+20:40:49 [] AppCoreManager : ð¡ãèçé¢è§£æã(ç½ç») æªè¯å«å°èçæ¿é´ï¼è·³è¿é¢è§£æï¼åè¡¨å± 208 ä¸ªé¢éï¼
+20:40:49 [] AppCoreManager : ãç½ç»ãç´æ­æºåè¡¨å·²æ´æ°
+20:40:49 [] AppCoreManager : ãç½ç»ãç´æ­æºå è½½æåï¼é¢éæ»æ°ï¼208
+20:40:49 [] TVPlayerManager : è§é¢åè¾¨çååï¼1920Ã1080
+20:40:49 [] TVPlayerManager : [PLAY] è§é¢åè¾¨çååï¼1920Ã1080
+20:40:49 [] ChannelPanel : setChannels: åå§é¢éæ°=208
+20:40:49 [] LiveSourceLoader : LOAD: source #1 SUCCESS, channels=208
+20:40:49 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å è½½æåï¼å± 208 ä¸ªé¢é
+20:40:49 [] LiveSourceLoader : ãç½ç»ãæ°¸ä¹ååºå·²æ´æ°ï¼é¢éæ° 208
+20:40:49 [] TVPlayerManager : è§é¢åè¾¨çååï¼1920Ã1080
+20:40:49 [] TVPlayerManager : [PLAY] è§é¢åè¾¨çååï¼1920Ã1080
+20:40:49 [] LiveSourceLoader : LOAD: source #1 downloading: https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:49 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å¼å§å è½½ï¼https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:49 [] LiveSourceLoader : LOAD: source count=2 LIVE_URL='https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/heads/main/playlist1.m3u' LIVE_URL_2='https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u'
+20:40:49 [] AppCoreManager : ãç½ç»ãåå°å è½½ææ°ç´æ­æº...
+20:40:49 [] AppCoreManager : ð¡ãèçé¢è§£æã(ç¼å­) æªè¯å«å°èçæ¿é´ï¼è·³è¿é¢è§£æï¼åè¡¨å± 208 ä¸ªé¢éï¼
+20:40:49 [] ChannelPanel : setChannels: åå§é¢éæ°=208
+20:40:49 [] AppCoreManager : ãç¼å­ãç´æ­æºç¼å­å è½½å®æï¼é¢éæ°ï¼208
+20:40:49 [] AppCoreManager : ãEPGãå°è¯ä»ç¼å­å è½½...
+20:40:49 [] LiveSourceLoader : ä¸è½½æå attempt=1 size=33686 url=https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:49 [] AppCoreManager : ãç¼å­ãæ¾å°ç´æ­æºç¼å­ï¼å¿«éæ¾ç¤º
+20:40:49 [] TVPlayerManager : å¼å§æ­æ¾
+20:40:49 [] TVPlayerManager : [PLAY] å¼å§æ­æ¾
+20:40:49 [] AppCoreManager : ãç´æ­æºãå¼å§å è½½ç´æ­æº...
+20:40:49 [] MainActivity : SDK æ­æ¾å¨å®¹å¨æå¿çå¬å·²ç»å®
+20:40:49 [] SecChk : ð è°è¯çï¼è·³è¿ç­¾åæ ¡éª
+20:40:49 [] TVPlayerManager : æåæ­æ¾
+20:40:49 [] TVPlayerManager : [PLAY] æåæ­æ¾
+20:40:49 [] LiveSourceLoader : LOAD: source #1 downloading: https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:49 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å¼å§å è½½ï¼https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:49 [] LiveSourceLoader : LOAD: source count=2 LIVE_URL='https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/heads/main/playlist1.m3u' LIVE_URL_2='https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u'
+20:40:49 [] AppCoreManager : ãç½ç»ãåå°å è½½ææ°ç´æ­æº...
+20:40:49 [] AppCoreManager : ð¡ãèçé¢è§£æã(ç¼å­) æªè¯å«å°èçæ¿é´ï¼è·³è¿é¢è§£æï¼åè¡¨å± 208 ä¸ªé¢éï¼
+20:40:49 [] AppCoreManager : ãç¼å­ãç´æ­æºç¼å­å è½½å®æï¼é¢éæ°ï¼208
+20:40:49 [] AppCoreManager : ãEPGãå°è¯ä»ç¼å­å è½½...
+20:40:49 [] AppCoreManager : ãç¼å­ãæ¾å°ç´æ­æºç¼å­ï¼å¿«éæ¾ç¤º
+20:40:49 [] AppCoreManager : ãç´æ­æºãå¼å§å è½½ç´æ­æº...
+20:40:49 [] MainActivity : SDK æ­æ¾å¨å®¹å¨æå¿çå¬å·²ç»å®
+20:40:49 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (2/3)
+20:40:49 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:49 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=10
+20:40:49 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:49 [] HuyaTogetherWatch : ä»Cache APIè·åå° 875 ä¸ªç»¼èºæ¿é´
+20:40:49 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b51509e
+20:40:49 [] SecChk : ð è°è¯çï¼è·³è¿ç­¾åæ ¡éª
+20:40:49 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:49 [] RedirectHttp : [20:40:49] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:49 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:49 [] RedirectHttp : [20:40:49] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:49 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:49 [] RedirectHttp : [20:40:49] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:49 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:49 [] RedirectHttp : [20:40:49] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:49 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:49 [] RedirectHttp : [20:40:49] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:49 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+20:40:49 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:49 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=10
+20:40:49 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:49 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@aece6e1
+20:40:49 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+20:40:49 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:49 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=10
+20:40:49 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:49 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@a784848
+20:40:49 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9946ba9
+20:40:49 [] GroupList : getView pos:7, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:8, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:9, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:17, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:16, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:15, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:14, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:13, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:12, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:11, selectedPos:10, isSelected:false
+20:40:49 [] GroupList : getView pos:10, selectedPos:10, isSelected:true
+20:40:48 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5447300
+20:40:48 [] RedirectHttp : [20:40:48] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5447300
+20:40:48 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5447300
+20:40:48 [] RedirectHttp : [20:40:48] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5447300
+20:40:48 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920786-1-1748669057.hls.ts?servicetype=1
+20:40:48 [] RedirectHttp : [20:40:48] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920786-1-1748669057.hls.ts?servicetype=1
+20:40:48 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920786-1-1748669057.hls.ts?servicetype=1
+20:40:48 [] RedirectHttp : [20:40:48] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920786-1-1748669057.hls.ts?servicetype=1
+20:40:48 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 5294268 å­è (5170 KB)
+20:40:48 [] RedirectHttp : [20:40:48] ä¼ è¾å®æï¼å±è¯»å 5294268 å­è (5170 KB)
+20:40:48 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+20:40:48 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:48 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=10
+20:40:48 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:48 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+20:40:48 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:48 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=10
+20:40:48 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:48 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@3f8f485
+20:40:48 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@4335fc
+20:40:48 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@8372491
+20:40:48 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+20:40:48 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+20:40:48 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 238 (å: 238)
+20:40:48 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 238 (å: 489)
+20:40:48 [] MyApplication : å®å¨æ°æ®å­å¨åå§åå®æ
+20:40:48 [] SecureDataStore : å®å¨å­å¨åå§åå®æ
+20:40:48 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+20:40:48 [] SecureDataStore : å å¯å¯é¥å·²å°±ç»ª
+20:40:48 [] SecureDataStore : æ°å å¯å¯é¥å·²çæ
+20:40:48 [] MyApplication : å®å¨æ£æµåç°é£é©: æ£æµå°å®å¨å¨è:
+â ï¸ æ£æµå° Root æé
+
+20:40:48 [] SecurityGuard : å®å¨æ£æµå®æ: æ£æµå°å®å¨å¨è:
+â ï¸ æ£æµå° Root æé
+
+20:40:48 [] HuyaTogetherWatch : å§éç±»æ»å±è·åå° 489 ä¸ªæ¿é´
+20:40:48 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+20:40:48 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:48 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=9
+20:40:48 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:48 [] SecurityGuard : â ï¸ æ£æµå° Root ç¯å¢
+20:40:48 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@acebfa5
+20:40:48 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@70a0f7a
+20:40:47 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼å»¶è¿åéè¯ (1/3)
+20:40:47 [] HuyaTogetherWatch : Cache API è¯·æ±å¤±è´¥ï¼ååºç ï¼503
+20:40:47 [] NetUtil : å¼å¸¸ååº: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=8
+20:40:47 [] NetUtil : ææè¯·æ±å¼å¸¸ååº: www.huya.com -> 503
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@636de22
+20:40:47 [] GroupList : getView pos:7, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:8, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:17, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:16, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:15, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:14, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:13, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:12, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:11, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:10, selectedPos:9, isSelected:false
+20:40:47 [] GroupList : getView pos:9, selectedPos:9, isSelected:true
+20:40:47 [] SecurityGuard : å®å¨ç®¡çå¨åå§åå®æï¼ç­¾ååå¸: fcEvh0TosbkPDj65...
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@ffc3fe6
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@6bfed3c
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d387709
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b803b61
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@3aa1ec8
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@60e25e5
+20:40:47 [] MyApplication : èç SDK åå§åå®æ
+20:40:47 [] HuyaSDKParser : â HuyaBerry init å¤±è´¥ï¼éè¦ä¿®å¤æè½è§¦åSDKåè°ï¼: UnsatisfiedLinkError: dlopen failed: library "libmmkv.so" not found
+  â³ com.duowan.kiwi.barrage.MmkvConfigImpl.getSpImpl(MmkvConfigImpl.java:18)
+  â³ com.duowan.ark.util.Config.<init>(Config.java:61)
+  â³ com.duowan.ark.util.Config.getConfig(Config.java:52)
+  â³ com.duowan.ark.util.Config.getInstance(Config.java:34)
+  â³ com.duowan.ark.ArkValue.initDebugValue(ArkValue.java:177)
+  â³ com.duowan.ark.ArkValue.init(ArkValue.java:97)
+  â³ com.duowan.ark.Ark.init(Ark.java...[å·²æªæ­]
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@795c25f
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@8e9f7da
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@fd58d85
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@5dc9593
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@53ef1cd
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@8aad8a5
+20:40:47 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+20:40:47 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+20:40:47 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+20:40:47 [] HuyaTogetherWatch : è¿æ»¤æåºåæ¿é´æ°: 98 (å: 98)
+20:40:47 [] HuyaTogetherWatch : å»éåæ¿é´æ°: 98 (å: 213)
+20:40:47 [] HuyaTogetherWatch : çµå½±ç±»æ»å±è·åå° 213 ä¸ªæ¿é´
+20:40:47 [] HuyaSDKParser : [hiidoç»è®¡] HuyaStatisAgent.mApi æ¿æ¢ä¸º NoOp: â æå(PV/init å·²æ¦æª)
+20:40:47 [] HuyaSDKParser : [2/4] HuyaBerryConfig build å®æ
+20:40:47 [] HuyaCacheGov : â SDK ç²¾ç®å¼å³å·²ç´æ¥è°ç¨ï¼isOpenBugly/debugMode/isNeedPlay/cameraMode/oneKeyGangUp/hidePauseBtn/landscapeMode = falseï¼
+20:40:47 [] HuyaCacheGov : â SDK æ ¹ç®å½éå®åè³: /data/user/0/com.tv.live/cache/huya_sdk
+20:40:47 [] HuyaSDKParser : [è®¾å¤æçº¹] UDB host å·²æ¹åæå 127.0.0.1 â udbdf.huya.com ç­ä¸æ¥å¨é¨å¤±æ â
+20:40:47 [] HuyaSDKParser :   â HuyaBerryConfig.Builder é¾è·¯æå»ºå®æï¼å«å®æ¹ç²¾ç®å¼å³ï¼
+20:40:47 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@4ea7835
+20:40:47 [] HuyaSDKParser :   ð ä»å å¯å­å¨å è½½å­è¯: gameId=2135, appId=12***56, appKey=d8***dd
+20:40:47 [] HuyaSDKParser : [1/4] åå¤æå»º HuyaBerryConfig.Builder
+20:40:47 [] SdkCompatHook : â å·²ä¸­å BaseApi.crashIfDebugï¼sOnCrashListener=nullï¼ï¼SDK init ä¸åå éè´å½éè¯¯æå¼å¸¸
+20:40:46 [] HuyaSDKParser : â èç Mars åçåºé¢æ£éè¿
+20:40:46 [] HuyaSDKParser :   â StnLogic.startTask native æ³¨åæ£æ¥éè¿
+20:40:46 [] HuyaSDKParser :   â loadLibrary("marsstn") æå
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d9eba6c
+20:40:46 [] HuyaSDKParser :   â loadLibrary("stlport_shared") æå
+20:40:46 [] HuyaSDKParser :   â loadLibrary("c++_shared") æå
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@144571f
+20:40:46 [] HuyaSDKParser : ãAppãå¼å§åå§åèç SDK...
+20:40:46 [] HuyaSDKParser : ãAppãå¼å§åå§åèç SDK...
+20:40:46 [] HuyaSDKLogger : â HuyaSDKLogger åå§åå®æï¼logcat çå¬ SDK æ¥å¿ï¼
+20:40:46 [] HuyaSDKLogger : â ï¸ æ  READ_LOGS æéï¼è·³è¿ logcat çå¬ï¼é¿åè§¦åç³»ç»æ¥å¿æéå¼¹çªï¼
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@497b4e6
+20:40:46 [] GroupList : getView pos:15, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:14, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:13, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:12, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:11, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:10, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:9, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:8, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:7, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:6, selectedPos:5, isSelected:false
+20:40:46 [] GroupList : getView pos:5, selectedPos:5, isSelected:true
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d972741
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d385236
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@8fb096a
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@62f460c
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@9174d3f
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b18f55e
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@b7bbe99
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@6d14be0
+20:40:46 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@bc8dc74
+20:40:45 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@2fb3f76
+20:40:45 [] ChannelList : getView pos:11, selectedPos:0, isSelected:false
+20:40:45 [] HuyaTogetherWatch : cacheç¬¬ä¸ä¸ªæ¿é´ææå­æ®µï¼java.util.LinkedHashMap$LinkedKeyIterator@d1f0211
+20:40:45 [] ChannelList : getView pos:10, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:9, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:8, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:7, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:6, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:5, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:4, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:3, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:2, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:1, selectedPos:0, isSelected:false
+20:40:45 [] ChannelList : getView pos:0, selectedPos:0, isSelected:true
+20:40:45 [] GroupList : getView pos:10, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:9, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:8, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:7, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:6, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:5, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:4, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:3, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:2, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:1, selectedPos:0, isSelected:false
+20:40:45 [] GroupList : getView pos:0, selectedPos:0, isSelected:true
+20:40:45 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: www.huya.com
+20:40:45 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: www.huya.com -> 4 ä¸ªpin
+20:40:45 [] HuyaCacheGov : â æ¸çå®æ: 40.90 KB â 40.90 KB  èç 0 B  èæ¶ 113ms
+20:40:45 [] HuyaCacheGov : Step1(æ¥å¿/å´©æº/è¿æ) æ¸ç: 0 B  å©ä½ 8 æä»¶ = 40.90 KB
+20:40:45 [] TVPlayerManager : ç­æç¼å²æ¢å¤ï¼æ¶é¿ï¼944ms
+20:40:45 [] TVPlayerManager : [PLAY] ç­æç¼å²æ¢å¤ï¼æ¶é¿ï¼944ms
+20:40:45 [] TVPlayerManager : å¼å§æ­æ¾
+20:40:45 [] TVPlayerManager : [PLAY] å¼å§æ­æ¾
+20:40:45 [] TVPlayerManager : æ­æ¾å°±ç»ª (STATE_READY)
+20:40:45 [] TVPlayerManager : [PLAY] æ­æ¾å°±ç»ª (STATE_READY)
+20:40:45 [] HuyaCacheGov : æ«æå° SDK åéç®å½ 8 ä¸ª, å± 8 ä¸ªæä»¶, å½åå ç¨ = 40.90 KB
+20:40:45 [] AppCacheInspector : â åºç¨ç¼å­å·¡æ£å®æ: 77.67 KB â 77.67 KB  éæ¾ 0 B  èæ¶ 24ms
+
+20:40:45 [] MyApplication : LogServer å¯å¨æå: 172.16.1.4:9527
+20:40:45 [] LogServer : HTTP Server listening on port 9527
+20:40:45 [] LogServer : LogServer starting on port 9527 (cleared 0 old connections)
+20:40:45 [] TVPlayerManager : è§é¢åè¾¨çååï¼1920Ã1080
+20:40:45 [] TVPlayerManager : [PLAY] è§é¢åè¾¨çååï¼1920Ã1080
+20:40:44 [] MyApplication : å´©æºå¤çå¨åå§åå®æ
+20:40:44 [] CrashHandler : èªå¨éå¯ï¼å·²å³é­
+20:40:44 [] CrashHandler : å´©æºé¡µé¢æ¾ç¤ºæ¶é¿ï¼60 ç§
+20:40:44 [] CrashHandler : å´©æºæ¥å¿ä¿å­ç®å½ï¼/data/user/0/com.tv.live/files/crash_logs
+20:40:44 [] CrashHandler : å¨å±å´©æºæè·å¨å·²åå§å
+20:40:44 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: epg.catvod.com
+20:40:44 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: epg.catvod.com -> 3 ä¸ªpin
+20:40:44 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:44 [] RedirectHttp : [20:40:44] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:44 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5294268
+20:40:44 [] RedirectHttp : [20:40:44] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 5294268
+20:40:44 [] RedirectHttp : ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5294268
+20:40:44 [] RedirectHttp : [20:40:44] ååº: HTTP 200, Content-Type: video/mpeg, Content-Length: 5294268
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920776-1-1748669056.hls.ts?servicetype=1
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920776-1-1748669056.hls.ts?servicetype=1
+20:40:44 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:44 [] RedirectHttp : [20:40:44] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:44 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:44 [] RedirectHttp : [20:40:44] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920776-1-1748669056.hls.ts?servicetype=1
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/1787920776-1-1748669056.hls.ts?servicetype=1
+20:40:44 [] RedirectHttp : ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:44 [] RedirectHttp : [20:40:44] ä¼ è¾å®æï¼å±è¯»å 1059 å­è (1 KB)
+20:40:44 [] TVPlayerManager : æªè§£æå°ä»»ä½æ¸æ°åº¦æµï¼å¯è½æ¯ç´æ­æºæ¬èº«ä¸æ¯æå¤ç çæç½ç»è¢«æ¦æª
+20:40:44 [] TVPlayerManager : ãæ®éæºãä¸»æ­æ¾åè¡¨é¿åº¦: 1028
+20:40:44 [] RedirectHttp : è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:44 [] RedirectHttp : [20:40:44] è¿æ¥æåï¼å¼å§ä¼ è¾ï¼é¢æå­èæ°: 1059
+20:40:44 [] RedirectHttp : ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:44 [] RedirectHttp : [20:40:44] ååº: HTTP 200, Content-Type: application/vnd.apple.mpegurl, Content-Length: 1059
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ è¯·æ±æå ç¶æç  200: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] TVPlayerManager : ãæ®éæºãä¸»æ­æ¾åè¡¨ååºç : 200
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ éå®å1æ¬¡~ ç¶æç  302: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ éå®å1æ¬¡~ ç¶æç  302: http://117.169.31.150:8080/wh7f454c46tw3267969542_-902761079/hwrr.jx.chinamobile.com/PLTV/88888888/224/3221225705/index.m3u8?icpid=88888888&RTS=1787920843&from=79201&hms_devid=218&online=1787920843&vqe=3
+20:40:44 [] RedirectHttp : æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+20:40:44 [] RedirectHttp : [20:40:44] æ±è¥¿å«è§ è¯·æ±é¾æ¥: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] play() åï¼state=2
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] play() åï¼state=2
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] prepare åï¼state=2
+20:40:44 [] TVPlayerManager : ç¼å²ä¸­ (STATE_BUFFERING)
+20:40:44 [] TVPlayerManager : [PLAY] ç¼å²ä¸­ (STATE_BUFFERING)
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] prepare åï¼state=1
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-doPlayNormal] setMediaSource åï¼player state=1
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-3] sp ready, debugEnabled=false
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-2] åå¤åå»º SharedPreferences å httpFactory...(åå°)
+20:40:44 [] TVPlayerManager : ãæ®éæºãè§£æä¸»æ­æ¾åè¡¨: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+20:40:44 [] ChannelPanel : SDK åºå®åç»é¢å è½½å¤±è´¥: SDK æªåå§åå®æï¼ç¨æ·ç¹å»åç»æ¶ä»ä¼èµ°åç»æåï¼
+20:40:44 [] TVPlayerManager : ð´ [DEBUG-1] fetchAndParseMasterPlaylistNormal è¿åï¼ç»§ç»­æ§è¡
+20:40:44 [] TVPlayerManager : ãæ®éæºãå¼å§æ­æ¾: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+20:40:44 [] TVPlayerManager : doPlay: url=http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8 isHls=true isRealStream=true
+20:40:44 [] ChannelPanel : ð SDK ç¬ç«çº¿è·¯åå°é¢å è½½èç 5 å¤§åºå®åç»â¦
+20:40:44 [] SourceHealthChecker : å¼å§å¨éæºæ£æµï¼é¢éæ°: 208
+20:40:44 [] ChannelPanel : setChannels: åå§é¢éæ°=208
+20:40:44 [] AppCoreManager : ãEPGãå¼å§å è½½èç®å...
+20:40:44 [] AppCoreManager : ãå¥åº·æ£æµãå·²è§¦ååå°å¨éæºæ£æµ
+20:40:44 [] AppCoreManager : ð¡ãèçé¢è§£æã(ç½ç») æªè¯å«å°èçæ¿é´ï¼è·³è¿é¢è§£æï¼åè¡¨å± 208 ä¸ªé¢éï¼
+20:40:44 [] AppCoreManager : ãç½ç»ãç´æ­æºåè¡¨å·²æ´æ°
+20:40:44 [] AppCoreManager : ãç½ç»ãç´æ­æºå è½½æåï¼é¢éæ»æ°ï¼208
+20:40:44 [] LiveSourceLoader : LOAD: source #1 SUCCESS, channels=208
+20:40:44 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å è½½æåï¼å± 208 ä¸ªé¢é
+20:40:44 [] LiveSourceLoader : ãç½ç»ãæ°¸ä¹ååºå·²æ´æ°ï¼é¢éæ° 208
+20:40:44 [] LiveSourceLoader : ä¸è½½æå attempt=1 size=33686 url=https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:43 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: cdn.jsdelivr.net
+20:40:43 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: cdn.jsdelivr.net -> 4 ä¸ªpin
+20:40:43 [] SSLCertPinner : é¦æ¬¡å­¦ä¹ è¯ä¹¦: live.cdn.huya.com
+20:40:43 [] SSLCertPinner : ä¿å­è¯ä¹¦æçº¹: live.cdn.huya.com -> 3 ä¸ªpin
+20:40:43 [] NetUtil : NetUtil åå§åå®æï¼å«å®å¨éç½®ï¼
+20:40:43 [] TVPlayerManager : Surfaceå·²éå»ºï¼æ­æ¾å·²æ¢å¤ï¼éè¯ç¬¬1æ¬¡ï¼
+20:40:43 [] TVPlayerManager : Surfaceå·²éå»ºï¼æ­æ¾å·²æ¢å¤ï¼éè¯ç¬¬1æ¬¡ï¼
+20:40:43 [] TVPlayerManager : Surfaceåå: 1920x1080
+20:40:43 [] TVPlayerManager : Surfaceåå»ºæåï¼æ­æ¾å¨å·²ç»å®è§å¾å¹¶æç»­æ­æ¾
+20:40:43 [] ChannelPanel : setChannels: åå§é¢éæ°=0
+20:40:43 [] LiveSourceLoader : LOAD: source #1 downloading: https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:43 [] LiveSourceLoader : ãç½ç»ãç´æ­æº #1 å¼å§å è½½ï¼https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+20:40:43 [] LiveSourceLoader : LOAD: source count=2 LIVE_URL='https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/heads/main/playlist1.m3u' LIVE_URL_2='https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u'
+20:40:43 [] AppCoreManager : ãç½ç»ãåå°å è½½ææ°ç´æ­æº...
+20:40:43 [] AppCoreManager : ãç¼å­ãæ ç¼å­ï¼ç«å³æ¸²æç©ºUIï¼åå°ç»§ç»­ç½ç»å è½½
+20:40:43 [] AppCoreManager : ãç´æ­æºãå¼å§å è½½ç´æ­æº...
+20:40:43 [] MainActivity : SDK æ­æ¾å¨å®¹å¨æå¿çå¬å·²ç»å®
+20:40:43 [] MainActivity : PlayerView éå»ºå®æ
+20:40:43 [] MyApplication : TVPlayerManager é¢ç­å®æï¼åå°çº¿ç¨ï¼: 153ms
+20:40:43 [] MyApplication : ç½ç»å·¥å·åå§åå®æ
+20:40:42 [] MyApplication : SSL è¯ä¹¦ç®¡çå¨åå§åå®æ
+20:40:42 [] SSLCertPinner : é¦æ¬¡å¯å¨ï¼å¯ç¨å­¦ä¹ æ¨¡å¼
+20:40:42 [] SSLCertPinner : SSLè¯ä¹¦ç®¡çå¨åå§åå®æï¼å·²å­å¨ 0 ä¸ªååè¯ä¹¦
+20:40:42 [] MyApplication : èç SDK å­è¯å è½½æå: gameId=2135, appId=12***56, appKey=d8***dd
+20:40:42 [] HYC : å­è¯åå§åå®æ
+20:40:42 [] HYC : é»è®¤å­è¯å·²å å¯å­å¨
+20:40:42 [] EncryptedStorage : å å¯å¤±è´¥: Caller-provided IV not permitted
+20:40:42 [] EncryptedStorage : å å¯å¤±è´¥: Caller-provided IV not permitted
+20:40:42 [] EncryptedStorage : å å¯å¤±è´¥: Caller-provided IV not permitted
+20:40:42 [] HYC : é¦æ¬¡åå§åå­è¯
+20:40:42 [] MyApplication : å å¯å­å¨åå§åæå
+20:40:42 [] EncryptedStorage : â EncryptedStorage åå§åæå
+20:40:42 [] EncryptedStorage : â å è½½ AES-256 å¯é¥æå
+20:40:42 [] EncryptedStorage : â çææ°ç AES-256 å¯é¥
+20:40:42 [] MyApplication : å®å¨å®å«åå§åå®æ
+20:40:42 [] SecurityGuard : å®å¨å®å«ï¼è°è¯æ¨¡å¼ï¼ä»è®°å½æ¥å¿
+20:40:42 [] TamperReporter : åç¼è¯æ£æµå¨ï¼è°è¯æ¨¡å¼ï¼ä»è®°å½æ¥å¿
+20:40:42 [] MyApplication : å­ç¬¦ä¸²ä¿æ¤åå§åå®æ
+20:40:42 [] StringProtector : å­ç¬¦ä¸²ä¿æ¤å·²ç¦ç¨ï¼è°è¯æ¨¡å¼ï¼
+20:40:42 [] MyApplication : DEX ä¿æ¤åå§åå®æ
+20:40:42 [] MyApplication : å®å¨æ£æ¥éè¿
+20:40:42 [] SecChk : ð è°è¯çï¼è·³è¿ç­¾åæ ¡éª
+20:40:42 [] MyApplication : URL éç½®è§£å¯å®æ
+20:40:42 [] UrlConfig : URL éç½®è§£å¯å®æï¼SecurityCore.isLoaded=true | RAW[L1=ok, L2=ok, E1=ok, E2=ok, L3=asset://live_source_3.txt]
+20:40:42 [] SecurityCore : DECRYPT: Native decrypted OK, len=27
+20:40:42 [] SecurityCore : DECRYPT: Native decrypted OK, len=30
+20:40:42 [] UrlConfig : LIVE_URL_2 åå§å°åå·²å¤±æ(404)ï¼å·²èªå¨è¿ç§»å°æ°å°å: https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u
+20:40:42 [] SecurityCore : DECRYPT: Native decrypted OK, len=54
+20:40:42 [] UrlConfig : LIVE_URL è§£å¯æå: https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/h...
+20:40:42 [] SecurityCore : DECRYPT: Native decrypted OK, len=83
+20:40:42 [] MyApplication : SecurityCore åå§åæå
+20:40:42 [] SecurityCore : SECURITY_INIT: Native SO loaded OK
+20:40:42 [] SecurityCore : libtvlive_security.so å è½½æå
+20:40:42 [] SecChk : ð è°è¯çï¼è·³è¿ç­¾åæ ¡éª
+20:40:42 [] TVPlayerManager : ðº å¯å¨æ¶è¯»åè§£ç å¨è®¾ç½®: decoder_mode=auto â mDecoderMode=0
+20:40:42 [] SourceHealthChecker : å è½½å¤±è´¥è®°å½: 0 æ¡
+20:40:42 [] MyApplication : å¨å±å¼å¸¸ä¸æ¥åå§åå®æï¼Bugly å·²ç§»é¤ï¼
+20:40:42 [] ExceptionReporter : ExceptionReporter disabled
+20:40:42 [] ExceptionReporter : ExceptionReporter initialized (policy: throwable+events / biz-masked / tracking-on)
+20:40:42 [] BootReceiver : ç¨æ·æªå¼å¯å¼æºèªå¯ï¼ä¸å¯å¨
+20:40:42 [] BootReceiver : å¼æºèªå¯å¼å³ç¶æï¼false
+20:40:42 [] BootReceiver : æ¶å°å¹¿æ­ï¼android.net.conn.CONNECTIVITY_CHANGE
+20:40:42 [] MyApplication : å­ç¬¦ä¸²æ··æ·æµè¯éè¿
+20:40:42 [] MyApplication : è°è¯çï¼è·³è¿åè°è¯æ£æµ
+20:40:42 [] AntiDebug : åè°è¯æ£æµå·²ç¦ç¨ï¼è°è¯æ¨¡å¼ï¼
+20:40:42 [] MyApplication : åºç¨å¯å¨å®æï¼å¿«éæ¨¡å¼ï¼
+20:40:42 [] BootReceiver : å¨æå¼æºååºçå¬å·²æ³¨åï¼è¦çå¿«éå¼æº/SCREEN_ON åºæ¯ï¼

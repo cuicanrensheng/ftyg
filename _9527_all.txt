@@ -1,0 +1,1374 @@
+[00:26:03] (debug) <BootReceiver> 动态开机兜底监听已注册（覆盖快速开机/SCREEN_ON 场景）
+[00:26:03] (info) <MyApplication> 应用启动完成（快速模式）
+[00:26:03] (info) <ExceptionReporter> ExceptionReporter initialized (policy: throwable+events / biz-masked / tracking-on)
+[00:26:03] (info) <TamperReporter> 反编译检测器已启用
+[00:26:03] (info) <TVPlayerManager> 📺 启动时读取解码器设置: decoder_mode=auto → mDecoderMode=0
+[00:26:03] (debug) <SourceHealthChecker> 加载失败记录: 0 条
+[00:26:03] (info) <MyApplication> 全局异常上报初始化完成（Bugly 已移除）
+[00:26:03] (info) <ExceptionReporter> ExceptionReporter enabled
+[00:26:03] (debug) <BootReceiver> 开机自启开关状态：false
+[00:26:03] (debug) <BootReceiver> 收到广播：android.net.conn.CONNECTIVITY_CHANGE
+[00:26:03] (debug) <BootReceiver> 用户未开启开机自启，不启动
+[00:26:03] (info) <TamperReporter> 反编译检测器已启用
+[00:26:03] (info) <SecChk> 🔒 正式版：启用签名校验
+[00:26:03] (info) <SecChk> ✅ 包名校验通过
+[00:26:03] (info) <SecChk> ✅ 签名校验通过
+[00:26:03] (info) <SecChk> 当前签名 SHA256=xQdedEk3xbKAsqg0WqDdH0qmjiYAkARaVVtrTVXdQAQ=
+[00:26:03] (warn) <AntiDebug> 检测到模拟位置应用
+[00:26:03] (info) <MyApplication> 字符串混淆测试通过
+[00:26:03] (info) <MyApplication> 反调试检测通过
+[00:26:03] (warn) <AntiDebug> ⚠️ 检测到模拟位置应用（可能用于测试，非篡改）
+[00:26:03] (info) <MyApplication> SecurityCore 初始化成功
+[00:26:03] (error) <SecurityCore> SECURITY_INIT: Native SO loaded OK
+[00:26:03] (info) <SecurityCore> libtvlive_security.so 加载成功
+[00:26:03] (info) <UrlConfig> LIVE_URL 解密成功: https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/h...
+[00:26:03] (error) <SecurityCore> DECRYPT: Native decrypted OK, len=83
+[00:26:03] (warn) <UrlConfig> LIVE_URL_2 原始地址已失效(404)，已自动迁移到新地址: https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u
+[00:26:03] (error) <SecurityCore> DECRYPT: Native decrypted OK, len=54
+[00:26:03] (info) <MyApplication> 安全检查通过
+[00:26:03] (info) <SecChk> ✅ 包名校验通过
+[00:26:03] (info) <SecChk> ✅ 签名校验通过
+[00:26:03] (info) <SecChk> 当前签名 SHA256=xQdedEk3xbKAsqg0WqDdH0qmjiYAkARaVVtrTVXdQAQ=
+[00:26:03] (info) <TamperReporter> 反编译检测器已启用
+[00:26:03] (info) <SecChk> 🔒 正式版：启用签名校验
+[00:26:03] (info) <MyApplication> URL 配置解密完成
+[00:26:03] (info) <UrlConfig> URL 配置解密完成，SecurityCore.isLoaded=true | RAW[L1=ok, L2=ok, E1=ok, E2=ok, L3=asset://live_source_3.txt]
+[00:26:03] (error) <SecurityCore> DECRYPT: Native decrypted OK, len=27
+[00:26:03] (error) <SecurityCore> DECRYPT: Native decrypted OK, len=30
+[00:26:03] (info) <DexProtector> DEX hash: GxuC2sigGNmP5SVU...
+[00:26:03] (info) <MyApplication> 安全守卫初始化完成
+[00:26:03] (info) <SecurityGuard> 安全守卫已启用
+[00:26:03] (info) <TamperReporter> 反编译检测器已启用
+[00:26:03] (info) <MyApplication> 字符串保护初始化完成
+[00:26:03] (info) <StringProtector> 字符串保护已启用
+[00:26:03] (info) <MyApplication> DEX 保护初始化完成
+[00:26:03] (info) <DexProtector> DEX 保护初始化完成
+[00:26:03] (info) <EncryptedStorage> ✅ 生成新的 AES-256 密钥
+[00:26:03] (info) <HYC> 首次初始化凭证
+[00:26:03] (info) <MyApplication> 加密存储初始化成功
+[00:26:03] (info) <EncryptedStorage> ✅ EncryptedStorage 初始化成功
+[00:26:03] (info) <EncryptedStorage> ✅ 加载 AES-256 密钥成功
+[00:26:03] (warn) <EncryptedStorage> 加密失败: Caller-provided IV not permitted
+[00:26:03] (warn) <EncryptedStorage> 加密失败: Caller-provided IV not permitted
+[00:26:03] (info) <HYC> 默认凭证已加密存储
+[00:26:03] (warn) <EncryptedStorage> 加密失败: Caller-provided IV not permitted
+[00:26:03] (info) <MyApplication> 网络工具初始化完成
+[00:26:03] (info) <MyApplication> SSL 证书管理器初始化完成
+[00:26:03] (info) <SSLCertPinner> 首次启动，启用学习模式
+[00:26:03] (info) <SSLCertPinner> SSL证书管理器初始化完成，已存储 0 个域名证书
+[00:26:03] (info) <MyApplication> 虎牙 SDK 凭证加载成功: gameId=2135, appId=12***56, appKey=d8***dd
+[00:26:03] (info) <HYC> 凭证初始化完成
+[00:26:03] (info) <MyApplication> TVPlayerManager 预热完成（后台线程）: 290ms
+[00:26:03] (debug) <MainActivity> SDK 播放器容器手势监听已绑定
+[00:26:03] (debug) <MainActivity> PlayerView 重建完成
+[00:26:03] (debug) <AppCoreManager> 【直播源】开始加载直播源...
+[00:26:03] (error) <LiveSourceLoader> LOAD: source #1 downloading: https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+[00:26:03] (debug) <LiveSourceLoader> 【网络】直播源 #1 开始加载：https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+[00:26:03] (error) <LiveSourceLoader> LOAD: source count=2 LIVE_URL='https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/heads/main/playlist1.m3u' LIVE_URL_2='https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u'
+[00:26:03] (debug) <AppCoreManager> 【网络】后台加载最新直播源...
+[00:26:03] (debug) <AppCoreManager> 【缓存】无缓存，立即渲染空UI，后台继续网络加载
+[00:26:03] (debug) <ChannelPanel> setChannels: 原始频道数=0
+[00:26:03] (debug) <TVPlayerManager> Surface创建成功，播放器已绑定视图并持续播放
+[00:26:03] (debug) <TVPlayerManager> Surface变化: 1920x1080
+[00:26:03] (info) <NetUtil> NetUtil 初始化完成（含安全配置）
+[00:26:03] (info) <SSLCertPinner> 首次学习证书: live.cdn.huya.com
+[00:26:03] (info) <SSLCertPinner> 保存证书指纹: live.cdn.huya.com -> 3 个pin
+[00:26:03] (info) <SecChk> ✅ 包名校验通过
+[00:26:03] (info) <SecChk> ✅ 签名校验通过
+[00:26:03] (info) <SecChk> 当前签名 SHA256=xQdedEk3xbKAsqg0WqDdH0qmjiYAkARaVVtrTVXdQAQ=
+[00:26:03] (info) <TamperReporter> 反编译检测器已启用
+[00:26:03] (info) <SecChk> 🔒 正式版：启用签名校验
+[00:26:03] (debug) <MainActivity> SDK 播放器容器手势监听已绑定
+[00:26:03] (error) <LiveSourceLoader> LOAD: source #1 downloading: https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+[00:26:03] (debug) <LiveSourceLoader> 【网络】直播源 #1 开始加载：https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+[00:26:03] (error) <LiveSourceLoader> LOAD: source count=2 LIVE_URL='https://raw.githubusercontent.com/cuicanrensheng/IPTV/refs/heads/main/playlist1.m3u' LIVE_URL_2='https://gitee.com/qf_1111/iptv/raw/master/playlist.m3u'
+[00:26:03] (debug) <AppCoreManager> 【网络】后台加载最新直播源...
+[00:26:03] (debug) <AppCoreManager> 【缓存】无缓存，立即渲染空UI，后台继续网络加载
+[00:26:03] (debug) <AppCoreManager> 【直播源】开始加载直播源...
+[00:26:04] (debug) <ChannelPanel> setChannels: 原始频道数=0
+[00:26:04] (debug) <TVPlayerManager> Surface销毁，播放器保持运行不解绑
+[00:26:04] (info) <SSLCertPinner> 首次学习证书: cdn.jsdelivr.net
+[00:26:04] (info) <SSLCertPinner> 保存证书指纹: cdn.jsdelivr.net -> 4 个pin
+[00:26:04] (info) <SSLCertPinner> 首次学习证书: www.huya.com
+[00:26:04] (info) <SSLCertPinner> 保存证书指纹: www.huya.com -> 4 个pin
+[00:26:04] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@ec92593
+[00:26:04] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@7c9f9d0
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@1fcedc9
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@b9aacce
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@6d687ef
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@89ce2fc
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@2dd9d85
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@838c7da
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@75332e8
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@f5f8d01
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@86b87a6
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@98185e7
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@a9c9594
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@eb6f83d
+[00:26:05] (info) <MyApplication> 崩溃处理器初始化完成
+[00:26:05] (debug) <CrashHandler> 自动重启：已关闭
+[00:26:05] (debug) <CrashHandler> 崩溃页面显示时长：60 秒
+[00:26:05] (debug) <CrashHandler> 崩溃日志保存目录：/data/user/0/com.tv.live/files/crash_logs
+[00:26:05] (debug) <CrashHandler> 全局崩溃捕获器已初始化
+[00:26:05] (info) <LogServer> LogServer starting on port 9527 (cleared 0 old connections)
+[00:26:05] (info) <LogServer> HTTP Server listening on port 9527
+[00:26:05] (info) <MyApplication> LogServer 启动成功: 172.16.1.4:9527
+[00:26:05] (info) <AppCacheInspector> ✅ 应用缓存巡检完成: 374 B → 374 B  释放 0 B  耗时 5ms
+
+[00:26:05] (info) <HuyaCacheGov> 扫描到 SDK 候选目录 8 个, 共 5 个文件, 当前占用 = 1.95 KB
+[00:26:05] (info) <HuyaCacheGov> ✅ 清理完成: 1.95 KB → 1.95 KB  节省 0 B  耗时 10ms
+[00:26:05] (info) <HuyaCacheGov> Step1(日志/崩溃/过期) 清理: 0 B  剩余 5 文件 = 1.95 KB
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@2777700
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@d1fdb39
+[00:26:05] (debug) <LiveSourceLoader> 下载成功 attempt=1 size=33686 url=https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+[00:26:05] (debug) <LiveSourceLoader> 【网络】永久兜底已更新，频道数 208
+[00:26:05] (debug) <AppCoreManager> 【网络】直播源列表已更新
+[00:26:05] (debug) <AppCoreManager> 【网络】直播源加载成功，频道总数：208
+[00:26:05] (error) <LiveSourceLoader> LOAD: source #1 SUCCESS, channels=208
+[00:26:05] (debug) <LiveSourceLoader> 【网络】直播源 #1 加载成功，共 208 个频道
+[00:26:05] (info) <SourceHealthChecker> 开始全量源检测，频道数: 208
+[00:26:05] (debug) <ChannelPanel> setChannels: 原始频道数=208
+[00:26:05] (debug) <AppCoreManager> 【EPG】开始加载节目单...
+[00:26:05] (debug) <AppCoreManager> 【健康检测】已触发后台全量源检测
+[00:26:05] (debug) <AppCoreManager> 🟡【虎牙预解析】(网络) 未识别到虎牙房间，跳过预解析（列表共 208 个频道）
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-1] fetchAndParseMasterPlaylistNormal 返回！继续执行
+[00:26:05] (debug) <TVPlayerManager> 【普通源】开始播放: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+[00:26:05] (debug) <TVPlayerManager> doPlay: url=http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8 isHls=true isRealStream=true
+[00:26:05] (debug) <ChannelPanel> 🚀 SDK 独立线路后台预加载虎牙 5 大固定分组…
+[00:26:05] (debug) <TVPlayerManager> 【普通源】解析主播放列表: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-2] 准备创建 SharedPreferences 和 httpFactory...(后台)
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-3] sp ready, debugEnabled=false
+[00:26:05] (warn) <ChannelPanel> SDK 固定分组预加载失败: SDK 未初始化完成（用户点击分组时仍会走单组拉取）
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] setMediaSource 前！player state=1
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] prepare 后！state=2
+[00:26:05] (info) <TVPlayerManager> [PLAY] 缓冲中 (STATE_BUFFERING)
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] prepare 前！state=1
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] play() 后！state=2
+[00:26:05] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] play() 前！state=2
+[00:26:05] (debug) <TVPlayerManager> 【普通源】主播放列表响应码: 200
+[00:26:05] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:05] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:05] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:05] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=5
+[00:26:05] (debug) <TVPlayerManager> 【普通源】主播放列表长度: 1028
+[00:26:05] (warn) <TVPlayerManager> 未解析到任何清晰度流，可能是直播源本身不支持多码率或网络被拦截
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@e66b0a2
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@cb8f3c6
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@7beadd
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@463a87f
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@2769895
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@dac7538
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@b8bda76
+[00:26:05] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@f2454d
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@9a4d513
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@ed32802
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@caae949
+[00:26:06] (debug) <HuyaTogetherWatch> 电影类总共获取到 213 个房间
+[00:26:06] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 98 (原: 98)
+[00:26:06] (debug) <HuyaTogetherWatch> 去重后房间数: 98 (原: 213)
+[00:26:06] (debug) <HuyaTogetherWatch> 电影类总共获取到 213 个房间
+[00:26:06] (debug) <HuyaTogetherWatch> 去重后房间数: 98 (原: 213)
+[00:26:06] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 98 (原: 98)
+[00:26:06] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 98 (原: 98)
+[00:26:06] (debug) <HuyaTogetherWatch> 去重后房间数: 98 (原: 213)
+[00:26:06] (debug) <HuyaTogetherWatch> 电影类总共获取到 213 个房间
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@303b6b9
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@f5f525f
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@6575afe
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@b2934ac
+[00:26:06] (info) <TVPlayerManager> [PLAY] 视频分辨率变化：1920×1080
+[00:26:06] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+[00:26:06] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@5ead686
+[00:26:06] (debug) <HuyaTogetherWatch> 剧集类总共获取到 489 个房间
+[00:26:06] (debug) <HuyaTogetherWatch> 剧集类总共获取到 489 个房间
+[00:26:06] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 238 (原: 238)
+[00:26:06] (debug) <HuyaTogetherWatch> 去重后房间数: 238 (原: 489)
+[00:26:06] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 238 (原: 238)
+[00:26:06] (debug) <HuyaTogetherWatch> 去重后房间数: 238 (原: 489)
+[00:26:06] (debug) <HuyaTogetherWatch> 剧集类总共获取到 489 个房间
+[00:26:06] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 238 (原: 238)
+[00:26:06] (debug) <HuyaTogetherWatch> 去重后房间数: 238 (原: 489)
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@b1ff128
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@5040e41
+[00:26:06] (info) <TVPlayerManager> [PLAY] 播放就绪 (STATE_READY)
+[00:26:06] (info) <TVPlayerManager> [PLAY] 短暂缓冲恢复，时长：650ms
+[00:26:06] (info) <TVPlayerManager> [PLAY] 开始播放
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@2e68fed
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:06] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+[00:26:06] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:06] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:06] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=7
+[00:26:06] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:06] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=8
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@6d22ca3
+[00:26:06] (info) <SSLCertPinner> 保存证书指纹: epg.catvod.com -> 3 个pin
+[00:26:06] (info) <SSLCertPinner> 首次学习证书: epg.catvod.com
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:06] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:06] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=8
+[00:26:06] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:06] (warn) <TVPlayerManager> Surface恢复重试已达上限(10次)，停止重试
+[00:26:06] (warn) <TVPlayerManager> Surface恢复重试已达上限(10次)，停止重试
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@f7b1b4
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@a383520
+[00:26:06] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@458a8aa
+[00:26:06] (warn) <TVPlayerManager> Surface恢复重试已达上限(10次)，停止重试
+[00:26:07] (warn) <TVPlayerManager> Surface恢复重试已达上限(10次)，停止重试
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@8fe604f
+[00:26:07] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:07] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:07] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:07] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=9
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@1c143dc
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@a1f1ce5
+[00:26:07] (warn) <NetUtil> 敏感请求异常响应: www.huya.com -> 503
+[00:26:07] (debug) <HuyaTogetherWatch> Cache API 请求失败，响应码：503
+[00:26:07] (warn) <NetUtil> 异常响应: 503 https://www.huya.com/cache.php?m=LiveList&do=getLiveListByPage&gameId=2135&tagAll=0&page=9
+[00:26:07] (debug) <HuyaTogetherWatch> Cache API 请求失败，延迟后重试 (1/3)
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@82b43ba
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@8ab3c99
+[00:26:07] (network) <HuyaSDKParser> 【App】开始初始化虎牙 SDK...
+[00:26:07] (network) <HuyaSDKParser> 【App】开始初始化虎牙 SDK...
+[00:26:07] (info) <HuyaSDKLogger> ✅ HuyaSDKLogger 初始化完成（logcat 监听 SDK 日志）
+[00:26:07] (warn) <HuyaSDKLogger> ⚠️ 无 READ_LOGS 权限，跳过 logcat 监听（避免触发系统日志权限弹窗）
+[00:26:07] (debug) <HuyaSDKParser>   ✅ loadLibrary("c++_shared") 成功
+[00:26:07] (debug) <HuyaSDKParser>   ✅ loadLibrary("stlport_shared") 成功
+[00:26:07] (info) <HuyaSDKParser> ✅ 虎牙 Mars 原生库预检通过
+[00:26:07] (debug) <HuyaSDKParser>   ✅ StnLogic.startTask native 注册检查通过
+[00:26:07] (debug) <HuyaSDKParser>   ✅ loadLibrary("marsstn") 成功
+[00:26:07] (info) <HuyaSDKParser> [设备指纹] UDB host 已改写指向 127.0.0.1 → udbdf.huya.com 等上报全部失效 ✅
+[00:26:07] (info) <HuyaSDKParser>   ✅ HuyaBerryConfig.Builder 链路构建完成（含官方精简开关）
+[00:26:07] (info) <HuyaSDKParser>   🔐 从加密存储加载凭证: gameId=2135, appId=12***56, appKey=d8***dd
+[00:26:07] (debug) <HuyaSDKParser> [1/4] 准备构建 HuyaBerryConfig.Builder
+[00:26:07] (info) <SdkCompatHook> ✅ 已中和 BaseApi.crashIfDebug（sOnCrashListener=null），SDK init 不再因非致命错误抛异常
+[00:26:07] (debug) <HuyaSDKParser> [2/4] HuyaBerryConfig build 完成
+[00:26:07] (info) <HuyaCacheGov> ✅ SDK 精简开关已直接调用（isOpenBugly/debugMode/isNeedPlay/cameraMode/oneKeyGangUp/hidePauseBtn/landscapeMode = false）
+[00:26:07] (info) <HuyaCacheGov> ✅ SDK 根目录重定向至: /data/user/0/com.tv.live/cache/huya_sdk
+[00:26:07] (info) <HuyaSDKParser> [hiido统计] HuyaStatisAgent.mApi 替换为 NoOp: ✅ 成功(PV/init 已拦截)
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@d03b836
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@c7a1337
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@55f20a4
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@14b21c2
+[00:26:07] (debug) <HuyaTogetherWatch> 从Cache API获取到 822 个动漫房间
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@11fc104
+[00:26:07] (debug) <HuyaTogetherWatch> 去重后房间数: 123 (原: 157)
+[00:26:07] (debug) <HuyaTogetherWatch> 动漫类总共获取到 157 个房间（去重前）
+[00:26:07] (debug) <HuyaTogetherWatch> cache API 返回 822 个房间，过滤出 64 个动漫房间
+[00:26:07] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 123 (原: 123)
+[00:26:07] (debug) <HuyaTogetherWatch> 从Cache API获取到 826 个综艺房间
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@a356e
+[00:26:07] (debug) <HuyaTogetherWatch> 从Cache API获取到 826 个动漫房间
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@1b4740f
+[00:26:07] (debug) <HuyaTogetherWatch> 动漫类总共获取到 156 个房间（去重前）
+[00:26:07] (debug) <HuyaTogetherWatch> cache API 返回 826 个房间，过滤出 63 个动漫房间
+[00:26:07] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 123 (原: 123)
+[00:26:07] (debug) <HuyaTogetherWatch> 去重后房间数: 123 (原: 156)
+[00:26:07] (debug) <HuyaTogetherWatch> cache API 返回 826 个房间，过滤出 32 个综艺房间
+[00:26:07] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 31 (原: 31)
+[00:26:07] (debug) <HuyaTogetherWatch> 去重后房间数: 31 (原: 51)
+[00:26:07] (debug) <HuyaTogetherWatch> 综艺类总共获取到 51 个房间（去重前）
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[怀旧老片] = 29 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 98 个房间，默认分类: 影视热播
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[影视热播]频道数: 45
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[外国电影] = 24 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[影视热播] = 45 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[剧集追剧]频道数: 224
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[海外追剧] = 14 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[剧集追剧] = 224 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 238 个房间，默认分类: 剧集追剧
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[动漫动画]频道数: 80
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[动漫动画] = 80 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[海外动漫] = 43 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 123 个房间，默认分类: 动漫动画
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[综艺娱乐]频道数: 31
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[综艺娱乐] = 31 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 31 个房间，默认分类: 综艺娱乐
+[00:26:07] (debug) <HuyaSDKParser> ⏳【预解析】SDK 尚未 init，已缓存 30 个房间号，等 init 完成后自动开始
+[00:26:07] (debug) <ChannelPanel> 🟢【虎牙预解析】(一起看) 收集到 463 个房间，开始后台并行预解析
+[00:26:07] (debug) <ChannelPanel> 虎牙一起看加载完成，新增 463 个频道，总计 671
+[00:26:07] (info) <HuyaTogetherWatch> 【兜底】已写入永久兜底，房间数=490，字节=221779
+[00:26:07] (debug) <CrashHandler> 自动重启：已关闭
+[00:26:07] (warn) <ChannelPanel> SDK 固定分组预加载失败: 正在获取中，请稍候（用户点击分组时仍会走单组拉取）
+[00:26:07] (debug) <CrashHandler> 崩溃页面显示时长：60 秒
+[00:26:07] (debug) <ChannelPanel> 🚀 SDK 独立线路后台预加载虎牙 5 大固定分组…
+[00:26:07] (debug) <CrashHandler> 崩溃日志保存目录：/data/user/0/com.tv.live/files/crash_logs
+[00:26:07] (debug) <ChannelPanel> 🚀 SDK 独立线路后台预加载虎牙 5 大固定分组…
+[00:26:07] (debug) <CrashHandler> 全局崩溃捕获器已初始化
+[00:26:07] (info) <HuyaSDKParser> ✅ HuyaBerry SDK 初始化 & 绑定完成
+[00:26:07] (info) <HuyaSDKParser> ✅ HuyaBerry SDK 初始化成功 (init 无异常)
+[00:26:07] (info) <HuyaSDKParser> 已注入gameIdArr权限: [2135_一起看, 2336_王者荣耀, 2633_二次元, 1663_星秀, 6861_原创]
+[00:26:07] (info) <HuyaSDKParser> injectMultiGameIds: 原有gameIdArr长度=5
+[00:26:07] (info) <HuyaSDKParser> injectMultiGameIds: 开始注入多gameId权限...
+[00:26:07] (info) <HuyaSDKParser> 已注入gameIdArr权限: [2135_一起看, 2336_王者荣耀, 2633_二次元, 1663_星秀, 6861_原创]
+[00:26:07] (info) <HuyaSDKParser> injectMultiGameIds: 原有gameIdArr为空/不存在
+[00:26:07] (info) <HuyaSDKParser> injectMultiGameIds: 开始注入多gameId权限...
+[00:26:07] (info) <HuyaSDKParser> ✅ 全局崩溃处理器已夺回（虎牙 CrashHandler 已被覆盖）
+[00:26:07] (info) <HuyaSDKParser> ✅ 品类校验成功: 虎牙一起看(2135)
+[00:26:07] (debug) <CustomUI> 【CustomUICallback】【CustomUI:changeGame】code=0 gameId=2135
+[00:26:07] (debug) <CustomUI> 【CustomUICallback】【CustomUI:changeGame】code=0 gameId=2135
+[00:26:07] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342412 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:07] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342412 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:07] (debug) <HuyaSDKParser> 🔁【预解析】(1/30) roomId=11342412
+[00:26:07] (info) <MyApplication> 虎牙 SDK 初始化完成
+[00:26:07] (debug) <HuyaSDKParser> 🔄【预解析】SDK init 完成，补发 30 个房间的预解析
+[00:26:07] (network) <HuyaSDKParser> 【App】✅ BerryEvent 事件代理已注册
+[00:26:07] (network) <HuyaSDKParser> 【App】✅ BerryEvent 事件代理已注册
+[00:26:07] (info) <HuyaSDKParser> ✅ 已直接关闭 SDK 上报: APM+统计通道全部关闭
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] ====== 全部关闭成功 ✅✅✅ ======
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证]   └─ setGameAccountID(游戏账号绑定) ✅ 已清空且禁用
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证]   ├─ sendPlayerData(播放心跳上报) ✅ no-op 禁用
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] [播放数据/游戏账号双重保险]
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证]   └─ debugMode/cameraMode/oneKeyGangUp/isNeedPlay/hidePauseBtn/landscapeMode=false ✅
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] [Builder精简开关]
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证]   └─ HuyaStatisAgent.mApi→NoOp ✅ 成功(PV/init已拦截)
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证]   ├─ ReportApi→NoOpReportApi ✅
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] [Hiido运营统计]
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证]   └─ stopReport             ✅
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] [ciku APM]
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] ====== SDK上报关闭汇总 ======
+[00:26:07] (info) <HuyaBerryReportGuard> ✅ sendPlayerData 播放数据上报已禁用（no-op，不触发任何网络请求）
+[00:26:07] (info) <HuyaBerryReportGuard> ✅ setGameAccountID("") 已清空游戏账号绑定（不关联任何游戏账号）
+[00:26:07] (info) <HuyaSDKParser> [SDK上报验证] Step4 统计通道: ReportApi=com.tv.live.util.NoOpReportApi ✅ 已替换为NoOp
+[00:26:07] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:07] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11342412
+[00:26:07] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342412
+[00:26:07] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342412
+[00:26:07] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@48edb53
+[00:26:07] (debug) <HuyaTogetherWatch> 从Cache API获取到 822 个综艺房间
+[00:26:07] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 31 (原: 31)
+[00:26:07] (debug) <HuyaTogetherWatch> 去重后房间数: 31 (原: 51)
+[00:26:07] (debug) <HuyaTogetherWatch> 综艺类总共获取到 51 个房间（去重前）
+[00:26:07] (debug) <HuyaTogetherWatch> cache API 返回 822 个房间，过滤出 32 个综艺房间
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[影视热播]频道数: 45
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[外国电影] = 24 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[影视热播] = 45 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[怀旧老片] = 29 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 98 个房间，默认分类: 影视热播
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[剧集追剧]频道数: 224
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[海外追剧] = 14 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[剧集追剧] = 224 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 238 个房间，默认分类: 剧集追剧
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[综艺娱乐]频道数: 31
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[综艺娱乐] = 31 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 31 个房间，默认分类: 综艺娱乐
+[00:26:07] (debug) <HuyaTogetherWatch>   兜底[动漫动画]频道数: 80
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[动漫动画] = 80 个频道
+[00:26:07] (debug) <HuyaTogetherWatch>   分组[海外动漫] = 43 个频道
+[00:26:07] (debug) <HuyaTogetherWatch> 按关键词分类完成: 123 个房间，默认分类: 动漫动画
+[00:26:07] (debug) <HuyaSDKParser> 🔁【预解析】无新增房间（均已在队列或已有有效缓存），跳过
+[00:26:07] (debug) <ChannelPanel> 🟢【虎牙预解析】(一起看) 收集到 463 个房间，开始后台并行预解析
+[00:26:07] (debug) <ChannelPanel> 虎牙一起看加载完成，新增 463 个频道，总计 463
+[00:26:07] (info) <HuyaTogetherWatch> 【兜底】已写入永久兜底，房间数=490，字节=221779
+[00:26:08] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:08] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342412
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342412
+[00:26:08] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:08] (debug) <HuyaSDKParser> ✅【预解析】roomId=11342412 成功, streams=8
+[00:26:08] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342412 等待者=1
+[00:26:08] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342412 等待者=1
+[00:26:08] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:08] (network) <HuyaSDKParser> 【App】房间11342412 SDK解析成功: 8 条流
+[00:26:08] (network) <HuyaSDKParser> 【App】房间11342412 SDK解析成功: 8 条流
+[00:26:08] (debug) <HuyaSDKParser> 房间11342412 流信息写入缓存: 8 条流
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 流畅(500bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 超清(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser> 线路#1(v=14): 4 个码率
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 流畅(500bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 超清(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:08] (debug) <HuyaSDKParser> 线路#0(v=5): 4 个码率
+[00:26:08] (debug) <HuyaSDKParser> V33DBG room=11342412 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@56b5711, com.huya.berry.module.Player.SMObject$BitRateInfo@b617076, com.huya.berry.module.Player.SMObject$BitRateInfo@a050677, com.huya.berry.module.Player.SMObject$BitRateInfo@32632e4]
+[00:26:08] (debug) <HuyaSDKParser> V33DBG room=11342412 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@56b5711, com.huya.berry.module.Player.SMObject$BitRateInfo@b617076, com.huya.berry.module.Player.SMObject$BitRateInfo@a050677, com.huya.berry.module.Player.SMObject$BitRateInfo@32632e4]
+[00:26:08] (debug) <HuyaSDKParser> V33DBG room=11342412 singleInfo.size=2
+[00:26:08] (debug) <HuyaSDKParser> V33DBG room=11342412 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@2069b38
+[00:26:08] (debug) <HuyaTogetherWatch> 从Cache API获取到 826 个动漫房间
+[00:26:08] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@c5ac562
+[00:26:08] (debug) <HuyaTogetherWatch> 去重后房间数: 123 (原: 156)
+[00:26:08] (debug) <HuyaTogetherWatch> 动漫类总共获取到 156 个房间（去重前）
+[00:26:08] (debug) <HuyaTogetherWatch> cache API 返回 826 个房间，过滤出 63 个动漫房间
+[00:26:08] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 123 (原: 123)
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:TagList-list】code=0 size=4
+[00:26:08] (info) <TogetherWatchGroup> 【SDK→分组】分类分布: 虎牙电影=1 虎牙电视剧=1 虎牙动漫=1 虎牙综艺=1 虎牙一起看=0
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:TagList-list】code=0 size=4
+[00:26:08] (debug) <HuyaTogetherWatch> cache第一个房间所有字段：java.util.LinkedHashMap$LinkedKeyIterator@ce18237
+[00:26:08] (debug) <HuyaTogetherWatch> 从Cache API获取到 826 个综艺房间
+[00:26:08] (debug) <HuyaTogetherWatch> 过滤排序后房间数: 31 (原: 31)
+[00:26:08] (debug) <HuyaTogetherWatch> 去重后房间数: 31 (原: 51)
+[00:26:08] (debug) <HuyaTogetherWatch> 综艺类总共获取到 51 个房间（去重前）
+[00:26:08] (debug) <HuyaTogetherWatch> cache API 返回 826 个房间，过滤出 32 个综艺房间
+[00:26:08] (debug) <HuyaTogetherWatch>   兜底[影视热播]频道数: 45
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[外国电影] = 24 个频道
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[影视热播] = 45 个频道
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[怀旧老片] = 29 个频道
+[00:26:08] (debug) <HuyaTogetherWatch> 按关键词分类完成: 98 个房间，默认分类: 影视热播
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:08] (debug) <HuyaTogetherWatch> 按关键词分类完成: 238 个房间，默认分类: 剧集追剧
+[00:26:08] (debug) <HuyaTogetherWatch>   兜底[剧集追剧]频道数: 224
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[海外追剧] = 14 个频道
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[剧集追剧] = 224 个频道
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[海外动漫] = 43 个频道
+[00:26:08] (debug) <HuyaTogetherWatch> 按关键词分类完成: 123 个房间，默认分类: 动漫动画
+[00:26:08] (debug) <HuyaTogetherWatch>   兜底[综艺娱乐]频道数: 31
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[综艺娱乐] = 31 个频道
+[00:26:08] (debug) <HuyaTogetherWatch> 按关键词分类完成: 31 个房间，默认分类: 综艺娱乐
+[00:26:08] (debug) <HuyaTogetherWatch>   兜底[动漫动画]频道数: 80
+[00:26:08] (debug) <HuyaTogetherWatch>   分组[动漫动画] = 80 个频道
+[00:26:08] (debug) <ChannelPanel> 虎牙一起看加载完成，新增 0 个频道，总计 671
+[00:26:08] (info) <HuyaTogetherWatch> 【兜底】已写入永久兜底，房间数=490，字节=221779
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:08] (info) <SecurityGuard> 安全管理器初始化完成，签名哈希: xQdedEk3xbKAsqg0...
+[00:26:08] (warn) <SecurityGuard> ⚠️ 检测到 Root 环境
+[00:26:08] (warn) <MyApplication> 安全检测发现风险: 检测到安全威胁:
+⚠️ 检测到 Root 权限
+
+[00:26:08] (info) <SecurityGuard> 安全检测完成: 检测到安全威胁:
+⚠️ 检测到 Root 权限
+
+[00:26:08] (debug) <SecureDataStore> 新加密密钥已生成
+[00:26:08] (info) <MyApplication> 安全数据存储初始化完成
+[00:26:08] (info) <SecureDataStore> 安全存储初始化完成
+[00:26:08] (debug) <SecureDataStore> 加密密钥已就绪
+[00:26:08] (info) <TogetherWatchGroup> 【推荐列表】原始频道数=40
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:08] (info) <TogetherWatchGroup> 【推荐列表】分类后频道数=40
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:08] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:08] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:08] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:08] (info) <TogetherWatchGroup> 【tag=最新(filterlib-2135-4531)】解析频道数=14
+[00:26:08] (info) <TogetherWatchGroup> 【tag=最新】原始列表=14
+[00:26:08] (info) <TogetherWatchGroup> 【tag=最新】第2页无新频道，停止翻页
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:08] (info) <TogetherWatchGroup> 【tag=综艺(filterlib-2135-853)】解析频道数=20
+[00:26:08] (info) <TogetherWatchGroup> 【tag=综艺】原始列表=20
+[00:26:08] (info) <TogetherWatchGroup> 【tag=综艺】第2页无新频道，停止翻页
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:08] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=全部(gid-2135)】解析频道数=21
+[00:26:09] (info) <TogetherWatchGroup> 【tag=全部】原始列表=21
+[00:26:09] (info) <TogetherWatchGroup> 【tag=全部】第3页无新频道，停止翻页
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=全部】原始列表=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=全部】第2页无新频道，停止翻页
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=全部(gid-2135)】解析频道数=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=UP(filterlib-2135-4537)】解析频道数=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=UP】原始列表=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=UP】第2页无新频道，停止翻页
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:09] (info) <TogetherWatchGroup> 【tag=最新(filterlib-2135-4531)】解析频道数=14
+[00:26:09] (info) <TogetherWatchGroup> 【tag=最新】原始列表=14
+[00:26:09] (info) <TogetherWatchGroup> 【tag=最新】第2页无新频道，停止翻页
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:09] (info) <HuyaSDKParser-DebugChecker>   ℹ️  检查项2【模块注册】：ModuleManager 类名无法定位（版本混淆），降级为不判定，跳过
+[00:26:09] (info) <HuyaSDKParser-DebugChecker> ================ 🔬【豆包推荐：播放器模块剥离自检】================
+[00:26:09] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342421
+[00:26:09] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342421
+[00:26:09] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11342421
+[00:26:09] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:09] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342421 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:09] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342421 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:09] (debug) <HuyaSDKParser> 🔁【预解析】(2/30) roomId=11342421
+[00:26:09] (info) <HuyaSDKParser-DebugChecker> 
+================ 🔬【自检结果汇总】✅ 通过（检查项 passed=3/3）================
+  ℹ️  检查项1【播放器类加载】：ClassNotFound 4/6（debug minifyEnabled=false 属正常，release 会全部消失）
+  ⚠️  CLASS 还能加载（debug 阶段正常，release R8 会剥离）：com.huya.berry.sdkplayer.SdkPlayerService
+  ⚠️  CLASS 还能加载（debug 阶段正常，release R8 会剥离）：com.huya.berry.sdkplayer.floats.view.PlayerActivity
+========================================================
+  🎉 豆包判断标准输出：✅ 正常：未检测到播放器模块
+     解释：方案1 官方开关 + 方案2 R8 播放器类 dontwarn 全部生效
+     Release 阶段 R8 会把未加载类全部剥离 dex，再省 ≈0....[已截断]
+[00:26:09] (info) <HuyaSDKParser-DebugChecker>   ✅ 检查项3【so 内存加载】：/proc/self/maps 中无 libberry_player/decoder/ijk 等 mmap 记录（运行内存真·省下）
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=UP(filterlib-2135-4537)】解析频道数=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=UP】原始列表=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=UP】第2页无新频道，停止翻页
+[00:26:09] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342421
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342421
+[00:26:09] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:09] (debug) <HuyaSDKParser> 房间11342421 流信息写入缓存: 6 条流
+[00:26:09] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 超清(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:09] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:09] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:09] (debug) <HuyaSDKParser> 线路#1(v=14): 3 个码率
+[00:26:09] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 超清(2000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:09] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:09] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光6M(6000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:09] (debug) <HuyaSDKParser> 线路#0(v=5): 3 个码率
+[00:26:09] (debug) <HuyaSDKParser> V33DBG room=11342421 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e1a0a5b, com.huya.berry.module.Player.SMObject$BitRateInfo@da052f8, com.huya.berry.module.Player.SMObject$BitRateInfo@a5b13d1]
+[00:26:09] (debug) <HuyaSDKParser> V33DBG room=11342421 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e1a0a5b, com.huya.berry.module.Player.SMObject$BitRateInfo@da052f8, com.huya.berry.module.Player.SMObject$BitRateInfo@a5b13d1]
+[00:26:09] (debug) <HuyaSDKParser> V33DBG room=11342421 singleInfo.size=2
+[00:26:09] (debug) <HuyaSDKParser> V33DBG room=11342421 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@a02456a
+[00:26:09] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:09] (debug) <HuyaSDKParser> ✅【预解析】roomId=11342421 成功, streams=6
+[00:26:09] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342421 等待者=1
+[00:26:09] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342421 等待者=1
+[00:26:09] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:09] (network) <HuyaSDKParser> 【App】房间11342421 SDK解析成功: 6 条流
+[00:26:09] (network) <HuyaSDKParser> 【App】房间11342421 SDK解析成功: 6 条流
+[00:26:09] (info) <TogetherWatchGroup> 【tag=综艺(filterlib-2135-853)】解析频道数=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=综艺】原始列表=20
+[00:26:09] (info) <TogetherWatchGroup> 【tag=综艺】第2页无新频道，停止翻页
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:09] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:09] (info) <TogetherWatchGroup> 【固定分组】虎牙一起看兜底 频道数=19
+[00:26:09] (debug) <HuyaSDKParser> 🔀【预解析】队列正在跑，追加 25 个新房间到队尾（总计 55 个）
+[00:26:09] (debug) <ChannelPanel> ✅ SDK 5 大固定分组预加载完成，共新增 93 个频道，总计 556，耗时 0ms
+[00:26:09] (debug) <ChannelPanel> SDK 分组[虎牙一起看]预加载完成，新增 12 个频道
+[00:26:09] (debug) <ChannelPanel> SDK 分组[虎牙综艺]预加载完成，新增 20 个频道
+[00:26:09] (debug) <ChannelPanel> SDK 分组[虎牙动漫]预加载完成，新增 19 个频道
+[00:26:09] (debug) <ChannelPanel> SDK 分组[虎牙电视剧]预加载完成，新增 15 个频道
+[00:26:09] (debug) <ChannelPanel> SDK 分组[虎牙电影]预加载完成，新增 27 个频道
+[00:26:09] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:09] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:09] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:10] (debug) <HuyaSDKParser> 🔁【预解析】(3/55) roomId=11601986
+[00:26:10] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11601986 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:10] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11601986 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:10] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11601986
+[00:26:10] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11601986
+[00:26:10] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11601986
+[00:26:10] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:10] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11601986
+[00:26:10] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:10] (debug) <HuyaSDKParser> ✅【预解析】roomId=11601986 成功, streams=2
+[00:26:10] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11601986 等待者=1
+[00:26:10] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11601986 等待者=1
+[00:26:10] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:10] (network) <HuyaSDKParser> 【App】房间11601986 SDK解析成功: 2 条流
+[00:26:10] (network) <HuyaSDKParser> 【App】房间11601986 SDK解析成功: 2 条流
+[00:26:10] (debug) <HuyaSDKParser> 房间11601986 流信息写入缓存: 2 条流
+[00:26:10] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:10] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:10] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:10] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:10] (debug) <HuyaSDKParser> V33DBG room=11601986 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@4311fc6]
+[00:26:10] (debug) <HuyaSDKParser> V33DBG room=11601986 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@4311fc6]
+[00:26:10] (debug) <HuyaSDKParser> V33DBG room=11601986 singleInfo.size=2
+[00:26:10] (debug) <HuyaSDKParser> V33DBG room=11601986 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@619f1a1
+[00:26:10] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:10] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:10] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11601986
+[00:26:11] (debug) <SourceHealthChecker> 检测异常(不计入失效): https://vip.ffzy-play7.com/20230112/11082_fde1a94d/index.m3u8 → unexpected end of stream on com.android.okhttp.Address@7a1558
+[00:26:12] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=21059607 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:12] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=21059607 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:12] (debug) <HuyaSDKParser> 🔁【预解析】(4/55) roomId=21059607
+[00:26:12] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=21059607
+[00:26:12] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=21059607
+[00:26:12] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=21059607
+[00:26:12] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:12] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:12] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=21059607
+[00:26:12] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=21059607
+[00:26:12] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:12] (debug) <HuyaSDKParser> ✅【预解析】roomId=21059607 成功, streams=2
+[00:26:12] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=21059607 等待者=1
+[00:26:12] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=21059607 等待者=1
+[00:26:12] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:12] (network) <HuyaSDKParser> 【App】房间21059607 SDK解析成功: 2 条流
+[00:26:12] (network) <HuyaSDKParser> 【App】房间21059607 SDK解析成功: 2 条流
+[00:26:12] (debug) <HuyaSDKParser> 房间21059607 流信息写入缓存: 2 条流
+[00:26:12] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:12] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:12] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:12] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:12] (debug) <HuyaSDKParser> V33DBG room=21059607 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@96aa761]
+[00:26:12] (debug) <HuyaSDKParser> V33DBG room=21059607 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@96aa761]
+[00:26:12] (debug) <HuyaSDKParser> V33DBG room=21059607 singleInfo.size=2
+[00:26:12] (debug) <HuyaSDKParser> V33DBG room=21059607 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@e4abac8
+[00:26:12] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:13] (debug) <TVPlayerManager> 【虎牙】variantList 填充: 共 8 个清晰度，分布在 2 条线路
+[00:26:13] (debug) <TVPlayerManager> 【虎牙】线路轮询：切换到线路 1
+[00:26:13] (info) <TVPlayerManager> 【画质选择】默认流已调整: 蓝光4M → 蓝光6M (统一最高画质)
+[00:26:13] (info) <HuyaSDKParser> 【适配选择】选中流: Stream[line#0(v=5) 蓝光6M(6000bps) HLS=true FLV=true] (resolutionLabel=1080p, bitRate=6000bps)
+[00:26:13] (info) <TVPlayerManager> ⚡【虎牙解析耗时】0ms, roomId=11342412，缓存命中=true，流数=8
+[00:26:13] (network) <HuyaSDKParser> 【App】命中缓存: roomId=11342412 streams=8
+[00:26:13] (network) <HuyaSDKParser> 【App】命中缓存: roomId=11342412 streams=8
+[00:26:13] (debug) <HuyaSDKParser> 命中房间11342412流信息缓存（5s前）
+[00:26:13] (debug) <TVPlayerManager> 【虎牙】使用 SDK 全量解析, roomId=11342412
+[00:26:13] (info) <TVPlayerManager> 🚀【虎牙并行加载】命中预解析缓存！房间=11342412，缓存年龄=5s，流数=8，即将瞬时启动播放（跳过实时SDK等待）
+[00:26:13] (debug) <TVPlayerManager> 【虎牙】SDK 全量解析成功, 默认流=http://hs.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-
+[00:26:13] (debug) <TVPlayerManager> 【虎牙】扁平化线路: 主源 + 7 个备源 (总变体数=8)
+[00:26:13] (debug) <TVPlayerManager>   线路1: 蓝光4M 蓝光6M 超清 流畅 
+[00:26:13] (debug) <TVPlayerManager>   线路0: 蓝光6M 蓝光4M 超清 流畅 
+[00:26:13] (debug) <TVPlayerManager> 【虎牙源】开始播放: http://hs.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-
+[00:26:13] (debug) <TVPlayerManager> doPlay: url=http://hs.hls.huya.com/src/1394575534-1394575534-5989656310331736064-2789274524-10057-A-0-1_4000.m3u isHls=true isRealStream=true
+[00:26:13] (debug) <TVPlayerManager> 【虎牙源】mPendingPlaybackHeaders 为空，走默认虎牙 headers
+[00:26:13] (info) <TVPlayerManager> [PLAY] 暂停播放
+[00:26:13] (info) <TVPlayerManager> [PLAY] 缓冲中 (STATE_BUFFERING)
+[00:26:13] (info) <TVPlayerManager> [PLAY] 视频分辨率变化：0×0
+[00:26:13] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11601968
+[00:26:13] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:13] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11601968 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:13] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11601968 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:13] (debug) <HuyaSDKParser> 🔁【预解析】(5/55) roomId=11601968
+[00:26:13] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11601968
+[00:26:13] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11601968
+[00:26:13] (debug) <HuyaSDKParser> ✅【预解析】roomId=11601968 成功, streams=2
+[00:26:13] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11601968 等待者=1
+[00:26:13] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11601968 等待者=1
+[00:26:13] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:13] (network) <HuyaSDKParser> 【App】房间11601968 SDK解析成功: 2 条流
+[00:26:13] (network) <HuyaSDKParser> 【App】房间11601968 SDK解析成功: 2 条流
+[00:26:13] (debug) <HuyaSDKParser> 房间11601968 流信息写入缓存: 2 条流
+[00:26:13] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:13] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:13] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:13] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:13] (debug) <HuyaSDKParser> V33DBG room=11601968 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@cdf2cb3]
+[00:26:13] (debug) <HuyaSDKParser> V33DBG room=11601968 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@cdf2cb3]
+[00:26:13] (debug) <HuyaSDKParser> V33DBG room=11601968 singleInfo.size=2
+[00:26:13] (debug) <HuyaSDKParser> V33DBG room=11601968 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@5e79a22
+[00:26:13] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:13] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:13] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11601968
+[00:26:13] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11601968
+[00:26:13] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:14] (info) <TVPlayerManager> [PLAY] 视频分辨率变化：1280×720
+[00:26:14] (info) <TVPlayerManager> [PLAY] 播放就绪 (STATE_READY)
+[00:26:14] (info) <TVPlayerManager> [PLAY] 短暂缓冲恢复，时长：719ms
+[00:26:14] (info) <TVPlayerManager> [PLAY] 开始播放
+[00:26:15] (debug) <Settings> SettingsDialog 显示成功
+[00:26:15] (debug) <Settings> First item focused
+[00:26:15] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=880261 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:15] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=880261 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:15] (debug) <HuyaSDKParser> 🔁【预解析】(6/55) roomId=880261
+[00:26:15] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=880261
+[00:26:15] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=880261
+[00:26:15] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=880261
+[00:26:15] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:15] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:15] (debug) <HuyaSDKParser> ✅【预解析】roomId=880261 成功, streams=2
+[00:26:15] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=880261 等待者=1
+[00:26:15] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=880261 等待者=1
+[00:26:15] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:15] (network) <HuyaSDKParser> 【App】房间880261 SDK解析成功: 2 条流
+[00:26:15] (network) <HuyaSDKParser> 【App】房间880261 SDK解析成功: 2 条流
+[00:26:15] (debug) <HuyaSDKParser> 房间880261 流信息写入缓存: 2 条流
+[00:26:15] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:15] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:15] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:15] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:15] (debug) <HuyaSDKParser> V33DBG room=880261 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@d92012e]
+[00:26:15] (debug) <HuyaSDKParser> V33DBG room=880261 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@d92012e]
+[00:26:15] (debug) <HuyaSDKParser> V33DBG room=880261 singleInfo.size=2
+[00:26:15] (debug) <HuyaSDKParser> V33DBG room=880261 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@c6557a9
+[00:26:15] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:15] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:15] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=880261
+[00:26:15] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=880261
+[00:26:15] (debug) <SettingsDialog> Focus requested to first item
+[00:26:16] (debug) <MainActivity> 设置已主动刷新，无需切后台
+[00:26:16] (debug) <MainActivity> 📡 收到解锁广播，isOpeningSettings 已重置
+[00:26:16] (debug) <MainActivity> 📡 收到解锁广播，isOpeningSettings 已重置
+[00:26:16] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342427
+[00:26:16] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11342427
+[00:26:16] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:16] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342427 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:16] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342427 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:16] (debug) <HuyaSDKParser> 🔁【预解析】(7/55) roomId=11342427
+[00:26:16] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342427
+[00:26:16] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:16] (debug) <HuyaSDKParser> V33DBG room=11342427 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@13a668d]
+[00:26:16] (debug) <HuyaSDKParser> V33DBG room=11342427 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@13a668d]
+[00:26:16] (debug) <HuyaSDKParser> V33DBG room=11342427 singleInfo.size=2
+[00:26:16] (debug) <HuyaSDKParser> V33DBG room=11342427 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@68a8b24
+[00:26:16] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:16] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:16] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342427
+[00:26:16] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342427
+[00:26:16] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:16] (debug) <HuyaSDKParser> ✅【预解析】roomId=11342427 成功, streams=2
+[00:26:16] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342427 等待者=1
+[00:26:16] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342427 等待者=1
+[00:26:16] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:16] (network) <HuyaSDKParser> 【App】房间11342427 SDK解析成功: 2 条流
+[00:26:16] (network) <HuyaSDKParser> 【App】房间11342427 SDK解析成功: 2 条流
+[00:26:16] (debug) <HuyaSDKParser> 房间11342427 流信息写入缓存: 2 条流
+[00:26:16] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:16] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:16] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:0, selectedPos:0, isSelected:true
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:1, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:2, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:3, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:6, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:5, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:4, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:8, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:7, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:9, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:10, selectedPos:0, isSelected:false
+[00:26:17] (debug) <ChannelList> getView(byGroup) pos:11, selectedPos:0, isSelected:false
+[00:26:18] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11336587 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:18] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11336587 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:18] (debug) <HuyaSDKParser> 🔁【预解析】(8/55) roomId=11336587
+[00:26:18] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11336587
+[00:26:18] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11336587
+[00:26:18] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11336587
+[00:26:18] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:18] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:18] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11336587
+[00:26:18] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11336587
+[00:26:18] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:18] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:18] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:18] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:18] (debug) <HuyaSDKParser> V33DBG room=11336587 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@ef22f6d]
+[00:26:18] (debug) <HuyaSDKParser> V33DBG room=11336587 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@ef22f6d]
+[00:26:18] (debug) <HuyaSDKParser> V33DBG room=11336587 singleInfo.size=2
+[00:26:18] (debug) <HuyaSDKParser> V33DBG room=11336587 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@f526b84
+[00:26:18] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:18] (debug) <HuyaSDKParser> ✅【预解析】roomId=11336587 成功, streams=2
+[00:26:18] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11336587 等待者=1
+[00:26:18] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11336587 等待者=1
+[00:26:18] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:18] (network) <HuyaSDKParser> 【App】房间11336587 SDK解析成功: 2 条流
+[00:26:18] (network) <HuyaSDKParser> 【App】房间11336587 SDK解析成功: 2 条流
+[00:26:18] (debug) <HuyaSDKParser> 房间11336587 流信息写入缓存: 2 条流
+[00:26:18] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:19] (debug) <AppCoreManager> 【加载】超时，自动隐藏加载动画
+[00:26:19] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11602058 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:19] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11602058 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:19] (debug) <HuyaSDKParser> 🔁【预解析】(9/55) roomId=11602058
+[00:26:19] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11602058
+[00:26:19] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11602058
+[00:26:19] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11602058
+[00:26:19] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:19] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:19] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11602058
+[00:26:19] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11602058
+[00:26:19] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:19] (debug) <HuyaSDKParser> ✅【预解析】roomId=11602058 成功, streams=3
+[00:26:19] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11602058 等待者=1
+[00:26:19] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11602058 等待者=1
+[00:26:19] (debug) <HuyaSDKParser> SDK 解析完成: 3 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:19] (network) <HuyaSDKParser> 【App】房间11602058 SDK解析成功: 3 条流
+[00:26:19] (network) <HuyaSDKParser> 【App】房间11602058 SDK解析成功: 3 条流
+[00:26:19] (debug) <HuyaSDKParser> 房间11602058 流信息写入缓存: 3 条流
+[00:26:19] (debug) <HuyaSDKParser>   → Stream[line#2(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:19] (debug) <HuyaSDKParser> 线路#2(v=14): 1 个码率
+[00:26:19] (debug) <HuyaSDKParser>   → Stream[line#1(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:19] (debug) <HuyaSDKParser> 线路#1(v=5): 1 个码率
+[00:26:19] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:19] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:19] (debug) <HuyaSDKParser> V33DBG room=11602058 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3fbd176]
+[00:26:19] (debug) <HuyaSDKParser> V33DBG room=11602058 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3fbd176]
+[00:26:19] (debug) <HuyaSDKParser> V33DBG room=11602058 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@3fbd176]
+[00:26:19] (debug) <HuyaSDKParser> V33DBG room=11602058 singleInfo.size=3
+[00:26:19] (debug) <HuyaSDKParser> V33DBG room=11602058 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@a5e9c11
+[00:26:19] (debug) <HuyaSDKParser> getLines: 3 条线路
+[00:26:20] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:20] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:20] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:20] (debug) <DateList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:20] (debug) <ChannelPanel> Right panel opened, focus on channel list
+[00:26:20] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=29982675 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:20] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342412 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:20] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342386 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:20] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342390 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352876 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11601968 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <AppCoreManager> 【EPG】最新节目单加载完成
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059581 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342424 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11282233 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:21] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11282233 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:21] (debug) <HuyaSDKParser> 🔁【预解析】(10/55) roomId=11282233
+[00:26:21] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11282233
+[00:26:21] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11282233
+[00:26:21] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11282233
+[00:26:21] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:21] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:21] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11282233
+[00:26:21] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11282233
+[00:26:21] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:21] (debug) <HuyaSDKParser> ✅【预解析】roomId=11282233 成功, streams=2
+[00:26:21] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11282233 等待者=1
+[00:26:21] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11282233 等待者=1
+[00:26:21] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:21] (network) <HuyaSDKParser> 【App】房间11282233 SDK解析成功: 2 条流
+[00:26:21] (network) <HuyaSDKParser> 【App】房间11282233 SDK解析成功: 2 条流
+[00:26:21] (debug) <HuyaSDKParser> 房间11282233 流信息写入缓存: 2 条流
+[00:26:21] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:21] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:21] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:21] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:21] (debug) <HuyaSDKParser> V33DBG room=11282233 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@825c875]
+[00:26:21] (debug) <HuyaSDKParser> V33DBG room=11282233 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@825c875]
+[00:26:21] (debug) <HuyaSDKParser> V33DBG room=11282233 singleInfo.size=2
+[00:26:21] (debug) <HuyaSDKParser> V33DBG room=11282233 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@4f023ac
+[00:26:21] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11602058 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342435 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342421 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:21] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342427 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:12, selectedPos:0, isSelected:false
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352941 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11601986 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:13, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:14, selectedPos:0, isSelected:false
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059577 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:15, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:16, selectedPos:0, isSelected:false
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059574 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:17, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:18, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:19, selectedPos:0, isSelected:false
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352935 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:6, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:5, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:4, selectedPos:0, isSelected:false
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11352962 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:3, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:2, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:1, selectedPos:0, isSelected:false
+[00:26:22] (debug) <ChannelList> getView(byGroup) pos:0, selectedPos:0, isSelected:true
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059585 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <HuyaSDKParser> 🔁【预解析】(11/55) roomId=11342386
+[00:26:22] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342386 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:22] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342386 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:22] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11342386
+[00:26:22] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:22] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342386
+[00:26:22] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342386
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=30080229 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=21059579 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:22] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342386
+[00:26:22] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:22] (debug) <HuyaSDKParser> ✅【预解析】roomId=11342386 成功, streams=2
+[00:26:22] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342386 等待者=1
+[00:26:22] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342386 等待者=1
+[00:26:22] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:22] (network) <HuyaSDKParser> 【App】房间11342386 SDK解析成功: 2 条流
+[00:26:22] (network) <HuyaSDKParser> 【App】房间11342386 SDK解析成功: 2 条流
+[00:26:22] (debug) <HuyaSDKParser> 房间11342386 流信息写入缓存: 2 条流
+[00:26:22] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:22] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:22] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:22] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:22] (debug) <HuyaSDKParser> V33DBG room=11342386 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@dee80c]
+[00:26:22] (debug) <HuyaSDKParser> V33DBG room=11342386 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@dee80c]
+[00:26:22] (debug) <HuyaSDKParser> V33DBG room=11342386 singleInfo.size=2
+[00:26:22] (debug) <HuyaSDKParser> V33DBG room=11342386 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@c18373f
+[00:26:22] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:22] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:22] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342386
+[00:26:23] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342428 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:23] (info) <SourceHealthChecker> 全量源检测完成: 检测 210 个URL, 剔除 0 个失效源
+[00:26:23] (debug) <SourceHealthChecker> 检测异常(不计入失效): http://cdn.jdshipin.com:8880/huya.php?id=11342414 → Unable to resolve host "diyp.zxyxndc.top": No address associated with hostname
+[00:26:23] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:23] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:23] (debug) <ChannelPanel> Right panel opened, focus on channel list
+[00:26:24] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=10871113
+[00:26:24] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=10871113
+[00:26:24] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=10871113
+[00:26:24] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:24] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=10871113 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:24] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=10871113 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:24] (debug) <HuyaSDKParser> 🔁【预解析】(12/55) roomId=10871113
+[00:26:24] (debug) <HuyaSDKParser> ✅【预解析】roomId=10871113 成功, streams=2
+[00:26:24] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=10871113 等待者=1
+[00:26:24] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=10871113 等待者=1
+[00:26:24] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:24] (network) <HuyaSDKParser> 【App】房间10871113 SDK解析成功: 2 条流
+[00:26:24] (network) <HuyaSDKParser> 【App】房间10871113 SDK解析成功: 2 条流
+[00:26:24] (debug) <HuyaSDKParser> 房间10871113 流信息写入缓存: 2 条流
+[00:26:24] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:24] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:24] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:24] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:24] (debug) <HuyaSDKParser> V33DBG room=10871113 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e9a8dc5]
+[00:26:24] (debug) <HuyaSDKParser> V33DBG room=10871113 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@e9a8dc5]
+[00:26:24] (debug) <HuyaSDKParser> V33DBG room=10871113 singleInfo.size=2
+[00:26:24] (debug) <HuyaSDKParser> V33DBG room=10871113 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@8f26c3c
+[00:26:24] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:24] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:24] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=10871113
+[00:26:24] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=10871113
+[00:26:24] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:25] (debug) <HuyaSDKParser> 🔁【预解析】(13/55) roomId=11601960
+[00:26:25] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11601960
+[00:26:25] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11601960
+[00:26:25] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11601960
+[00:26:25] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:25] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11601960 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:25] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11601960 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:25] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:25] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:25] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11601960
+[00:26:25] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11601960
+[00:26:25] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:25] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:25] (network) <HuyaSDKParser> 【App】房间11601960 SDK解析成功: 2 条流
+[00:26:25] (network) <HuyaSDKParser> 【App】房间11601960 SDK解析成功: 2 条流
+[00:26:25] (debug) <HuyaSDKParser> 房间11601960 流信息写入缓存: 2 条流
+[00:26:25] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:25] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:25] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:25] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:25] (debug) <HuyaSDKParser> V33DBG room=11601960 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@715fcb1]
+[00:26:25] (debug) <HuyaSDKParser> V33DBG room=11601960 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@715fcb1]
+[00:26:25] (debug) <HuyaSDKParser> V33DBG room=11601960 singleInfo.size=2
+[00:26:25] (debug) <HuyaSDKParser> V33DBG room=11601960 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@103d358
+[00:26:25] (debug) <HuyaSDKParser> ✅【预解析】roomId=11601960 成功, streams=2
+[00:26:25] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11601960 等待者=1
+[00:26:25] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11601960 等待者=1
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:0, selectedPos:0, isSelected:true
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:3, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:2, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:1, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:7, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:6, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:5, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:4, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:9, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:8, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:11, selectedPos:0, isSelected:false
+[00:26:27] (debug) <ChannelList> getView(byGroup) pos:10, selectedPos:0, isSelected:false
+[00:26:27] (debug) <HuyaSDKParser> 🔁【预解析】(14/55) roomId=11352973
+[00:26:27] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11352973
+[00:26:27] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11352973
+[00:26:27] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11352973
+[00:26:27] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:27] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11352973 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:27] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11352973 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:27] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:27] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:27] (network) <HuyaSDKParser> 【App】房间11352973 SDK解析成功: 2 条流
+[00:26:27] (network) <HuyaSDKParser> 【App】房间11352973 SDK解析成功: 2 条流
+[00:26:27] (debug) <HuyaSDKParser> 房间11352973 流信息写入缓存: 2 条流
+[00:26:27] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:27] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:27] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:27] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:27] (debug) <HuyaSDKParser> V33DBG room=11352973 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@417f34]
+[00:26:27] (debug) <HuyaSDKParser> V33DBG room=11352973 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@417f34]
+[00:26:27] (debug) <HuyaSDKParser> V33DBG room=11352973 singleInfo.size=2
+[00:26:27] (debug) <HuyaSDKParser> V33DBG room=11352973 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@aa79207
+[00:26:27] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:27] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:27] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11352973
+[00:26:27] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11352973
+[00:26:27] (debug) <HuyaSDKParser> ✅【预解析】roomId=11352973 成功, streams=2
+[00:26:27] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11352973 等待者=1
+[00:26:27] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11352973 等待者=1
+[00:26:28] (debug) <HuyaSDKParser> 🔁【预解析】(15/55) roomId=11342399
+[00:26:28] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342399
+[00:26:28] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342399
+[00:26:28] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11342399
+[00:26:28] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:28] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342399 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:28] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342399 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:28] (network) <HuyaSDKParser> 【App】房间11342399 SDK解析成功: 2 条流
+[00:26:28] (debug) <HuyaSDKParser> 房间11342399 流信息写入缓存: 2 条流
+[00:26:28] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:28] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:28] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:28] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:28] (debug) <HuyaSDKParser> V33DBG room=11342399 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@582b7c9]
+[00:26:28] (debug) <HuyaSDKParser> V33DBG room=11342399 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@582b7c9]
+[00:26:28] (debug) <HuyaSDKParser> V33DBG room=11342399 singleInfo.size=2
+[00:26:28] (debug) <HuyaSDKParser> V33DBG room=11342399 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@1c35f93
+[00:26:28] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:28] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:28] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342399
+[00:26:28] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342399
+[00:26:28] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:28] (debug) <HuyaSDKParser> ✅【预解析】roomId=11342399 成功, streams=2
+[00:26:28] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342399 等待者=1
+[00:26:28] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342399 等待者=1
+[00:26:28] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:28] (network) <HuyaSDKParser> 【App】房间11342399 SDK解析成功: 2 条流
+[00:26:29] (debug) <ChannelList> getView(byGroup) pos:12, selectedPos:0, isSelected:false
+[00:26:29] (debug) <ChannelList> getView(byGroup) pos:13, selectedPos:0, isSelected:false
+[00:26:29] (debug) <ChannelList> getView(byGroup) pos:14, selectedPos:0, isSelected:false
+[00:26:29] (debug) <ChannelList> getView(byGroup) pos:15, selectedPos:0, isSelected:false
+[00:26:30] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11279251
+[00:26:30] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11279251
+[00:26:30] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11279251
+[00:26:30] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:30] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11279251 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:30] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11279251 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:30] (debug) <HuyaSDKParser> 🔁【预解析】(16/55) roomId=11279251
+[00:26:30] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:30] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelPanel> Right panel opened, focus on channel list
+[00:26:30] (debug) <HuyaSDKParser> ✅【预解析】roomId=11279251 成功, streams=2
+[00:26:30] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11279251 等待者=1
+[00:26:30] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11279251 等待者=1
+[00:26:30] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:30] (network) <HuyaSDKParser> 【App】房间11279251 SDK解析成功: 2 条流
+[00:26:30] (network) <HuyaSDKParser> 【App】房间11279251 SDK解析成功: 2 条流
+[00:26:30] (debug) <HuyaSDKParser> 房间11279251 流信息写入缓存: 2 条流
+[00:26:30] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:30] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:30] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:30] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:30] (debug) <HuyaSDKParser> V33DBG room=11279251 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@a83cea9]
+[00:26:30] (debug) <HuyaSDKParser> V33DBG room=11279251 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@a83cea9]
+[00:26:30] (debug) <HuyaSDKParser> V33DBG room=11279251 singleInfo.size=2
+[00:26:30] (debug) <HuyaSDKParser> V33DBG room=11279251 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@74e5230
+[00:26:30] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:30] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:30] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11279251
+[00:26:30] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11279251
+[00:26:30] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:30] (debug) <LiveSourceLoader> 下载成功 attempt=1 size=33686 url=https://cdn.jsdelivr.net/gh/cuicanrensheng/IPTV@refs/heads/main/playlist1.m3u
+[00:26:30] (debug) <LiveSourceLoader> 【网络】永久兜底已更新，频道数 208
+[00:26:30] (error) <LiveSourceLoader> LOAD: source #1 SUCCESS, channels=208
+[00:26:30] (debug) <LiveSourceLoader> 【网络】直播源 #1 加载成功，共 208 个频道
+[00:26:30] (debug) <AppCoreManager> 【网络】直播源列表已更新（超时后补到数据）
+[00:26:30] (debug) <AppCoreManager> 【网络】直播源加载成功，频道总数：208
+[00:26:30] (debug) <TVPlayerManager> doPlay: url=http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8 isHls=true isRealStream=true
+[00:26:30] (debug) <ChannelPanel> setChannels: 原始频道数=208
+[00:26:30] (debug) <AppCoreManager> 【EPG】开始加载节目单...
+[00:26:30] (debug) <AppCoreManager> 【健康检测】已触发后台全量源检测
+[00:26:30] (debug) <SourceHealthChecker> 距上次全量检测不足7天，跳过
+[00:26:30] (debug) <AppCoreManager> 🟡【虎牙预解析】(网络) 未识别到虎牙房间，跳过预解析（列表共 208 个频道）
+[00:26:30] (debug) <TVPlayerManager> 【普通源】解析主播放列表: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-1] fetchAndParseMasterPlaylistNormal 返回！继续执行
+[00:26:30] (debug) <TVPlayerManager> 【普通源】开始播放: http://hwrr.jx.chinamobile.com:8080/PLTV/88888888/224/3221225705/index.m3u8
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-2] 准备创建 SharedPreferences 和 httpFactory...(后台)
+[00:26:30] (debug) <ChannelPanel> 🚀 SDK 独立线路后台预加载虎牙 5 大固定分组…
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-3] sp ready, debugEnabled=false
+[00:26:30] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:30] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] setMediaSource 前！player state=3
+[00:26:30] (debug) <HuyaSDKParser> 🔁【预解析】无新增房间（均已在队列或已有有效缓存），跳过
+[00:26:30] (debug) <ChannelPanel> 🟢【虎牙预解析】(一起看) 收集到 463 个房间，开始后台并行预解析
+[00:26:30] (debug) <ChannelPanel> 虎牙一起看加载完成，新增 463 个频道，总计 671
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] play() 后！state=2
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] play() 前！state=2
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] prepare 后！state=2
+[00:26:30] (info) <TVPlayerManager> 🔴 [DEBUG-doPlayNormal] prepare 前！state=2
+[00:26:30] (info) <TVPlayerManager> [PLAY] 暂停播放
+[00:26:30] (info) <TVPlayerManager> [PLAY] 缓冲中 (STATE_BUFFERING)
+[00:26:30] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:30] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:30] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:30] (info) <TVPlayerManager> [PLAY] 视频分辨率变化：0×0
+[00:26:30] (debug) <TVPlayerManager> 【普通源】主播放列表响应码: 200
+[00:26:30] (info) <TogetherWatchGroup> 【SDK→分组】分类分布: 虎牙电影=1 虎牙电视剧=1 虎牙动漫=1 虎牙综艺=1 虎牙一起看=0
+[00:26:30] (debug) <CustomUI> 【CustomUICallback】【CustomUI:TagList-list】code=0 size=4
+[00:26:30] (debug) <CustomUI> 【CustomUICallback】【CustomUI:TagList-list】code=0 size=4
+[00:26:30] (warn) <TVPlayerManager> 未解析到任何清晰度流，可能是直播源本身不支持多码率或网络被拦截
+[00:26:30] (debug) <TVPlayerManager> 【普通源】主播放列表长度: 1028
+[00:26:30] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:30] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:30] (info) <TVPlayerManager> [PLAY] 视频分辨率变化：1920×1080
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:31] (info) <TogetherWatchGroup> 【推荐列表】分类后频道数=40
+[00:26:31] (info) <TogetherWatchGroup> 【推荐列表】原始频道数=40
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveList-list】code=0 size=20
+[00:26:31] (info) <TVPlayerManager> [PLAY] 短暂缓冲恢复，时长：586ms
+[00:26:31] (info) <TVPlayerManager> [PLAY] 开始播放
+[00:26:31] (info) <TVPlayerManager> [PLAY] 播放就绪 (STATE_READY)
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (info) <TogetherWatchGroup> 【tag=最新(filterlib-2135-4531)】解析频道数=14
+[00:26:31] (info) <TogetherWatchGroup> 【tag=最新】原始列表=14
+[00:26:31] (info) <TogetherWatchGroup> 【tag=最新】第2页无新频道，停止翻页
+[00:26:31] (info) <TogetherWatchGroup> 【tag=全部(gid-2135)】解析频道数=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=全部】原始列表=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=全部】第2页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=UP(filterlib-2135-4537)】解析频道数=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=UP】原始列表=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=UP】第2页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=最新(filterlib-2135-4531)】解析频道数=14
+[00:26:31] (info) <TogetherWatchGroup> 【tag=最新】原始列表=14
+[00:26:31] (info) <TogetherWatchGroup> 【tag=最新】第2页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4531 size=14
+[00:26:31] (info) <TogetherWatchGroup> 【tag=全部(gid-2135)】解析频道数=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=全部】原始列表=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=全部】第2页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=gid-2135 size=20
+[00:26:31] (debug) <GroupList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:31] (debug) <GroupList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:31] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=UP(filterlib-2135-4537)】解析频道数=40
+[00:26:31] (info) <TogetherWatchGroup> 【tag=UP】原始列表=40
+[00:26:31] (info) <TogetherWatchGroup> 【tag=UP】第3页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-4537 size=20
+[00:26:31] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342387 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:31] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11342387 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:31] (debug) <HuyaSDKParser> 🔁【预解析】(17/55) roomId=11342387
+[00:26:31] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342387
+[00:26:31] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11342387
+[00:26:31] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11342387
+[00:26:31] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:31] (info) <TogetherWatchGroup> 【tag=综艺(filterlib-2135-853)】解析频道数=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=综艺】原始列表=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=综艺】第2页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (info) <TogetherWatchGroup> 【固定分组】虎牙一起看兜底 频道数=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=综艺(filterlib-2135-853)】解析频道数=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=综艺】原始列表=20
+[00:26:31] (info) <TogetherWatchGroup> 【tag=综艺】第2页无新频道，停止翻页
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:LiveListByTag-list】code=0 tag=filterlib-2135-853 size=20
+[00:26:31] (debug) <HuyaSDKParser> 🔁【预解析】无新增房间（均已在队列或已有有效缓存），跳过
+[00:26:31] (debug) <ChannelPanel> ✅ SDK 5 大固定分组预加载完成，共新增 92 个频道，总计 763，耗时 1ms
+[00:26:31] (debug) <ChannelPanel> SDK 分组[虎牙一起看]预加载完成，新增 12 个频道
+[00:26:31] (debug) <ChannelPanel> SDK 分组[虎牙综艺]预加载完成，新增 20 个频道
+[00:26:31] (debug) <ChannelPanel> SDK 分组[虎牙动漫]预加载完成，新增 19 个频道
+[00:26:31] (debug) <ChannelPanel> SDK 分组[虎牙电视剧]预加载完成，新增 15 个频道
+[00:26:31] (debug) <ChannelPanel> SDK 分组[虎牙电影]预加载完成，新增 26 个频道
+[00:26:31] (debug) <GroupList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:31] (debug) <ChannelList> getView pos:0, selectedPos:0, isSelected:true
+[00:26:31] (debug) <GroupList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:31] (debug) <GroupList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:3, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:2, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:1, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:8, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:7, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:6, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:5, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:4, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:11, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:10, selectedPos:0, isSelected:false
+[00:26:31] (debug) <ChannelList> getView pos:9, selectedPos:0, isSelected:false
+[00:26:31] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342387
+[00:26:31] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11342387
+[00:26:31] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:31] (debug) <HuyaSDKParser> ✅【预解析】roomId=11342387 成功, streams=2
+[00:26:31] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342387 等待者=1
+[00:26:31] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11342387 等待者=1
+[00:26:31] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:31] (network) <HuyaSDKParser> 【App】房间11342387 SDK解析成功: 2 条流
+[00:26:31] (network) <HuyaSDKParser> 【App】房间11342387 SDK解析成功: 2 条流
+[00:26:31] (debug) <HuyaSDKParser> 房间11342387 流信息写入缓存: 2 条流
+[00:26:31] (debug) <HuyaSDKParser>   → Stream[line#1(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:31] (debug) <HuyaSDKParser> 线路#1(v=5): 1 个码率
+[00:26:31] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:31] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:31] (debug) <HuyaSDKParser> V33DBG room=11342387 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@7cd2ee2]
+[00:26:31] (debug) <HuyaSDKParser> V33DBG room=11342387 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@7cd2ee2]
+[00:26:31] (debug) <HuyaSDKParser> V33DBG room=11342387 singleInfo.size=2
+[00:26:31] (debug) <HuyaSDKParser> V33DBG room=11342387 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@7c69bad
+[00:26:31] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:33] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11352950
+[00:26:33] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11352950
+[00:26:33] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11352950
+[00:26:33] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:33] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11352950 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:33] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11352950 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:33] (debug) <HuyaSDKParser> 🔁【预解析】(18/55) roomId=11352950
+[00:26:33] (debug) <HuyaSDKParser> ✅【预解析】roomId=11352950 成功, streams=2
+[00:26:33] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11352950 等待者=1
+[00:26:33] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11352950 等待者=1
+[00:26:33] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:33] (network) <HuyaSDKParser> 【App】房间11352950 SDK解析成功: 2 条流
+[00:26:33] (network) <HuyaSDKParser> 【App】房间11352950 SDK解析成功: 2 条流
+[00:26:33] (debug) <HuyaSDKParser> 房间11352950 流信息写入缓存: 2 条流
+[00:26:33] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:33] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:33] (debug) <HuyaSDKParser>   → Stream[line#0(v=5) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:33] (debug) <HuyaSDKParser> 线路#0(v=5): 1 个码率
+[00:26:33] (debug) <HuyaSDKParser> V33DBG room=11352950 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@560d86f]
+[00:26:33] (debug) <HuyaSDKParser> V33DBG room=11352950 line=5 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@560d86f]
+[00:26:33] (debug) <HuyaSDKParser> V33DBG room=11352950 singleInfo.size=2
+[00:26:33] (debug) <HuyaSDKParser> V33DBG room=11352950 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@c91ef4e
+[00:26:33] (debug) <HuyaSDKParser> getLines: 2 条线路
+[00:26:33] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:33] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11352950
+[00:26:33] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11352950
+[00:26:33] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:33] (warn) <SecurityGuard> 检测到 Root 环境（仅记录）
+[00:26:34] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11352894
+[00:26:34] (debug) <HuyaSDKParser> 【App】发起SDK解析: roomId=11352894
+[00:26:34] (debug) <HuyaSDKParser> 调用 SDK getLiveDataByRoomId, roomId=11352894
+[00:26:34] (debug) <HuyaSDKParser> ✅ CustomUICallback 直接实现创建成功 (impl=o.n00)
+[00:26:34] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11352894 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:34] (debug) <HuyaSDKParser> 【App】【去重】新请求入队 roomId=11352894 inflight=1 线程=HuyaSDKParser-Preload
+[00:26:34] (debug) <HuyaSDKParser> 🔁【预解析】(19/55) roomId=11352894
+[00:26:34] (debug) <HuyaSDKParser> SDK onResultCallback: code=0 data=LiveInfo alreadyTimeout=false
+[00:26:34] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11352894
+[00:26:34] (debug) <CustomUI> 【CustomUICallback】【CustomUI:onResultCallback】code=0 dataType=LiveInfo roomId=11352894
+[00:26:34] (debug) <HuyaSDKParser> 📞【SDK回调进入】onResultCallback(code=0, data=LiveInfo) from main
+[00:26:34] (debug) <HuyaSDKParser> ✅【预解析】roomId=11352894 成功, streams=2
+[00:26:34] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11352894 等待者=1
+[00:26:34] (debug) <HuyaSDKParser> 【App】【去重】完成分发 roomId=11352894 等待者=1
+[00:26:34] (debug) <HuyaSDKParser> SDK 解析完成: 2 条线路, 默认 Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true]
+[00:26:34] (network) <HuyaSDKParser> 【App】房间11352894 SDK解析成功: 2 条流
+[00:26:34] (network) <HuyaSDKParser> 【App】房间11352894 SDK解析成功: 2 条流
+[00:26:34] (debug) <HuyaSDKParser> 房间11352894 流信息写入缓存: 2 条流
+[00:26:34] (debug) <HuyaSDKParser>   → Stream[line#1(v=14) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:34] (debug) <HuyaSDKParser> 线路#1(v=14): 1 个码率
+[00:26:34] (debug) <HuyaSDKParser>   → Stream[line#0(v=3) 蓝光4M(4000bps) HLS=true FLV=true] URL(HLS/FLV)
+[00:26:34] (debug) <HuyaSDKParser> 线路#0(v=3): 1 个码率
+[00:26:34] (debug) <HuyaSDKParser> V33DBG room=11352894 line=14 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@408699]
+[00:26:34] (debug) <HuyaSDKParser> V33DBG room=11352894 line=3 bitRateInfoList=[com.huya.berry.module.Player.SMObject$BitRateInfo@408699]
+[00:26:34] (debug) <HuyaSDKParser> V33DBG room=11352894 singleInfo.size=2
+[00:26:34] (debug) <HuyaSDKParser> V33DBG room=11352894 singleStreamInfo=com.huya.berry.module.Player.SMObject$SingleStreamInfo@40c33e0
+[00:26:34] (debug) <HuyaSDKParser> getLines: 2 条线路

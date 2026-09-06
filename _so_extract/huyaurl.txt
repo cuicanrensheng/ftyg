@@ -1,0 +1,1286 @@
+﻿Compiled from "HuyaUrlUtil.java"
+public class com.huyaudbunify.util.HuyaUrlUtil {
+  public static java.lang.String constServName;
+
+  public static java.lang.String constUrlGetPass;
+
+  public static java.lang.String constUrlGetPassDev;
+
+  public static java.lang.String constUrlReg;
+
+  public static java.lang.String constUrlRegDev;
+
+  public static java.lang.String constUrlLgn;
+
+  public static java.lang.String constUrlLgnDev;
+
+  public static java.lang.String constUrlLog;
+
+  public static java.lang.String constUrlLogDev;
+
+  public static java.lang.String constUrlLgnThird;
+
+  public static java.lang.String constUrlLgnThirdDev;
+
+  public com.huyaudbunify.util.HuyaUrlUtil();
+    Code:
+       0: aload_0
+       1: invokespecial #1                  // Method java/lang/Object."<init>":()V
+       4: return
+
+  public static java.lang.String getUrl(long);
+    Code:
+       0: getstatic     #2                  // Field com/huyaudbunify/msg/MsgLogin.mMsgId:J
+       3: lload_0
+       4: lcmp
+       5: ifne          12
+       8: invokestatic  #3                  // Method com/huyaudbunify/msg/MsgLogin.getUrl:()Ljava/lang/String;
+      11: areturn
+      12: getstatic     #4                  // Field com/huyaudbunify/msg/MsgLoginAntiViolent.mMsgId:J
+      15: lload_0
+      16: lcmp
+      17: ifne          24
+      20: invokestatic  #5                  // Method com/huyaudbunify/msg/MsgLoginAntiViolent.getUrl:()Ljava/lang/String;
+      23: areturn
+      24: getstatic     #6                  // Field com/huyaudbunify/msg/MsgLoginRefreshPic.mMsgId:J
+      27: lload_0
+      28: lcmp
+      29: ifne          36
+      32: invokestatic  #7                  // Method com/huyaudbunify/msg/MsgLoginRefreshPic.getUrl:()Ljava/lang/String;
+      35: areturn
+      36: getstatic     #8                  // Field com/huyaudbunify/msg/MsgLoginSendMobileSms.mMsgId:J
+      39: lload_0
+      40: lcmp
+      41: ifne          48
+      44: invokestatic  #9                  // Method com/huyaudbunify/msg/MsgLoginSendMobileSms.getUrl:()Ljava/lang/String;
+      47: areturn
+      48: getstatic     #10                 // Field com/huyaudbunify/msg/MsgLoginPhoneSms.mMsgId:J
+      51: lload_0
+      52: lcmp
+      53: ifne          60
+      56: invokestatic  #11                 // Method com/huyaudbunify/msg/MsgLoginPhoneSms.getUrl:()Ljava/lang/String;
+      59: areturn
+      60: getstatic     #12                 // Field com/huyaudbunify/msg/MsgLoginCred.mMsgId:J
+      63: lload_0
+      64: lcmp
+      65: ifne          72
+      68: invokestatic  #13                 // Method com/huyaudbunify/msg/MsgLoginCred.getUrl:()Ljava/lang/String;
+      71: areturn
+      72: getstatic     #14                 // Field com/huyaudbunify/msg/MsgLoginSessionSendSms.mMsgId:J
+      75: lload_0
+      76: lcmp
+      77: ifne          84
+      80: invokestatic  #15                 // Method com/huyaudbunify/msg/MsgLoginSessionSendSms.getUrl:()Ljava/lang/String;
+      83: areturn
+      84: getstatic     #16                 // Field com/huyaudbunify/msg/MsgLoginSecondAuth.mMsgId:J
+      87: lload_0
+      88: lcmp
+      89: ifne          96
+      92: invokestatic  #17                 // Method com/huyaudbunify/msg/MsgLoginSecondAuth.getUrl:()Ljava/lang/String;
+      95: areturn
+      96: getstatic     #18                 // Field com/huyaudbunify/msg/MsgRegisterSendSms.mMsgId:J
+      99: lload_0
+     100: lcmp
+     101: ifne          108
+     104: invokestatic  #19                 // Method com/huyaudbunify/msg/MsgRegisterSendSms.getUrl:()Ljava/lang/String;
+     107: areturn
+     108: getstatic     #20                 // Field com/huyaudbunify/msg/MsgRegisterVerifySms.mMsgId:J
+     111: lload_0
+     112: lcmp
+     113: ifne          120
+     116: invokestatic  #21                 // Method com/huyaudbunify/msg/MsgRegisterVerifySms.getUrl:()Ljava/lang/String;
+     119: areturn
+     120: getstatic     #22                 // Field com/huyaudbunify/msg/MsgRegisterPhoneCode.mMsgId:J
+     123: lload_0
+     124: lcmp
+     125: ifne          132
+     128: invokestatic  #23                 // Method com/huyaudbunify/msg/MsgRegisterPhoneCode.getUrl:()Ljava/lang/String;
+     131: areturn
+     132: getstatic     #24                 // Field com/huyaudbunify/msg/MsgRegisterPhoneToken.mMsgId:J
+     135: lload_0
+     136: lcmp
+     137: ifne          144
+     140: invokestatic  #25                 // Method com/huyaudbunify/msg/MsgRegisterPhoneToken.getUrl:()Ljava/lang/String;
+     143: areturn
+     144: getstatic     #26                 // Field com/huyaudbunify/msg/MsgFPSendSms.mMsgId:J
+     147: lload_0
+     148: lcmp
+     149: ifne          156
+     152: invokestatic  #27                 // Method com/huyaudbunify/msg/MsgFPSendSms.getUrl:()Ljava/lang/String;
+     155: areturn
+     156: getstatic     #28                 // Field com/huyaudbunify/msg/MsgFPVerifySms.mMsgId:J
+     159: lload_0
+     160: lcmp
+     161: ifne          168
+     164: invokestatic  #29                 // Method com/huyaudbunify/msg/MsgFPVerifySms.getUrl:()Ljava/lang/String;
+     167: areturn
+     168: getstatic     #30                 // Field com/huyaudbunify/msg/MsgFPToken.mMsgId:J
+     171: lload_0
+     172: lcmp
+     173: ifne          180
+     176: invokestatic  #31                 // Method com/huyaudbunify/msg/MsgFPToken.getUrl:()Ljava/lang/String;
+     179: areturn
+     180: getstatic     #32                 // Field com/huyaudbunify/msg/MsgFPCode.mMsgId:J
+     183: lload_0
+     184: lcmp
+     185: ifne          192
+     188: invokestatic  #33                 // Method com/huyaudbunify/msg/MsgFPCode.getUrl:()Ljava/lang/String;
+     191: areturn
+     192: getstatic     #34                 // Field com/huyaudbunify/msg/MsgCPSendSms.mMsgId:J
+     195: lload_0
+     196: lcmp
+     197: ifne          204
+     200: invokestatic  #35                 // Method com/huyaudbunify/msg/MsgCPSendSms.getUrl:()Ljava/lang/String;
+     203: areturn
+     204: getstatic     #36                 // Field com/huyaudbunify/msg/MsgCPVerifySms.mMsgId:J
+     207: lload_0
+     208: lcmp
+     209: ifne          216
+     212: invokestatic  #37                 // Method com/huyaudbunify/msg/MsgCPVerifySms.getUrl:()Ljava/lang/String;
+     215: areturn
+     216: getstatic     #38                 // Field com/huyaudbunify/msg/MsgCPToken.mMsgId:J
+     219: lload_0
+     220: lcmp
+     221: ifne          228
+     224: invokestatic  #39                 // Method com/huyaudbunify/msg/MsgCPToken.getUrl:()Ljava/lang/String;
+     227: areturn
+     228: getstatic     #40                 // Field com/huyaudbunify/msg/MsgCPCode.mMsgId:J
+     231: lload_0
+     232: lcmp
+     233: ifne          240
+     236: invokestatic  #41                 // Method com/huyaudbunify/msg/MsgCPCode.getUrl:()Ljava/lang/String;
+     239: areturn
+     240: getstatic     #42                 // Field com/huyaudbunify/msg/MsgCheckUserCP.mMsgId:J
+     243: lload_0
+     244: lcmp
+     245: ifne          252
+     248: invokestatic  #43                 // Method com/huyaudbunify/msg/MsgCheckUserCP.getUrl:()Ljava/lang/String;
+     251: areturn
+     252: getstatic     #44                 // Field com/huyaudbunify/msg/MsgCheckUserFP.mMsgId:J
+     255: lload_0
+     256: lcmp
+     257: ifne          264
+     260: invokestatic  #45                 // Method com/huyaudbunify/msg/MsgCheckUserFP.getUrl:()Ljava/lang/String;
+     263: areturn
+     264: getstatic     #46                 // Field com/huyaudbunify/msg/MsgCheckRegMobile.mMsgId:J
+     267: lload_0
+     268: lcmp
+     269: ifne          276
+     272: invokestatic  #47                 // Method com/huyaudbunify/msg/MsgCheckRegMobile.getUrl:()Ljava/lang/String;
+     275: areturn
+     276: getstatic     #48                 // Field com/huyaudbunify/msg/MsgGetByPass.mMsgId:J
+     279: lload_0
+     280: lcmp
+     281: ifne          288
+     284: invokestatic  #49                 // Method com/huyaudbunify/msg/MsgGetByPass.getUrl:()Ljava/lang/String;
+     287: areturn
+     288: getstatic     #50                 // Field com/huyaudbunify/msg/MsgUpdateCred.mMsgId:J
+     291: lload_0
+     292: lcmp
+     293: ifne          300
+     296: invokestatic  #51                 // Method com/huyaudbunify/msg/MsgUpdateCred.getUrl:()Ljava/lang/String;
+     299: areturn
+     300: getstatic     #52                 // Field com/huyaudbunify/msg/MsgReport.mMsgId:J
+     303: lload_0
+     304: lcmp
+     305: ifne          312
+     308: invokestatic  #53                 // Method com/huyaudbunify/msg/MsgReport.getUrl:()Ljava/lang/String;
+     311: areturn
+     312: getstatic     #54                 // Field com/huyaudbunify/msg/MsgReportCache.mMsgId:J
+     315: lload_0
+     316: lcmp
+     317: ifne          324
+     320: invokestatic  #55                 // Method com/huyaudbunify/msg/MsgReportCache.getUrl:()Ljava/lang/String;
+     323: areturn
+     324: getstatic     #56                 // Field com/huyaudbunify/msg/MsgLoginThird.mMsgId:J
+     327: lload_0
+     328: lcmp
+     329: ifne          336
+     332: invokestatic  #57                 // Method com/huyaudbunify/msg/MsgLoginThird.getUrl:()Ljava/lang/String;
+     335: areturn
+     336: getstatic     #58                 // Field com/huyaudbunify/msg/MsgNotifyScanCode.mMsgId:J
+     339: lload_0
+     340: lcmp
+     341: ifne          348
+     344: invokestatic  #59                 // Method com/huyaudbunify/msg/MsgNotifyScanCode.getUrl:()Ljava/lang/String;
+     347: areturn
+     348: getstatic     #60                 // Field com/huyaudbunify/msg/MsgBindScanQr.mMsgId:J
+     351: lload_0
+     352: lcmp
+     353: ifne          360
+     356: invokestatic  #61                 // Method com/huyaudbunify/msg/MsgBindScanQr.getUrl:()Ljava/lang/String;
+     359: areturn
+     360: getstatic     #62                 // Field com/huyaudbunify/msg/MsgCancleQrLogin.mMsgId:J
+     363: lload_0
+     364: lcmp
+     365: ifne          372
+     368: invokestatic  #63                 // Method com/huyaudbunify/msg/MsgCancleQrLogin.getUrl:()Ljava/lang/String;
+     371: areturn
+     372: getstatic     #64                 // Field com/huyaudbunify/msg/MsgAuthScanQr.mMsgId:J
+     375: lload_0
+     376: lcmp
+     377: ifne          384
+     380: invokestatic  #65                 // Method com/huyaudbunify/msg/MsgAuthScanQr.getUrl:()Ljava/lang/String;
+     383: areturn
+     384: getstatic     #66                 // Field com/huyaudbunify/msg/MsgCancleAuthLogin.mMsgId:J
+     387: lload_0
+     388: lcmp
+     389: ifne          396
+     392: invokestatic  #67                 // Method com/huyaudbunify/msg/MsgCancleAuthLogin.getUrl:()Ljava/lang/String;
+     395: areturn
+     396: getstatic     #68                 // Field com/huyaudbunify/msg/MsgLoginAnonymous.mMsgId:J
+     399: lload_0
+     400: lcmp
+     401: ifne          408
+     404: invokestatic  #69                 // Method com/huyaudbunify/msg/MsgLoginAnonymous.getUrl:()Ljava/lang/String;
+     407: areturn
+     408: getstatic     #70                 // Field com/huyaudbunify/msg/MsgLoginMobileQuick.mMsgId:J
+     411: lload_0
+     412: lcmp
+     413: ifne          420
+     416: invokestatic  #71                 // Method com/huyaudbunify/msg/MsgLoginMobileQuick.getUrl:()Ljava/lang/String;
+     419: areturn
+     420: getstatic     #72                 // Field com/huyaudbunify/msg/MsgBindSendSms.mMsgId:J
+     423: lload_0
+     424: lcmp
+     425: ifne          432
+     428: invokestatic  #73                 // Method com/huyaudbunify/msg/MsgBindSendSms.getUrl:()Ljava/lang/String;
+     431: areturn
+     432: getstatic     #74                 // Field com/huyaudbunify/msg/MsgBindVerifySms.mMsgId:J
+     435: lload_0
+     436: lcmp
+     437: ifne          444
+     440: invokestatic  #75                 // Method com/huyaudbunify/msg/MsgBindVerifySms.getUrl:()Ljava/lang/String;
+     443: areturn
+     444: getstatic     #76                 // Field com/huyaudbunify/msg/MsgBindChangePhone.mMsgId:J
+     447: lload_0
+     448: lcmp
+     449: ifne          456
+     452: invokestatic  #77                 // Method com/huyaudbunify/msg/MsgBindChangePhone.getUrl:()Ljava/lang/String;
+     455: areturn
+     456: getstatic     #78                 // Field com/huyaudbunify/msg/MsgUnBindSendSms.mMsgId:J
+     459: lload_0
+     460: lcmp
+     461: ifne          468
+     464: invokestatic  #79                 // Method com/huyaudbunify/msg/MsgUnBindSendSms.getUrl:()Ljava/lang/String;
+     467: areturn
+     468: getstatic     #80                 // Field com/huyaudbunify/msg/MsgUnBindVerifySms.mMsgId:J
+     471: lload_0
+     472: lcmp
+     473: ifne          480
+     476: invokestatic  #81                 // Method com/huyaudbunify/msg/MsgUnBindVerifySms.getUrl:()Ljava/lang/String;
+     479: areturn
+     480: getstatic     #82                 // Field com/huyaudbunify/msg/MsgBindNewSendSms.mMsgId:J
+     483: lload_0
+     484: lcmp
+     485: ifne          492
+     488: invokestatic  #83                 // Method com/huyaudbunify/msg/MsgBindNewSendSms.getUrl:()Ljava/lang/String;
+     491: areturn
+     492: getstatic     #84                 // Field com/huyaudbunify/msg/MsgBindNewVerifySms.mMsgId:J
+     495: lload_0
+     496: lcmp
+     497: ifne          504
+     500: invokestatic  #85                 // Method com/huyaudbunify/msg/MsgBindNewVerifySms.getUrl:()Ljava/lang/String;
+     503: areturn
+     504: getstatic     #74                 // Field com/huyaudbunify/msg/MsgBindVerifySms.mMsgId:J
+     507: lload_0
+     508: lcmp
+     509: ifne          516
+     512: invokestatic  #75                 // Method com/huyaudbunify/msg/MsgBindVerifySms.getUrl:()Ljava/lang/String;
+     515: areturn
+     516: getstatic     #78                 // Field com/huyaudbunify/msg/MsgUnBindSendSms.mMsgId:J
+     519: lload_0
+     520: lcmp
+     521: ifne          528
+     524: invokestatic  #79                 // Method com/huyaudbunify/msg/MsgUnBindSendSms.getUrl:()Ljava/lang/String;
+     527: areturn
+     528: getstatic     #80                 // Field com/huyaudbunify/msg/MsgUnBindVerifySms.mMsgId:J
+     531: lload_0
+     532: lcmp
+     533: ifne          540
+     536: invokestatic  #81                 // Method com/huyaudbunify/msg/MsgUnBindVerifySms.getUrl:()Ljava/lang/String;
+     539: areturn
+     540: getstatic     #82                 // Field com/huyaudbunify/msg/MsgBindNewSendSms.mMsgId:J
+     543: lload_0
+     544: lcmp
+     545: ifne          552
+     548: invokestatic  #83                 // Method com/huyaudbunify/msg/MsgBindNewSendSms.getUrl:()Ljava/lang/String;
+     551: areturn
+     552: getstatic     #84                 // Field com/huyaudbunify/msg/MsgBindNewVerifySms.mMsgId:J
+     555: lload_0
+     556: lcmp
+     557: ifne          564
+     560: invokestatic  #85                 // Method com/huyaudbunify/msg/MsgBindNewVerifySms.getUrl:()Ljava/lang/String;
+     563: areturn
+     564: getstatic     #86                 // Field com/huyaudbunify/msg/MsgLoginGuest.mMsgId:J
+     567: lload_0
+     568: lcmp
+     569: ifne          576
+     572: invokestatic  #87                 // Method com/huyaudbunify/msg/MsgLoginGuest.getUrl:()Ljava/lang/String;
+     575: areturn
+     576: getstatic     #88                 // Field com/huyaudbunify/msg/MsgBindAuth.mMsgId:J
+     579: lload_0
+     580: lcmp
+     581: ifne          588
+     584: invokestatic  #89                 // Method com/huyaudbunify/msg/MsgBindAuth.getUrl:()Ljava/lang/String;
+     587: areturn
+     588: getstatic     #90                 // Field com/huyaudbunify/msg/MsgGetBindList.mMsgId:J
+     591: lload_0
+     592: lcmp
+     593: ifne          600
+     596: invokestatic  #91                 // Method com/huyaudbunify/msg/MsgGetBindList.getUrl:()Ljava/lang/String;
+     599: areturn
+     600: getstatic     #92                 // Field com/huyaudbunify/msg/MsgUnBindAuth.mMsgId:J
+     603: lload_0
+     604: lcmp
+     605: ifne          612
+     608: invokestatic  #93                 // Method com/huyaudbunify/msg/MsgUnBindAuth.getUrl:()Ljava/lang/String;
+     611: areturn
+     612: getstatic     #94                 // Field com/huyaudbunify/msg/MsgGetUserStatus.mMsgId:J
+     615: lload_0
+     616: lcmp
+     617: ifne          624
+     620: invokestatic  #95                 // Method com/huyaudbunify/msg/MsgGetUserStatus.getUrl:()Ljava/lang/String;
+     623: areturn
+     624: getstatic     #96                 // Field com/huyaudbunify/msg/MsgAnonyLoginCred.mMsgId:J
+     627: lload_0
+     628: lcmp
+     629: ifne          636
+     632: invokestatic  #97                 // Method com/huyaudbunify/msg/MsgAnonyLoginCred.getUrl:()Ljava/lang/String;
+     635: areturn
+     636: getstatic     #98                 // Field com/huyaudbunify/msg/MsgSendBindEmailCode.mMsgId:J
+     639: lload_0
+     640: lcmp
+     641: ifne          648
+     644: invokestatic  #99                 // Method com/huyaudbunify/msg/MsgSendBindEmailCode.getUrl:()Ljava/lang/String;
+     647: areturn
+     648: getstatic     #100                // Field com/huyaudbunify/msg/MsgBindLoginEmail.mMsgId:J
+     651: lload_0
+     652: lcmp
+     653: ifne          660
+     656: invokestatic  #101                // Method com/huyaudbunify/msg/MsgBindLoginEmail.getUrl:()Ljava/lang/String;
+     659: areturn
+     660: getstatic     #102                // Field com/huyaudbunify/msg/MsgEmailLogin.mMsgId:J
+     663: lload_0
+     664: lcmp
+     665: ifne          672
+     668: invokestatic  #103                // Method com/huyaudbunify/msg/MsgEmailLogin.getUrl:()Ljava/lang/String;
+     671: areturn
+     672: ldc           #104                // String
+     674: areturn
+
+  public static java.lang.String getAuthUrl();
+    Code:
+       0: ldc           #105                // String https://aq.huya.com/m/safe_redirect/safe_redirect.html?hideShareButton=1&allowRefresh=0
+       2: astore_0
+       3: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       6: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       9: ifeq          15
+      12: ldc           #108                // String http://aq-test.huya.com/m/safe_redirect/safe_redirect.html?hideShareButton=1&allowRefresh=0
+      14: astore_0
+      15: aload_0
+      16: areturn
+
+  public static java.lang.String getUpgradeUrl(long);
+    Code:
+       0: new           #109                // class java/lang/StringBuilder
+       3: dup
+       4: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+       7: ldc           #111                // String https://aq.huya.com/p/upgrade/upgrade_index.html?uid=
+       9: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      12: lload_0
+      13: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      16: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      19: astore_2
+      20: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+      23: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+      26: ifeq          49
+      29: new           #109                // class java/lang/StringBuilder
+      32: dup
+      33: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      36: ldc           #115                // String https://aq-test.huya.com/p/upgrade/upgrade_index.html?uid=
+      38: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      41: lload_0
+      42: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      45: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      48: astore_2
+      49: aload_2
+      50: areturn
+
+  public static java.lang.String getQUrlLink();
+    Code:
+       0: new           #109                // class java/lang/StringBuilder
+       3: dup
+       4: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+       7: ldc           #116                // String https://udblgn.huya.com/qrClient.html?appid=
+       9: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      12: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      15: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      18: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      21: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      24: astore_0
+      25: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+      28: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+      31: ifeq          59
+      34: new           #109                // class java/lang/StringBuilder
+      37: dup
+      38: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      41: ldc           #119                // String http://udblgn-test.huya.com/qrClient.html?appid=
+      43: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      46: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      49: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      52: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      55: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      58: astore_0
+      59: aload_0
+      60: areturn
+
+  public static java.lang.String getH5UrlRegister();
+    Code:
+       0: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       3: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       6: ifeq          45
+       9: new           #109                // class java/lang/StringBuilder
+      12: dup
+      13: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      16: ldc           #120                // String http://aq-test.huya.com/m/register.html?time=
+      18: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      21: invokestatic  #121                // Method java/lang/System.currentTimeMillis:()J
+      24: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      27: ldc           #122                // String &appid=
+      29: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      32: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      35: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      38: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      41: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      44: areturn
+      45: new           #109                // class java/lang/StringBuilder
+      48: dup
+      49: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      52: ldc           #123                // String https://aq.huya.com/m/register.html?time=
+      54: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      57: invokestatic  #121                // Method java/lang/System.currentTimeMillis:()J
+      60: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      63: ldc           #122                // String &appid=
+      65: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      68: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      71: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      74: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      77: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      80: areturn
+
+  public static java.lang.String getH5UrlFindPassword();
+    Code:
+       0: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       3: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       6: ifeq          45
+       9: new           #109                // class java/lang/StringBuilder
+      12: dup
+      13: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      16: ldc           #124                // String http://aq-test.huya.com/m/find.html?time=
+      18: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      21: invokestatic  #121                // Method java/lang/System.currentTimeMillis:()J
+      24: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      27: ldc           #122                // String &appid=
+      29: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      32: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      35: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      38: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      41: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      44: areturn
+      45: new           #109                // class java/lang/StringBuilder
+      48: dup
+      49: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      52: ldc           #125                // String https://aq.huya.com/m/find.html?time=
+      54: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      57: invokestatic  #121                // Method java/lang/System.currentTimeMillis:()J
+      60: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      63: ldc           #122                // String &appid=
+      65: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      68: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      71: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      74: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      77: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      80: areturn
+
+  public static java.lang.String getH5UrlModifyPassword();
+    Code:
+       0: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       3: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       6: ifeq          45
+       9: new           #109                // class java/lang/StringBuilder
+      12: dup
+      13: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      16: ldc           #126                // String http://aq-test.huya.com/m/modify.html?time=
+      18: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      21: invokestatic  #121                // Method java/lang/System.currentTimeMillis:()J
+      24: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      27: ldc           #122                // String &appid=
+      29: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      32: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      35: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      38: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      41: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      44: areturn
+      45: new           #109                // class java/lang/StringBuilder
+      48: dup
+      49: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+      52: ldc           #127                // String https://aq.huya.com/m/modify.html?time=
+      54: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      57: invokestatic  #121                // Method java/lang/System.currentTimeMillis:()J
+      60: invokevirtual #113                // Method java/lang/StringBuilder.append:(J)Ljava/lang/StringBuilder;
+      63: ldc           #122                // String &appid=
+      65: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      68: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      71: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      74: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      77: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      80: areturn
+
+  public static java.lang.String getHyBindMobileUrl();
+    Code:
+       0: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       3: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       6: ifeq          12
+       9: ldc           #128                // String http://aq-test.huya.com/m/bind/bind_tel.html
+      11: areturn
+      12: ldc           #129                // String https://aq.huya.com/m/bind/bind_tel.html
+      14: areturn
+
+  public static java.lang.String getHyChangeBindMobileUrl();
+    Code:
+       0: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       3: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       6: ifeq          12
+       9: ldc           #130                // String http://aq-test.huya.com/m/bind/yes_bind_tel.html
+      11: areturn
+      12: ldc           #131                // String https://aq.huya.com/m/bind/yes_bind_tel.html
+      14: areturn
+
+  public static java.lang.String getMigrateUrl(java.lang.String);
+    Code:
+       0: aload_0
+       1: ldc           #132                // String hymigrate
+       3: invokevirtual #133                // Method java/lang/String.contains:(Ljava/lang/CharSequence;)Z
+       6: ifeq          16
+       9: aload_0
+      10: invokestatic  #134                // Method getUrlFromDes:(Ljava/lang/String;)Ljava/lang/String;
+      13: astore_1
+      14: aload_1
+      15: areturn
+      16: ldc           #104                // String
+      18: areturn
+
+  public static java.lang.String getUrlFromDes(java.lang.String);
+    Code:
+       0: ldc           #104                // String
+       2: astore_1
+       3: ldc           #135                // String \\s*(?i)href\\s*=\\s*(\"([^\"]*\")|\'[^\']*\'|([^\'\">\\s]+))
+       5: astore_2
+       6: aload_2
+       7: iconst_2
+       8: invokestatic  #137                // Method java/util/regex/Pattern.compile:(Ljava/lang/String;I)Ljava/util/regex/Pattern;
+      11: astore_3
+      12: aload_3
+      13: aload_0
+      14: invokevirtual #138                // Method java/util/regex/Pattern.matcher:(Ljava/lang/CharSequence;)Ljava/util/regex/Matcher;
+      17: astore        4
+      19: aload         4
+      21: invokevirtual #139                // Method java/util/regex/Matcher.find:()Z
+      24: ifeq          60
+      27: aload         4
+      29: invokevirtual #140                // Method java/util/regex/Matcher.group:()Ljava/lang/String;
+      32: astore_1
+      33: aload_1
+      34: ldc           #141                // String href\\s*=\\s*([\'|\"]*)
+      36: ldc           #104                // String
+      38: invokevirtual #142                // Method java/lang/String.replaceAll:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      41: astore_1
+      42: aload_1
+      43: ldc           #143                // String [\'|\"]
+      45: ldc           #104                // String
+      47: invokevirtual #142                // Method java/lang/String.replaceAll:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      50: astore_1
+      51: aload_1
+      52: ldc           #144                // String
+      54: ldc           #104                // String
+      56: invokevirtual #142                // Method java/lang/String.replaceAll:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      59: astore_1
+      60: aload_1
+      61: areturn
+
+  public static java.lang.String getHyWeiguiUrl();
+    Code:
+       0: ldc           #145                // String https://hd.huya.com/h5/violation_appeals/index.html
+       2: astore_0
+       3: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       6: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+       9: ifeq          15
+      12: ldc           #146                // String http://test.hd.huya.com/h5/violation_appeals/index.html
+      14: astore_0
+      15: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+      18: invokevirtual #148                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.isLogin:()Z
+      21: ifeq          35
+      24: ldc           #149                // String lgn.huya.com
+      26: ldc           #104                // String
+      28: aload_0
+      29: ldc           #150                // String huya.com
+      31: invokestatic  #151                // Method getHyLgnJumpUrl:(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      34: astore_0
+      35: aload_0
+      36: areturn
+
+  public static java.lang.String getHYBusinessUrlParam(java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: ldc           #152                // String uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&huyalgn=1&version=%s&client_ua=%s&passport=%s&bypass=%d
+       2: astore_3
+       3: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       6: invokevirtual #153                // Method com/huyaudbunify/HuyaAuth.getDefaultToken:()Lcom/huyaudbunify/bean/ResGetTicket;
+       9: astore        4
+      11: ldc           #104                // String
+      13: astore        5
+      15: iconst_2
+      16: istore        6
+      18: ldc           #104                // String
+      20: astore        7
+      22: aload         4
+      24: ifnull        46
+      27: aload         4
+      29: invokevirtual #154                // Method com/huyaudbunify/bean/ResGetTicket.getToken:()Ljava/lang/String;
+      32: ldc           #155                // String UTF-8
+      34: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      37: astore        5
+      39: aload         4
+      41: invokevirtual #157                // Method com/huyaudbunify/bean/ResGetTicket.getTokenType:()I
+      44: istore        6
+      46: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+      49: invokevirtual #158                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getPassport:()Ljava/lang/String;
+      52: astore        8
+      54: aload         8
+      56: ldc           #155                // String UTF-8
+      58: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      61: astore        7
+      63: goto          73
+      66: astore        8
+      68: aload         8
+      70: invokevirtual #160                // Method java/lang/Exception.printStackTrace:()V
+      73: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+      76: invokevirtual #161                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getUid:()J
+      79: invokestatic  #162                // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+      82: astore        8
+      84: aload_3
+      85: bipush        9
+      87: anewarray     #163                // class java/lang/Object
+      90: dup
+      91: iconst_0
+      92: aload         8
+      94: aastore
+      95: dup
+      96: iconst_1
+      97: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+     100: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+     103: aastore
+     104: dup
+     105: iconst_2
+     106: aload         5
+     108: aastore
+     109: dup
+     110: iconst_3
+     111: iload         6
+     113: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     116: aastore
+     117: dup
+     118: iconst_4
+     119: aload_0
+     120: aastore
+     121: dup
+     122: iconst_5
+     123: aload_1
+     124: aastore
+     125: dup
+     126: bipush        6
+     128: aload_2
+     129: aastore
+     130: dup
+     131: bipush        7
+     133: aload         7
+     135: aastore
+     136: dup
+     137: bipush        8
+     139: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+     142: invokevirtual #165                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getType:()Lcom/huyaudbunify/account/SdkComType;
+     145: invokevirtual #166                // Method com/huyaudbunify/account/SdkComType.getType:()I
+     148: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     151: aastore
+     152: invokestatic  #167                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     155: astore_3
+     156: aload_3
+     157: areturn
+    Exception table:
+       from    to  target type
+          22    63    66   Class java/lang/Exception
+
+  public static java.lang.String getHyLgnJumpUrl(java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: ldc           #168                // String https://udblgn.huya.com/login/ticket?uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&cks=true&busiUrl=%s&reqDomainList=%s&passport=%s&bypass=%d&sdid=%s
+       2: astore        4
+       4: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       7: invokevirtual #107                // Method com/huyaudbunify/HuyaAuth.isDeveloper:()Z
+      10: ifeq          17
+      13: ldc           #169                // String http://udblgn-test.huya.com/login/ticket?uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&cks=true&busiUrl=%s&reqDomainList=%s&passport=%s&bypass=%d&sdid=%s
+      15: astore        4
+      17: ldc           #104                // String
+      19: astore        5
+      21: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+      24: invokevirtual #153                // Method com/huyaudbunify/HuyaAuth.getDefaultToken:()Lcom/huyaudbunify/bean/ResGetTicket;
+      27: astore        6
+      29: ldc           #104                // String
+      31: astore        7
+      33: iconst_2
+      34: istore        8
+      36: ldc           #104                // String
+      38: astore        9
+      40: ldc           #104                // String
+      42: astore        10
+      44: aload_2
+      45: ldc           #155                // String UTF-8
+      47: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      50: astore        5
+      52: aload         6
+      54: ifnull        76
+      57: aload         6
+      59: invokevirtual #154                // Method com/huyaudbunify/bean/ResGetTicket.getToken:()Ljava/lang/String;
+      62: ldc           #155                // String UTF-8
+      64: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      67: astore        7
+      69: aload         6
+      71: invokevirtual #157                // Method com/huyaudbunify/bean/ResGetTicket.getTokenType:()I
+      74: istore        8
+      76: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+      79: invokevirtual #158                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getPassport:()Ljava/lang/String;
+      82: astore        11
+      84: aload         11
+      86: ldc           #155                // String UTF-8
+      88: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      91: astore        9
+      93: invokestatic  #170                // Method com/huya/security/DeviceFingerprintSDK.getInstance:()Lcom/huya/security/DeviceFingerprintSDK;
+      96: invokevirtual #171                // Method com/huya/security/DeviceFingerprintSDK.getSDID:()Ljava/lang/String;
+      99: ldc           #155                // String UTF-8
+     101: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+     104: astore        10
+     106: goto          116
+     109: astore        11
+     111: aload         11
+     113: invokevirtual #160                // Method java/lang/Exception.printStackTrace:()V
+     116: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+     119: invokevirtual #161                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getUid:()J
+     122: invokestatic  #162                // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+     125: astore        11
+     127: aload         4
+     129: bipush        10
+     131: anewarray     #163                // class java/lang/Object
+     134: dup
+     135: iconst_0
+     136: aload         11
+     138: aastore
+     139: dup
+     140: iconst_1
+     141: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+     144: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+     147: aastore
+     148: dup
+     149: iconst_2
+     150: aload         7
+     152: aastore
+     153: dup
+     154: iconst_3
+     155: iload         8
+     157: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     160: aastore
+     161: dup
+     162: iconst_4
+     163: aload_1
+     164: aastore
+     165: dup
+     166: iconst_5
+     167: aload         5
+     169: aastore
+     170: dup
+     171: bipush        6
+     173: aload_3
+     174: aastore
+     175: dup
+     176: bipush        7
+     178: aload         9
+     180: aastore
+     181: dup
+     182: bipush        8
+     184: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+     187: invokevirtual #165                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getType:()Lcom/huyaudbunify/account/SdkComType;
+     190: invokevirtual #166                // Method com/huyaudbunify/account/SdkComType.getType:()I
+     193: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     196: aastore
+     197: dup
+     198: bipush        9
+     200: aload         10
+     202: aastore
+     203: invokestatic  #167                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     206: astore        12
+     208: aload         12
+     210: areturn
+    Exception table:
+       from    to  target type
+          44   106   109   Class java/lang/Exception
+
+  public static java.lang.String getHYBusinessUrl(java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: ldc           #152                // String uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&huyalgn=1&version=%s&client_ua=%s&passport=%s&bypass=%d
+       2: astore        4
+       4: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       7: invokevirtual #153                // Method com/huyaudbunify/HuyaAuth.getDefaultToken:()Lcom/huyaudbunify/bean/ResGetTicket;
+      10: astore        5
+      12: ldc           #104                // String
+      14: astore        6
+      16: iconst_2
+      17: istore        7
+      19: ldc           #104                // String
+      21: astore        8
+      23: aload         5
+      25: ifnull        47
+      28: aload         5
+      30: invokevirtual #154                // Method com/huyaudbunify/bean/ResGetTicket.getToken:()Ljava/lang/String;
+      33: ldc           #155                // String UTF-8
+      35: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      38: astore        6
+      40: aload         5
+      42: invokevirtual #157                // Method com/huyaudbunify/bean/ResGetTicket.getTokenType:()I
+      45: istore        7
+      47: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+      50: invokevirtual #158                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getPassport:()Ljava/lang/String;
+      53: astore        9
+      55: aload         9
+      57: ldc           #155                // String UTF-8
+      59: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      62: astore        8
+      64: goto          74
+      67: astore        9
+      69: aload         9
+      71: invokevirtual #160                // Method java/lang/Exception.printStackTrace:()V
+      74: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+      77: invokevirtual #161                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getUid:()J
+      80: invokestatic  #162                // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+      83: astore        9
+      85: aload         4
+      87: bipush        9
+      89: anewarray     #163                // class java/lang/Object
+      92: dup
+      93: iconst_0
+      94: aload         9
+      96: aastore
+      97: dup
+      98: iconst_1
+      99: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+     102: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+     105: aastore
+     106: dup
+     107: iconst_2
+     108: aload         6
+     110: aastore
+     111: dup
+     112: iconst_3
+     113: iload         7
+     115: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     118: aastore
+     119: dup
+     120: iconst_4
+     121: aload_1
+     122: aastore
+     123: dup
+     124: iconst_5
+     125: aload_2
+     126: aastore
+     127: dup
+     128: bipush        6
+     130: aload_3
+     131: aastore
+     132: dup
+     133: bipush        7
+     135: aload         8
+     137: aastore
+     138: dup
+     139: bipush        8
+     141: invokestatic  #147                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getInstance:()Lcom/huyaudbunify/util/HuyaAccountSaveUtils;
+     144: invokevirtual #165                // Method com/huyaudbunify/util/HuyaAccountSaveUtils.getType:()Lcom/huyaudbunify/account/SdkComType;
+     147: invokevirtual #166                // Method com/huyaudbunify/account/SdkComType.getType:()I
+     150: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     153: aastore
+     154: invokestatic  #167                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     157: astore        4
+     159: aload_0
+     160: ldc           #172                // String ?
+     162: invokevirtual #133                // Method java/lang/String.contains:(Ljava/lang/CharSequence;)Z
+     165: ifeq          197
+     168: new           #109                // class java/lang/StringBuilder
+     171: dup
+     172: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+     175: aload_0
+     176: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     179: ldc           #173                // String &
+     181: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     184: aload         4
+     186: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     189: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     192: astore        10
+     194: goto          223
+     197: new           #109                // class java/lang/StringBuilder
+     200: dup
+     201: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+     204: aload_0
+     205: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     208: ldc           #172                // String ?
+     210: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     213: aload         4
+     215: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     218: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     221: astore        10
+     223: aload         10
+     225: areturn
+    Exception table:
+       from    to  target type
+          23    64    67   Class java/lang/Exception
+
+  public static java.lang.String getHyLgnJumpUrl(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: ldc           #168                // String https://udblgn.huya.com/login/ticket?uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&cks=true&busiUrl=%s&reqDomainList=%s&passport=%s&bypass=%d&sdid=%s
+       2: astore        7
+       4: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+       7: invokevirtual #174                // Method com/huyaudbunify/util/HuyaDeveloperUtils.isDeveloper:()Z
+      10: ifeq          17
+      13: ldc           #169                // String http://udblgn-test.huya.com/login/ticket?uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&cks=true&busiUrl=%s&reqDomainList=%s&passport=%s&bypass=%d&sdid=%s
+      15: astore        7
+      17: ldc           #104                // String
+      19: astore        8
+      21: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+      24: invokevirtual #153                // Method com/huyaudbunify/HuyaAuth.getDefaultToken:()Lcom/huyaudbunify/bean/ResGetTicket;
+      27: astore        9
+      29: ldc           #104                // String
+      31: astore        10
+      33: iconst_2
+      34: istore        11
+      36: ldc           #104                // String
+      38: astore        12
+      40: aload         5
+      42: ldc           #155                // String UTF-8
+      44: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      47: astore        8
+      49: aload         9
+      51: ifnull        73
+      54: aload         9
+      56: invokevirtual #154                // Method com/huyaudbunify/bean/ResGetTicket.getToken:()Ljava/lang/String;
+      59: ldc           #155                // String UTF-8
+      61: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      64: astore        10
+      66: aload         9
+      68: invokevirtual #157                // Method com/huyaudbunify/bean/ResGetTicket.getTokenType:()I
+      71: istore        11
+      73: invokestatic  #170                // Method com/huya/security/DeviceFingerprintSDK.getInstance:()Lcom/huya/security/DeviceFingerprintSDK;
+      76: invokevirtual #171                // Method com/huya/security/DeviceFingerprintSDK.getSDID:()Ljava/lang/String;
+      79: ldc           #155                // String UTF-8
+      81: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      84: astore        12
+      86: goto          96
+      89: astore        13
+      91: aload         13
+      93: invokevirtual #160                // Method java/lang/Exception.printStackTrace:()V
+      96: lload_1
+      97: invokestatic  #162                // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+     100: astore        13
+     102: aload         7
+     104: bipush        10
+     106: anewarray     #163                // class java/lang/Object
+     109: dup
+     110: iconst_0
+     111: aload         13
+     113: aastore
+     114: dup
+     115: iconst_1
+     116: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+     119: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+     122: aastore
+     123: dup
+     124: iconst_2
+     125: aload         10
+     127: aastore
+     128: dup
+     129: iconst_3
+     130: iload         11
+     132: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     135: aastore
+     136: dup
+     137: iconst_4
+     138: aload         4
+     140: aastore
+     141: dup
+     142: iconst_5
+     143: aload         8
+     145: aastore
+     146: dup
+     147: bipush        6
+     149: aload         6
+     151: aastore
+     152: dup
+     153: bipush        7
+     155: aload_3
+     156: aastore
+     157: dup
+     158: bipush        8
+     160: iconst_3
+     161: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     164: aastore
+     165: dup
+     166: bipush        9
+     168: aload         12
+     170: aastore
+     171: invokestatic  #167                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     174: astore        14
+     176: aload         14
+     178: areturn
+    Exception table:
+       from    to  target type
+          40    86    89   Class java/lang/Exception
+
+  public static java.lang.String getHYBusinessUrlParam(long, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: ldc           #152                // String uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&huyalgn=1&version=%s&client_ua=%s&passport=%s&bypass=%d
+       2: astore        6
+       4: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       7: invokevirtual #153                // Method com/huyaudbunify/HuyaAuth.getDefaultToken:()Lcom/huyaudbunify/bean/ResGetTicket;
+      10: astore        7
+      12: ldc           #104                // String
+      14: astore        8
+      16: iconst_2
+      17: istore        9
+      19: aload         7
+      21: ifnull        43
+      24: aload         7
+      26: invokevirtual #154                // Method com/huyaudbunify/bean/ResGetTicket.getToken:()Ljava/lang/String;
+      29: ldc           #155                // String UTF-8
+      31: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      34: astore        8
+      36: aload         7
+      38: invokevirtual #157                // Method com/huyaudbunify/bean/ResGetTicket.getTokenType:()I
+      41: istore        9
+      43: goto          53
+      46: astore        10
+      48: aload         10
+      50: invokevirtual #160                // Method java/lang/Exception.printStackTrace:()V
+      53: lload_0
+      54: invokestatic  #162                // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+      57: astore        10
+      59: aload         6
+      61: bipush        9
+      63: anewarray     #163                // class java/lang/Object
+      66: dup
+      67: iconst_0
+      68: aload         10
+      70: aastore
+      71: dup
+      72: iconst_1
+      73: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      76: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      79: aastore
+      80: dup
+      81: iconst_2
+      82: aload         8
+      84: aastore
+      85: dup
+      86: iconst_3
+      87: iload         9
+      89: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      92: aastore
+      93: dup
+      94: iconst_4
+      95: aload_3
+      96: aastore
+      97: dup
+      98: iconst_5
+      99: aload         4
+     101: aastore
+     102: dup
+     103: bipush        6
+     105: aload         5
+     107: aastore
+     108: dup
+     109: bipush        7
+     111: aload_2
+     112: aastore
+     113: dup
+     114: bipush        8
+     116: iconst_3
+     117: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     120: aastore
+     121: invokestatic  #167                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     124: astore        6
+     126: aload         6
+     128: areturn
+    Exception table:
+       from    to  target type
+          19    43    46   Class java/lang/Exception
+
+  public static java.lang.String getHYBusinessUrl(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
+    Code:
+       0: ldc           #152                // String uid=%s&appid=%s&ticket=%s&ticketType=%d&busiId=%s&huyalgn=1&version=%s&client_ua=%s&passport=%s&bypass=%d
+       2: astore        7
+       4: invokestatic  #106                // Method com/huyaudbunify/HuyaAuth.getInstance:()Lcom/huyaudbunify/HuyaAuth;
+       7: invokevirtual #153                // Method com/huyaudbunify/HuyaAuth.getDefaultToken:()Lcom/huyaudbunify/bean/ResGetTicket;
+      10: astore        8
+      12: ldc           #104                // String
+      14: astore        9
+      16: iconst_2
+      17: istore        10
+      19: aload         8
+      21: ifnull        43
+      24: aload         8
+      26: invokevirtual #154                // Method com/huyaudbunify/bean/ResGetTicket.getToken:()Ljava/lang/String;
+      29: ldc           #155                // String UTF-8
+      31: invokestatic  #156                // Method java/net/URLEncoder.encode:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+      34: astore        9
+      36: aload         8
+      38: invokevirtual #157                // Method com/huyaudbunify/bean/ResGetTicket.getTokenType:()I
+      41: istore        10
+      43: goto          53
+      46: astore        11
+      48: aload         11
+      50: invokevirtual #160                // Method java/lang/Exception.printStackTrace:()V
+      53: lload_1
+      54: invokestatic  #162                // Method java/lang/String.valueOf:(J)Ljava/lang/String;
+      57: astore        11
+      59: aload         7
+      61: bipush        9
+      63: anewarray     #163                // class java/lang/Object
+      66: dup
+      67: iconst_0
+      68: aload         11
+      70: aastore
+      71: dup
+      72: iconst_1
+      73: invokestatic  #117                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getInstance:()Lcom/huyaudbunify/util/HuyaDeveloperUtils;
+      76: invokevirtual #118                // Method com/huyaudbunify/util/HuyaDeveloperUtils.getAppId:()Ljava/lang/String;
+      79: aastore
+      80: dup
+      81: iconst_2
+      82: aload         9
+      84: aastore
+      85: dup
+      86: iconst_3
+      87: iload         10
+      89: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      92: aastore
+      93: dup
+      94: iconst_4
+      95: aload         4
+      97: aastore
+      98: dup
+      99: iconst_5
+     100: aload         5
+     102: aastore
+     103: dup
+     104: bipush        6
+     106: aload         6
+     108: aastore
+     109: dup
+     110: bipush        7
+     112: aload_3
+     113: aastore
+     114: dup
+     115: bipush        8
+     117: iconst_3
+     118: invokestatic  #164                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     121: aastore
+     122: invokestatic  #167                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     125: astore        7
+     127: aload_0
+     128: ldc           #172                // String ?
+     130: invokevirtual #133                // Method java/lang/String.contains:(Ljava/lang/CharSequence;)Z
+     133: ifeq          165
+     136: new           #109                // class java/lang/StringBuilder
+     139: dup
+     140: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+     143: aload_0
+     144: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     147: ldc           #173                // String &
+     149: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     152: aload         7
+     154: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     157: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     160: astore        12
+     162: goto          191
+     165: new           #109                // class java/lang/StringBuilder
+     168: dup
+     169: invokespecial #110                // Method java/lang/StringBuilder."<init>":()V
+     172: aload_0
+     173: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     176: ldc           #172                // String ?
+     178: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     181: aload         7
+     183: invokevirtual #112                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     186: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     189: astore        12
+     191: aload         12
+     193: areturn
+    Exception table:
+       from    to  target type
+          19    43    46   Class java/lang/Exception
+
+  static {};
+    Code:
+       0: getstatic     #175                // Field com/huyaudbunify/BuildConfig.IS_HUYA_ACCOUNT:Ljava/lang/Boolean;
+       3: invokevirtual #176                // Method java/lang/Boolean.booleanValue:()Z
+       6: ifeq          67
+       9: ldc           #177                // String huyaudbwebui
+      11: putstatic     #178                // Field constServName:Ljava/lang/String;
+      14: ldc           #179                // String https://udbapi.huya.com
+      16: putstatic     #180                // Field constUrlGetPass:Ljava/lang/String;
+      19: ldc           #181                // String http://udbapi-test.huya.com
+      21: putstatic     #182                // Field constUrlGetPassDev:Ljava/lang/String;
+      24: ldc           #183                // String https://udbreg.huya.com
+      26: putstatic     #184                // Field constUrlReg:Ljava/lang/String;
+      29: ldc           #185                // String http://udbreg-test.huya.com
+      31: putstatic     #186                // Field constUrlRegDev:Ljava/lang/String;
+      34: ldc           #187                // String https://udblgn.huya.com
+      36: putstatic     #188                // Field constUrlLgn:Ljava/lang/String;
+      39: ldc           #189                // String http://udblgn-test.huya.com
+      41: putstatic     #190                // Field constUrlLgnDev:Ljava/lang/String;
+      44: ldc           #191                // String http://udblog.huya.com
+      46: putstatic     #192                // Field constUrlLog:Ljava/lang/String;
+      49: ldc           #191                // String http://udblog.huya.com
+      51: putstatic     #193                // Field constUrlLogDev:Ljava/lang/String;
+      54: ldc           #194                // String https://udb3lgn.huya.com
+      56: putstatic     #195                // Field constUrlLgnThird:Ljava/lang/String;
+      59: ldc           #196                // String http://udb3lgn-test.huya.com
+      61: putstatic     #197                // Field constUrlLgnThirdDev:Ljava/lang/String;
+      64: goto          122
+      67: ldc           #198                // String huyaudbindependentwebui
+      69: putstatic     #178                // Field constServName:Ljava/lang/String;
+      72: ldc           #199                // String https://udbapi.nimo.com
+      74: putstatic     #180                // Field constUrlGetPass:Ljava/lang/String;
+      77: ldc           #200                // String http://udbapi-test.nimo.com
+      79: putstatic     #182                // Field constUrlGetPassDev:Ljava/lang/String;
+      82: ldc           #201                // String https://udbreg.nimo.tv
+      84: putstatic     #184                // Field constUrlReg:Ljava/lang/String;
+      87: ldc           #202                // String http://udbreg-test.nimo.tv
+      89: putstatic     #186                // Field constUrlRegDev:Ljava/lang/String;
+      92: ldc           #203                // String https://udblgn.nimo.tv
+      94: putstatic     #188                // Field constUrlLgn:Ljava/lang/String;
+      97: ldc           #204                // String http://udblgn-test.nimo.tv
+      99: putstatic     #190                // Field constUrlLgnDev:Ljava/lang/String;
+     102: ldc           #205                // String http://udblog.nimo.tv
+     104: putstatic     #192                // Field constUrlLog:Ljava/lang/String;
+     107: ldc           #206                // String http://udblog-test.nimo.tv
+     109: putstatic     #193                // Field constUrlLogDev:Ljava/lang/String;
+     112: ldc           #207                // String https://udb3lgn.nimo.tv
+     114: putstatic     #195                // Field constUrlLgnThird:Ljava/lang/String;
+     117: ldc           #208                // String http://udb3lgn-test.nimo.tv
+     119: putstatic     #197                // Field constUrlLgnThirdDev:Ljava/lang/String;
+     122: return
+}

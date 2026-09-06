@@ -13,31 +13,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * 全局异常上报器（TVLive 业务代码 catch 到 Throwable 时调用）。
- *
- * ⚠️ 用户规则（严格执行，与 BuglyLogSender 完全一致，2026-08-22 更新）：
- *   1. 上传「异常 / 崩溃（Throwable）」—— 真实 Throwable → Bugly.postCatchedException
- *      无 Throwable 的业务失败（code != 0、null 结果、超时等）→ 不包装 RuntimeException，不触发异常路径上报
- *   2. 上传「运营统计 / 埋点 / 事件聚合」（但先敏感词打码）
- *      —— 虎牙 SDK 业务失败（reportHuyaBusinessFailure）在这里走 BuglyLogSender.reportHuyaBusinessFailureAsEvent
- *   3. 敏感词打码（两种）：
- *      ① 业务敏感（直播源 / 频道 / 虎牙 / rtmp / hls / flv / m3u8 / 房间号 / http(s):// …）
- *         → 命中整条值变 [MASKED_BIZ]
- *      ② 凭证敏感（password / token / secret / appkey / HY_APPKEY / api_key …）
- *         → 仅 value 打码 ****
- */
 public class ExceptionReporter {
     private static final String TAG = "ExceptionReporter";
 
-    // 🔒 凭证类敏感词（同 BuglyLogSender，保持一致）
     private static final String[] CREDENTIAL_SENSITIVE_KEYWORDS = {
         "password", "token", "secret", "credential",
         "api_key", "apikey", "HY_APPKEY", "HY_APPID",
         "appkey", "signkey", "wssecret", "encryptkey", "privatekey"
     };
 
-    // 🔒 业务类敏感词（同 BuglyLogSender，保持一致）
     private static final String[] BUSINESS_SENSITIVE_KEYWORDS = {
         "直播源", "频道", "虎牙", "rtmp", "hls", "flv", "m3u8",
         "房间号", "roomId", "频道名", "liveId",
@@ -46,7 +30,7 @@ public class ExceptionReporter {
         "http://", "https://"
     };
 
-    private static final long DEDUP_WINDOW_MS = 10_000;
+    private static final long DEDUP_WINDOW_MS = 60_000;
     private static final int MAX_REPORTS_PER_SESSION = 500;
 
     private static final Map<String, AtomicLong> lastReportTimeMap = new ConcurrentHashMap<>();
@@ -63,15 +47,6 @@ public class ExceptionReporter {
         LogBridge.i(TAG, "ExceptionReporter " + (value ? "enabled" : "disabled"));
     }
 
-    // ==================== LogCollector 依赖的对外入口 ====================
-
-    /**
-     * 被 LogCollector.error(tag,msg,throwable) 和 ERROR 级日志自动上报调用。
-     *
-     * 规则：
-     *  - throwable != null → 走 `report(tag,msg,throwable)` → Bugly 异常表
-     *  - throwable == null → 仅本地 Log，**不**包装 RuntimeException，避免正常 ERROR 日志污染崩溃率
-     */
     public static void reportError(String tag, String msg, Throwable throwable) {
         if (throwable != null) {
             report(tag, msg, throwable);
@@ -81,12 +56,6 @@ public class ExceptionReporter {
         }
     }
 
-    // ==================== 全局 catch(Throwable) 入口 ====================
-
-    /**
-     * 上报异常。
-     * throwable == null → 严格遵守「只上传异常/崩溃」→ 只本地Log，不上传 Bugly 异常路径。
-     */
     public static void report(String module, Throwable throwable) {
         report(module, null, throwable);
     }
@@ -94,7 +63,6 @@ public class ExceptionReporter {
     public static void report(String module, String context, Throwable throwable) {
         if (!enabled) return;
 
-        // —— 关键：无 Throwable 不上传异常路径（用户规则核心）——
         if (throwable == null) {
             LogBridge.w(TAG, "[non-throwable skip Bugly-exception] module=" + module
                     + " context=" + filterSensitive(context == null ? "" : context));
@@ -116,8 +84,9 @@ public class ExceptionReporter {
 
         String stackTrace = getStackTrace(throwable);
 
-        // 本地收集（logcat / LogCollector）→ 不过滤（因为本地是自己看）
-        LogBridge.e(TAG, "[" + module + "] Exception reported: " + throwable.getMessage(), throwable);
+        // msg 不再拼 throwable.getMessage()（LogBridge.e 还会追加 tr.getMessage()，造成 "X : X" 重复）；
+        // 完整堆栈已由下方 LogCollector 条目承载
+        LogBridge.e(TAG, "[" + module + "] Exception reported: " + throwable.getMessage());
         if (context != null && !context.isEmpty()) {
             LogBridge.e(TAG, "[" + module + "] Context: " + context);
         }
@@ -126,7 +95,6 @@ public class ExceptionReporter {
                     (context != null ? context + " | " : "") + stackTrace);
         } catch (Throwable ignored) {}
 
-        // 真正 Bugly 异常上报（仅 Throwable）
         try {
             BuglyLogSender.reportHuyaExceptionSafely(module, throwable, context);
         } catch (Throwable t) {
@@ -134,18 +102,8 @@ public class ExceptionReporter {
         }
     }
 
-    /**
-     * 上报虎牙 SDK 内部业务失败（回调 code != 0 / liveInfo == null / no streams / 超时）
-     *
-     *  —— 按用户规则「无 Throwable 不走异常路径，走运营统计路径」：
-     *     1) 必走本地 Log / LogCollector（本地完整明文，开发者可定位）
-     *     2) 尝试走 BuglyLogSender.reportHuyaBusinessFailureAsEvent → Bugly 运营统计（参数会打码）
-     *        （不会触发 postCatchedException，不会被算进崩溃/异常率）
-     *
-     *  参数里的 roomInfo / errorMsg 如果含「直播源/频道/虎牙/rtmp/hls/flv/m3u8」等敏感词，
-     *  BuglyLogSender 内部会把对应 value 替换成 [MASKED_BIZ] 再上传。
-     */
     public static void reportHuyaBusinessFailure(String module, int code, String errorMsg, String roomInfo) {
+        if (!enabled) return; // 与 report() 一致：静止上报时连带屏蔽业务失败上报（本地日志 + Bugly 事件）
         StringBuilder sb = new StringBuilder();
         sb.append("[HUYA_BIZ_FAIL local+track_event] ")
           .append(module == null ? "" : module)
@@ -153,12 +111,9 @@ public class ExceptionReporter {
           .append(" | errorMsg=").append(errorMsg == null ? "" : errorMsg)
           .append(" | room=").append(roomInfo == null ? "" : roomInfo);
         LogBridge.e(TAG, sb.toString());
-        try {
-            LogCollector.getInstance().error(module == null ? "HuyaBizFail" : module,
-                    filterSensitive(sb.toString()));
-        } catch (Throwable ignored) {}
+        // LogBridge.e 内部已同步进 LogCollector，无需重复入队（重复条目还会被
+        // filterSensitive 脱敏成 [MASKED_BIZ]，形成每房间两行的噪音）
 
-        // 运营统计上报（走 Bugly 埋点 / trackEvent，参数打码在 BuglyLogSender 内部完成）
         try {
             Context ctx = getAppContext();
             if (ctx != null) {
@@ -172,16 +127,6 @@ public class ExceptionReporter {
         }
     }
 
-    // =======================================
-    //  内部工具：敏感词打码（同 BuglyLogSender.maskAllSensitive 策略）
-    // =======================================
-
-    /**
-     * 敏感词过滤/打码（严格执行用户规则）：
-     *   ① 命中业务敏感词 → 整条值返回 [MASKED_BIZ]
-     *   ② 命中凭证敏感词 → 仅把 key:value 里的 value 打码成 ****
-     *   ③ 都没命中 → 原样返回
-     */
     static String filterSensitive(String msg) {
         if (TextUtils.isEmpty(msg)) return "";
 
@@ -215,8 +160,6 @@ public class ExceptionReporter {
         }
         return false;
     }
-
-    // ============== 内部工具（去重、栈字符串、key 构建、全局 Context 获取）==============
 
     private static boolean shouldReport(String key) {
         long now = System.currentTimeMillis();
@@ -257,10 +200,6 @@ public class ExceptionReporter {
         return sw.toString();
     }
 
-    /**
-     * 反射拿全局 Application Context（不依赖 MyApplication.getInstance 或 BaseApp，避免类名/包名改动）。
-     * 失败返回 null（此时仅本地记录，不影响主流程）。
-     */
     private static Context getAppContext() {
         MyApplication app = MyApplication.getInstance();
         if (app != null) {

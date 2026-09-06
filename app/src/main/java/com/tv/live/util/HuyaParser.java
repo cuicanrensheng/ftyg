@@ -71,7 +71,6 @@ public class HuyaParser {
                     String hls = null;
                     String flv = null;
 
-                    // 方案1：StreamInfo API (mp.huya.com) - 首选，已验证可用
                     try {
                         LogBridge.d("HuyaParser", "尝试从StreamInfo API获取播放地址");
                         String streamInfoResult = fetchFromStreamInfoAPI(roomLong);
@@ -92,7 +91,6 @@ public class HuyaParser {
                         LogBridge.d("HuyaParser", "StreamInfoAPI 异常: " + t.getMessage());
                     }
 
-                    // 方案2：移动端网页解析（主方案）
                     try {
                         LogBridge.d("HuyaParser", "尝试从移动端网页获取播放地址");
                         String mHtml = fetchHtml("https://m.huya.com/" + roomId);
@@ -116,7 +114,6 @@ public class HuyaParser {
                         LogBridge.d("HuyaParser", "移动端网页解析异常：" + t.getMessage());
                     }
 
-                    // 方案3：PC网页解析
                     try {
                         LogBridge.d("HuyaParser", "尝试从PC网页获取播放地址");
                         String pcHtml = fetchHtml("https://www.huya.com/" + roomId);
@@ -140,7 +137,6 @@ public class HuyaParser {
                         LogBridge.d("HuyaParser", "PC网页解析异常：" + t.getMessage());
                     }
 
-                    // 方案4: 通过 StreamInfo API 备用
                     try {
                         LogBridge.d("HuyaParser", "尝试从StreamInfo API获取播放地址");
                         String streamInfoResult = fetchFromStreamInfoAPI(roomLong);
@@ -202,8 +198,6 @@ public class HuyaParser {
         return sb.toString();
     }
 
-    // ================= 方案 2/3：HTML 抓取 =================
-
     private static String fetchHtml(String url) throws Exception {
         Request req = new Request.Builder()
                 .url(url)
@@ -218,8 +212,6 @@ public class HuyaParser {
         }
         return resp.body().string();
     }
-
-    // ================= 方案 4：StreamInfo API =================
 
     private static String fetchFromStreamInfoAPI(long roomId) throws Exception {
         String url = "https://mp.huya.com/cache.php?m=Live&do=profileRoom&roomid=" + roomId
@@ -276,8 +268,6 @@ public class HuyaParser {
         }
         return extractUrlFromJsonString(jsonStr);
     }
-
-    // ================= 工具方法 =================
 
     private static String extractUrlFromJsonString(String json) {
         if (TextUtils.isEmpty(json)) {
@@ -405,8 +395,6 @@ public class HuyaParser {
         }
         return null;
     }
-
-    // ================= 辅助方法 =================
 
     private static void putCache(long roomId, String hls, String flv) {
         sCache.put(roomId, new StreamCache(hls, flv));

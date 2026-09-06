@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -22,21 +23,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * 直播源健康检测器
- *
- * 【职责】
- * 1. 后台批量检测频道 URL 的可用性（HTTP HEAD/GET）
- * 2. 记录每个 URL 的连续失败次数
- * 3. 连续失败达到阈值 → 自动从频道的 backupUrls 中剔除
- * 4. 主源失效且有备用源 → 自动切换到可用备用源
- * 5. 播放失败时实时标记，定期批量复检
- *
- * 【设计原则】
- * - 只检测、不阻塞播放（后台子线程执行）
- * - 网络错误（超时/连不上）不计入失效，只有 HTTP 4xx/5xx 才算
- * - 检测结果持久化到 SharedPreferences，重启后保留
- */
 public class SourceHealthChecker {
     private static final String TAG = "SourceHealthChecker";
 
@@ -45,14 +31,15 @@ public class SourceHealthChecker {
     private static final String KEY_FAIL_PREFIX = "fail_";
     private static final String KEY_LAST_CHECK = "last_full_check";
 
-    /** 连续失败多少次后剔除该 URL */
     private static final int FAIL_THRESHOLD = 3;
-    /** 检测超时时间 */
+
     private static final int CHECK_TIMEOUT_MS = 8000;
-    /** 全量检测间隔（7天） */
+
     private static final long FULL_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000L;
-    /** 单次批量检测的最大并发数 */
+
     private static final int MAX_CONCURRENT = 8;
+
+    private static final long DNS_FAIL_CACHE_MS = 30 * 60 * 1000L;
 
     private final Context context;
     private final SharedPreferences sp;
@@ -66,19 +53,19 @@ public class SourceHealthChecker {
                 return t;
             });
 
-    /** URL → 连续失败次数（内存缓存，与SP同步） */
     private final Map<String, Integer> failCountMap = new ConcurrentHashMap<>();
 
-    /** 已剔除的 URL 集合（本会话内不再检测） */
     private final Map<String, Long> removedUrls = new ConcurrentHashMap<>();
+
+    private final Map<String, Long> dnsFailHosts = new ConcurrentHashMap<>();
 
     private volatile boolean isFullCheckRunning = false;
     private OnHealthCheckListener listener;
 
     public interface OnHealthCheckListener {
-        /** 全量检测完成：移除了多少个失效URL */
+
         void onCheckComplete(int removedCount, int totalChecked);
-        /** 单个URL被剔除 */
+
         void onUrlRemoved(String channelName, String url);
     }
 
@@ -100,18 +87,6 @@ public class SourceHealthChecker {
         sp.edit().putBoolean(KEY_ENABLED, enabled).apply();
     }
 
-    // ============================================================
-    // 失败标记（由 TVPlayerManager 调用）
-    // ============================================================
-
-    /**
-     * 标记某个 URL 播放失败（非网络原因）
-     * 达到阈值后自动从频道的备用源列表中剔除
-     *
-     * @param url       失败的 URL
-     * @param channel   所属频道（可为 null）
-     * @return 是否已剔除
-     */
     public void markFailed(String url, Channel channel) {
         if (url == null || url.isEmpty()) return;
         if (!isEnabled()) return;
@@ -130,9 +105,6 @@ public class SourceHealthChecker {
         });
     }
 
-    /**
-     * 标记某个 URL 播放成功 → 重置失败计数
-     */
     public void markSuccess(String url) {
         if (url == null || url.isEmpty()) return;
         Integer count = failCountMap.remove(url);
@@ -142,16 +114,12 @@ public class SourceHealthChecker {
         }
     }
 
-    // ============================================================
-    // URL 剔除
-    // ============================================================
-
     private void removeUrl(String url, Channel channel) {
         if (url == null) return;
         removedUrls.put(url, System.currentTimeMillis());
 
         if (channel != null) {
-            // 从备用源列表中移除
+
             Iterator<String> it = channel.getBackupUrls().iterator();
             boolean removed = false;
             while (it.hasNext()) {
@@ -162,7 +130,7 @@ public class SourceHealthChecker {
                     break;
                 }
             }
-            // 如果是主源失效且有备用源，提升第一个备用源为主源
+
             if (!removed && url.equals(channel.getMainPlayUrl())) {
                 if (!channel.getBackupUrls().isEmpty()) {
                     String newMain = channel.getBackupUrls().remove(0);
@@ -184,21 +152,10 @@ public class SourceHealthChecker {
         }
     }
 
-    /** 判断某个 URL 是否已被剔除 */
     public boolean isRemoved(String url) {
         return removedUrls.containsKey(url);
     }
 
-    // ============================================================
-    // 全量批量检测
-    // ============================================================
-
-    /**
-     * 批量检测所有频道的所有 URL
-     * 在后台线程执行，不阻塞 UI
-     *
-     * @param channels 频道列表
-     */
     public void checkAll(List<Channel> channels) {
         if (channels == null || channels.isEmpty()) return;
         if (!isEnabled()) return;
@@ -225,13 +182,13 @@ public class SourceHealthChecker {
             List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
 
             for (Channel ch : channels) {
-                // 检测主源
+
                 futures.add(checkExecutor.submit(() -> {
                     String url = ch.getMainPlayUrl();
                     if (url != null && !url.isEmpty() && !isRemoved(url)) {
-                        // 🔧 对虎牙房间号跳过检测，直接认为可用
+
                         if (isHuyaRoomUrl(url)) {
-                            // 跳过检测，不做任何操作
+
                             return;
                         }
                         totalChecked.incrementAndGet();
@@ -251,13 +208,12 @@ public class SourceHealthChecker {
                     }
                 }));
 
-                // 检测备用源
                 List<String> backups = new ArrayList<>(ch.getBackupUrls());
                 for (String url : backups) {
                     if (isRemoved(url)) continue;
                     futures.add(checkExecutor.submit(() -> {
                         if (isHuyaRoomUrl(url)) {
-                            // 跳过检测，不做任何操作
+
                             return;
                         }
                         totalChecked.incrementAndGet();
@@ -278,7 +234,6 @@ public class SourceHealthChecker {
                 }
             }
 
-            // 等待所有检测完成
             for (java.util.concurrent.Future<?> f : futures) {
                 try { f.get(); } catch (Exception ignored) {}
             }
@@ -297,10 +252,6 @@ public class SourceHealthChecker {
         });
     }
 
-    // ============================================================
-    // 核心修改：虎牙房间号识别
-    // ============================================================
-    /** 判断是否为虎牙房间号 URL（如 http://www.huya.com/123456） */
     private boolean isHuyaRoomUrl(String url) {
         if (url == null || url.isEmpty()) return false;
         try {
@@ -317,11 +268,12 @@ public class SourceHealthChecker {
         }
     }
 
-    /**
-     * 检测单个 URL 是否可用
-     * 返回 true=可用, false=失效
-     */
     private boolean checkUrl(String urlStr) {
+
+        if (isDnsRecentlyFailed(urlStr)) {
+            LogBridge.d(TAG, "跳过检测（DNS 近期失败）: " + urlStr);
+            return true;
+        }
         HttpURLConnection conn = null;
         try {
             URL url = new URL(urlStr);
@@ -330,13 +282,19 @@ public class SourceHealthChecker {
             conn.setConnectTimeout(CHECK_TIMEOUT_MS);
             conn.setReadTimeout(CHECK_TIMEOUT_MS);
             conn.setRequestProperty("User-Agent", "TVLive-HealthCheck/1.0");
-            conn.setInstanceFollowRedirects(true);
+
+            conn.setInstanceFollowRedirects(false);
 
             int code = conn.getResponseCode();
-            // 2xx 和 3xx 都算可用
+
             return code >= 200 && code < 400;
+        } catch (UnknownHostException e) {
+
+            recordDnsFailure(urlStr, e);
+            LogBridge.d(TAG, "DNS 解析失败(不计入失效，已缓存跳过): " + urlStr + " → " + e.getMessage());
+            return true;
         } catch (Exception e) {
-            // 网络异常（超时/DNS失败）不算源失效，返回 true 避免误删
+
             LogBridge.d(TAG, "检测异常(不计入失效): " + urlStr + " → " + e.getMessage());
             return true;
         } finally {
@@ -344,9 +302,43 @@ public class SourceHealthChecker {
         }
     }
 
-    // ============================================================
-    // SP 持久化
-    // ============================================================
+    private String extractHost(String urlStr) {
+        try {
+            return new URL(urlStr).getHost();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isDnsRecentlyFailed(String urlStr) {
+        String host = extractHost(urlStr);
+        if (host == null) return false;
+        Long t = dnsFailHosts.get(host);
+        if (t == null) return false;
+        if (System.currentTimeMillis() - t > DNS_FAIL_CACHE_MS) {
+            dnsFailHosts.remove(host);
+            return false;
+        }
+        return true;
+    }
+
+    private void recordDnsFailure(String urlStr, Throwable e) {
+        String host = null;
+        String msg = (e != null) ? e.getMessage() : null;
+        if (msg != null) {
+            int i = msg.indexOf('"');
+            int j = (i >= 0) ? msg.indexOf('"', i + 1) : -1;
+            if (i >= 0 && j > i) {
+                host = msg.substring(i + 1, j);
+            }
+        }
+        if (host == null || host.isEmpty()) {
+            host = extractHost(urlStr);
+        }
+        if (host != null && !host.isEmpty()) {
+            dnsFailHosts.put(host, System.currentTimeMillis());
+        }
+    }
 
     private void loadFailCounts() {
         Map<String, ?> all = sp.getAll();
@@ -371,12 +363,10 @@ public class SourceHealthChecker {
         sp.edit().remove(KEY_FAIL_PREFIX + url).apply();
     }
 
-    /**
-     * 清除所有失败记录（用户手动触发）
-     */
     public void resetAll() {
         failCountMap.clear();
         removedUrls.clear();
+        dnsFailHosts.clear();
         SharedPreferences.Editor editor = sp.edit();
         for (String key : sp.getAll().keySet()) {
             if (key.startsWith(KEY_FAIL_PREFIX)) {
@@ -387,17 +377,11 @@ public class SourceHealthChecker {
         LogBridge.i(TAG, "已重置所有源健康记录");
     }
 
-    /**
-     * 获取统计信息
-     */
     public String getStats() {
         return "已剔除: " + removedUrls.size() + " 个源, " +
                 "失败记录: " + failCountMap.size() + " 条";
     }
 
-    /**
-     * 释放资源
-     */
     public void release() {
         try {
             mainHandler.removeCallbacksAndMessages(null);
@@ -409,6 +393,7 @@ public class SourceHealthChecker {
             }
             failCountMap.clear();
             removedUrls.clear();
+            dnsFailHosts.clear();
             listener = null;
         } catch (Exception e) {
             LogBridge.e(TAG, "release异常: " + e.getMessage());

@@ -33,10 +33,6 @@ import com.tv.live.util.IntCallback;
 
 import java.util.List;
 
-/**
- * 设置对话框辅助类
- * 封装通用的对话框创建和显示逻辑
- */
 public class SettingsDialogHelper {
     private Context context;
     private Handler mainHandler;
@@ -54,9 +50,6 @@ public class SettingsDialogHelper {
         context = null;
     }
 
-    /**
-     * 显示数字输入对话框
-     */
     public void showNumberInputDialog(int currentValue, IntCallback onConfirmed) {
         if (context == null) return;
         LinearLayout dialogView = new LinearLayout(context);
@@ -193,9 +186,6 @@ public class SettingsDialogHelper {
         }, 100);
     }
 
-    /**
-     * 显示通用选择对话框
-     */
     public void showCommonSelectionDialog(String title, String[] items, int checkedItem, IntCallback onSelected) {
         if (context == null) return;
         LinearLayout dialogView = new LinearLayout(context);
@@ -264,9 +254,6 @@ public class SettingsDialogHelper {
         }, 200);
     }
 
-    /**
-     * 自定义适配器
-     */
     public static class CustomAdapter extends ArrayAdapter<String> {
         private int selectedPos;
 

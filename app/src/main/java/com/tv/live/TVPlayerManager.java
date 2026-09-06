@@ -85,7 +85,7 @@ public class TVPlayerManager {
     public static final int DECODER_MODE_AUTO = 0;
     public static final int DECODER_MODE_HARD = 1;
     public static final int DECODER_MODE_SOFT = 2;
-    
+
     private static final int MAX_RETRY_COUNT = 2;
     private static final int MAX_RETRY_COUNT_NETWORK = 5;
     private static final long STUCK_TIMEOUT = 20000;
@@ -136,11 +136,10 @@ public class TVPlayerManager {
     private Handler mHandler;
     private Runnable hideChannelRunnable;
 
-    // 🟢 虎牙 SDK 容器（仅用于隐藏，不再使用 SDK 原生播放器）
     private FrameLayout mSdkPlayerContainer;
     private Activity mActivity;
-    private int mHuyaRoomId = -1; // 当前虎牙房间号（用于重试时重新解析）
-    private int mCurrentHuyaLineIndex = 0; // 当前虎牙线路索引
+    private int mHuyaRoomId = -1;
+    private int mCurrentHuyaLineIndex = 0;
 
     private OnPlayStateListener listener;
     private OnSourceFailedListener sourceFailedListener;
@@ -156,8 +155,7 @@ public class TVPlayerManager {
     private boolean isRenderingSwitching = false;
 
     private final Map<String, String> reusableHeaderMap = Collections.synchronizedMap(new HashMap<>());
-    // 由 SDK 解析返回的专用播放请求头
-    // 在 doPlay 构建 reusableHeaderMap 时优先覆盖，避免 CDN 302 后鉴权头丢失
+
     private Map<String, String> mPendingPlaybackHeaders = null;
 
     private DefaultTrackSelector trackSelector;
@@ -179,7 +177,6 @@ public class TVPlayerManager {
         return t;
     });
 
-    // 子模块管理器
     private DecoderModeManager decoderModeManager;
     private VariantManager variantManager;
     private HuyaStreamPlayer huyaStreamPlayer;
@@ -222,9 +219,7 @@ public class TVPlayerManager {
         stuckCheckRunnable = new Runnable() {
             @Override
             public void run() {
-                // 🔧 修复卡顿：用播放器实际状态判断是否真正卡住，而非仅看 position 是否变化。
-                // 直播流的 getCurrentPosition() 可能长时间不增长（无 seek 时间轴），
-                // 原逻辑会在正常播放时误判"卡住"从而全量重试，放大卡顿。
+
                 if (player == null) {
                     lastPosition = 0;
                     lastPositionUpdateTime = System.currentTimeMillis();
@@ -234,13 +229,13 @@ public class TVPlayerManager {
                 try {
                     int state = player.getPlaybackState();
                     if (state == Player.STATE_IDLE || state == Player.STATE_ENDED) {
-                        // 播放器已空闲/结束且未恢复，判定为异常，触发重试
+
                         LogBridge.w(TAG, "检测到播放器异常状态(state=" + state + ")，自动重试...");
                         autoRetry("播放卡住");
                         return;
                     }
                     if (state == Player.STATE_BUFFERING) {
-                        // 持续处于缓冲状态超过阈值，判定为卡住（网络/解码问题）
+
                         long now = System.currentTimeMillis();
                         if (lastPositionUpdateTime == 0) {
                             lastPositionUpdateTime = now;
@@ -251,7 +246,7 @@ public class TVPlayerManager {
                             return;
                         }
                     } else {
-                        // STATE_READY：正常播放中，更新缓冲起始时间为0，避免误判
+
                         lastPositionUpdateTime = 0;
                     }
                 } catch (Exception e) {
@@ -261,7 +256,6 @@ public class TVPlayerManager {
             }
         };
 
-        // 初始化子模块管理器
         decoderModeManager = new DecoderModeManager(context, mHandler);
         variantManager = new VariantManager(new VariantManager.PlaybackCallback() {
             @Override
@@ -309,7 +303,7 @@ public class TVPlayerManager {
             @Override public int getHuyaRoomId() { return mHuyaRoomId; }
             @Override public void setPendingHeaders(Map<String, String> headers) { mPendingPlaybackHeaders = headers; }
             @Override public Map<String, String> getPendingHeaders() { return mPendingPlaybackHeaders; }
-            @Override public void setReusableHeaderMap(Map<String, String> map) { /* shared */ }
+            @Override public void setReusableHeaderMap(Map<String, String> map) {  }
             @Override public Map<String, String> getReusableHeaderMap() { return reusableHeaderMap; }
             @Override public void setCurrentResolutionLabel(String label) { currentResolutionLabel = label; }
             @Override public void ensurePlayerBoundToView() { TVPlayerManager.this.ensurePlayerBoundToView(); }
@@ -325,7 +319,7 @@ public class TVPlayerManager {
 
         initPlayer();
     }
-    
+
     private void dLog(String msg) {
         if (sp.getBoolean("log_enable", false)) {
             LogBridge.d(TAG, msg);
@@ -340,40 +334,34 @@ public class TVPlayerManager {
 
     private void logError(String msg) {
         LogBridge.e(TAG, msg);
-        // 过滤可预期的播放错误，不上报到Bugly
-        // 这些错误通常是由于直播源问题（URL过期、服务器问题等），不是应用bug
+
         if (shouldReportPlaybackError(msg)) {
             com.tv.live.util.LogCollector.getInstance().error(TAG, msg);
         } else {
-            // 仅在本地记录日志，不上报
+
             com.tv.live.util.LogCollector.getInstance().warn(TAG, "[播放过滤] " + msg);
         }
     }
-    
-    /**
-     * 判断播放错误是否应该上报到Bugly
-     * 只过滤明确是外部资源问题的可预期错误
-     */
+
     private boolean shouldReportPlaybackError(String msg) {
         if (msg == null || msg.isEmpty()) return false;
-        
+
         String lowerMsg = msg.toLowerCase();
-        
-        // 明确是外部资源问题的错误 - 不上报到Bugly
+
         String[] externalResourceErrors = {
-            "404 not found",        // 直播源URL不存在
-            "失败: http 404",        // 明确的404错误
-            "失败: http",           // HTTP请求失败
-            "打开连接失败: timeout",  // 网络超时
-            "播放异常: unexpected runtime error"  // ExoPlayer内部HLS解析错误
+            "404 not found",
+            "失败: http 404",
+            "失败: http",
+            "打开连接失败: timeout",
+            "播放异常: unexpected runtime error"
         };
-        
+
         for (String error : externalResourceErrors) {
             if (lowerMsg.contains(error)) {
                 return false;
             }
         }
-        
+
         return true;
     }
 
@@ -388,10 +376,9 @@ public class TVPlayerManager {
             com.tv.live.util.LogCollector.getInstance().network(TAG, msg);
         }
     }
-    
+
     private void initPlayer() {
-        // 🎯 解码器模式 → 是否优先软解（硬解不足时的降级策略）
-        // 方案 1：全 MediaCodec，靠 fallback + MediaCodecSelector 切换
+
         boolean preferSoftware;
         switch (mDecoderMode) {
             case DECODER_MODE_SOFT:
@@ -404,7 +391,7 @@ public class TVPlayerManager {
                 break;
             case DECODER_MODE_AUTO:
             default:
-                // 取消老电视芯片强制软解：AUTO 模式默认硬解优先（fallback 自动补位）
+
                 preferSoftware = false;
                 break;
         }
@@ -467,7 +454,7 @@ public class TVPlayerManager {
             if (TextUtils.isEmpty(path)) return false;
             String lower = path.toLowerCase(Locale.ROOT);
             if (lower.endsWith(".m3u8") || lower.endsWith(".m3u")) return true;
-            // 虎牙HLS CDN: *.hls.huya.com/src?... (无m3u8扩展名，但返回HLS流)
+
             String host = uri.getHost();
             if (host != null && host.contains(".hls.huya.com")) return true;
             return false;
@@ -476,7 +463,7 @@ public class TVPlayerManager {
             int q = lower.indexOf('?');
             String beforeQuery = q >= 0 ? lower.substring(0, q) : lower;
             if (beforeQuery.contains(".m3u8") || beforeQuery.contains(".m3u")) return true;
-            // 虎牙HLS CDN域名检测
+
             if (lower.contains(".hls.huya.com")) return true;
             return false;
         }
@@ -502,18 +489,6 @@ public class TVPlayerManager {
                     depth++;
                 }
 
-                // 🔧【核心修复】黑屏Bug：识别 Surface 失效异常（IllegalArgumentException
-                //    + MediaCodec.native_setSurface/Surface 相关），不应直接走网络错误切台，
-                //    而应触发 Surface 重建流程，让 ExoPlayer 重新绑定到新 Surface。
-                //
-                // 复现链路（来自电视日志 13:28:30 时刻）：
-                //  1) 用户按返回键退出应用
-                //  2) Coocaa 电视系统强制 disconnect 视频输出（vsyncbridge: Wrapper_disconnect IN）
-                //  3) ExoPlayer 在后台尝试 setOutputSurface 但 surface 已失效
-                //  4) 抛出 java.lang.IllegalArgumentException at MediaCodec.native_setSurface
-                //  5) 原代码直接 autoRetry("播放异常") → 切到下一个频道 → 同样失败 → 黑屏
-                //
-                // 修复策略：检测到 Surface 失效时，清空 player 并触发 onForeground 重建流程
                 if (isSurfaceLostError(error)) {
                     logWarn("检测到 Surface 失效（MediaCodec/Surface 相关），触发重建流程");
                     handleSurfaceLost();
@@ -555,6 +530,8 @@ public class TVPlayerManager {
                 if (state == Player.STATE_READY) {
                     logPlayback("播放就绪 (STATE_READY)");
                     updateWakeLock(true);
+
+                    HuyaSDKParser.notifyPlaybackSettled();
                     notifyLiveInfoUpdate();
                     showChannelAndAutoHide();
                     isSwitching = false;
@@ -618,7 +595,6 @@ public class TVPlayerManager {
         player.addListener(playerListener);
     }
 
-    // 🔴【核心修复】在 trySwitchBackup 里拦截虎牙房间号死循环
     private boolean trySwitchBackup() {
         if (currentChannel == null || currentChannel.getBackupUrls().isEmpty()) {
             return false;
@@ -634,13 +610,12 @@ public class TVPlayerManager {
             return false;
         }
         String backupUrl = backups.get(backupRetryIndex);
-        
-        // 🔴 如果备用源也是虎牙房间号，直接跳过，递归尝试下一个！
+
         if (isHuyaRoomUrl(backupUrl)) {
             LogBridge.w(TAG, "备用源是虎牙房间号，跳过！尝试下一个...");
             return trySwitchBackup();
         }
-        
+
         dLog("尝试切换到备用源：" + backupUrl);
         playUrlInternal(backupUrl);
         return true;
@@ -665,9 +640,6 @@ public class TVPlayerManager {
         isRetrying = false;
     }
 
-    /**
-     * 🟢【优化】异步播放准备阶段（后台线程）或 ExoPlayer 同步操作的异常统一处理（主线程执行）
-     */
     private void handleAsyncPlaybackError(Throwable e) {
         LogBridge.e(TAG, "播放异常", e);
         if (e instanceof RedirectFailedException) {
@@ -727,7 +699,7 @@ public class TVPlayerManager {
         retryRunnable = () -> {
             isRetrying = false;
             if (!TextUtils.isEmpty(currentUrl)) {
-                // 如果是虎牙流 URL，重新触发完整解析（获取新签名+headers）
+
                 if (currentUrl.contains(".huya.com") && mHuyaRoomId > 0) {
                     LogBridge.d(TAG, "【虎牙】重试：重新触发解析获取新签名, roomId=" + mHuyaRoomId);
                     playHuyaStream(mHuyaRoomId, 0);
@@ -740,17 +712,13 @@ public class TVPlayerManager {
         mHandler.postDelayed(retryRunnable, delayMs);
     }
 
-    /**
-     * 检测错误是否为 Surface 失效类（电视系统强制 disconnect 视频输出后常见）
-     * 特征：java.lang.IllegalArgumentException，且涉及 MediaCodec.setSurface 或 Surface 相关 native 方法
-     */
     private boolean isSurfaceLostError(Throwable throwable) {
         if (throwable == null) return false;
         Throwable t = throwable;
         int depth = 0;
         while (t != null && depth < 20) {
             if (t instanceof IllegalArgumentException) {
-                // 匹配 MediaCodec.setOutputSurface / native_setSurface 调用栈
+
                 for (StackTraceElement elem : t.getStackTrace()) {
                     String cls = elem.getClassName();
                     String method = elem.getMethodName();
@@ -767,16 +735,10 @@ public class TVPlayerManager {
         return false;
     }
 
-    /**
-     * Surface 失效处理：清空 ExoPlayer 的 surface 绑定，触发 playerView 重建 surface，
-     * 然后重新绑定播放器。这是修复"按返回退出再重开应用黑屏"的关键：
-     * - 不走 autoRetry 切台（切台无法解决 surface 失效问题）
-     * - 直接重置 surface 状态，让 onForeground 的 retryResumeAfterSurface 重新生效
-     */
     private void handleSurfaceLost() {
         try {
             LogBridge.w(TAG, "handleSurfaceLost: 开始处理 Surface 失效");
-            // 1. 解除 player 与 view 的绑定，让 PlayerView 重新创建 surface
+
             if (playerView != null) {
                 try {
                     playerView.setPlayer(null);
@@ -784,12 +746,11 @@ public class TVPlayerManager {
                     LogBridge.w(TAG, "setPlayer(null) 异常: " + e.getMessage());
                 }
             }
-            // 2. 重置 surface 状态
+
             surfaceReady = false;
             surfaceCallbackBound = false;
             pendingBindPlayer = true;
 
-            // 3. 主动触发 PlayerView 重建 surface（invalidate + requestLayout）
             if (playerView != null) {
                 try {
                     playerView.post(() -> {
@@ -802,28 +763,27 @@ public class TVPlayerManager {
                 } catch (Exception ignored) {}
             }
 
-            // 4. 延迟重新绑定并播放（等待新 surface 创建）
             if (mHandler != null) {
                 mHandler.postDelayed(() -> {
                     try {
                         if (player == null || playerView == null) return;
-                        // 重新注册 SurfaceHolder.Callback（surfaceCallbackBound 已被重置为 false）
+
                         bindSurfaceCallback(playerView);
-                        // 重新绑定 player 到 view
+
                         if (playerView.getPlayer() != player) {
                             playerView.setPlayer(player);
                         }
-                        // 重置 player 并重放当前 URL（从最新状态恢复）
+
                         if (!TextUtils.isEmpty(currentUrl)) {
                             LogBridge.d(TAG, "Surface 重建完成，重新播放: " + currentUrl);
-                            // 注意：playUrlInternal 会重新 prepare+play，无需手动 reset
+
                             playUrlInternal(currentUrl);
                         }
                         pendingBindPlayer = false;
                     } catch (Exception e) {
                         LogBridge.e(TAG, "Surface 重建后恢复播放异常: " + e.getMessage(), e);
                     }
-                }, 500); // 给 Surface 重建留 500ms
+                }, 500);
             }
         } catch (Exception e) {
             LogBridge.e(TAG, "handleSurfaceLost 异常", e);
@@ -936,14 +896,6 @@ public class TVPlayerManager {
         return mDecoderMode;
     }
 
-    /**
-     * 🧠 智能 MediaCodecSelector —— 整合黑名单过滤 + 硬解/软解优先级
-     *
-     * 1. 排除已知有缺陷的硬解器（DeviceCapabilities 里的黑名单）
-     * 2. preferSoftware=true 时把系统软解器排到最前
-     * 3. 硬解器内部按 CTS 认证优先排列
-     * 4. fallback 自动补位
-     */
     private MediaCodecSelector createSmartSelector(boolean preferSoftware) {
         return new MediaCodecSelector() {
             @Override
@@ -954,7 +906,6 @@ public class TVPlayerManager {
                 List<MediaCodecInfo> all = MediaCodecSelector.DEFAULT
                         .getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder);
 
-                // 1. 过滤黑名单
                 List<String> blacklist = new ArrayList<>();
                 blacklist.add("omx.ms.");
                 blacklist.add("c2.mstar.");
@@ -973,7 +924,6 @@ public class TVPlayerManager {
 
                 if (filtered.isEmpty()) filtered.addAll(all);
 
-                // 2. 软解优先：把系统软解器排到最前
                 if (preferSoftware) {
                     List<MediaCodecInfo> soft = new ArrayList<>();
                     List<MediaCodecInfo> hard = new ArrayList<>();
@@ -1068,8 +1018,6 @@ public class TVPlayerManager {
         newPlayerView.setPlayer(player);
         parent.addView(newPlayerView, index + 1, layoutParams);
 
-        // 🔧 修复黑屏：addView 后立即为新 PlayerView 注册 SurfaceHolder.Callback，
-        // 避免新 SurfaceView 在回调注册前就完成 surfaceCreated 分发导致 surfaceReady 永久 false。
         if (!useTexture) {
             surfaceCallbackBound = false;
             bindSurfaceCallback(newPlayerView);
@@ -1131,12 +1079,11 @@ public class TVPlayerManager {
 
     private boolean surfaceReady = false;
     private boolean pendingBindPlayer = false;
-    // 🔧 修复黑屏：标记当前 playerView 的 SurfaceHolder.Callback 是否已注册，
-    // 避免 switchRenderer 重建视图后回调注册竞态丢失导致 surfaceReady 永久 false
+
     private boolean surfaceCallbackBound = false;
 
     public void onForeground() {
-        // ExoPlayer
+
         try {
             if (player != null && playerView != null) {
                 if (surfaceReady) {
@@ -1146,7 +1093,7 @@ public class TVPlayerManager {
                     player.play();
                 } else {
                     pendingBindPlayer = true;
-                    // 长时间后台后 Surface 可能已被系统回收，主动诱使重建并延迟重试恢复播放
+
                     try {
                         playerView.post(() -> {
                             playerView.setVisibility(View.VISIBLE);
@@ -1155,10 +1102,6 @@ public class TVPlayerManager {
                         });
                     } catch (Exception ignored) {}
 
-                    // 🔧 修复：切前台时如果 Surface 未就绪，先强制绑定播放器到视图，
-                    // 确保 PlayerView 内部 Surface 重建后能自动恢复渲染，避免黑屏。
-                    // 部分高版本安卓（10-16）Surface 重建时机晚于 onResume，
-                    // 如果不提前绑定，surfaceCreated 回调可能不会触发。
                     try {
                         if (playerView.getPlayer() != player) {
                             playerView.setPlayer(player);
@@ -1174,8 +1117,6 @@ public class TVPlayerManager {
         }
     }
 
-    // 延迟重试：等待 Surface 重建，就绪后恢复播放，避免回前台黑屏
-    // 🔧 增强：最多重试10次（3秒），避免无限循环；每次重试都尝试强制绑定+播放
     private void retryResumeAfterSurface() {
         try {
             if (mHandler == null) return;
@@ -1198,7 +1139,7 @@ public class TVPlayerManager {
                                 LogBridge.d(TAG, "Surface已重建，播放已恢复（重试第" + retryCount[0] + "次）");
                                 return;
                             }
-                            // 🔧 每次重试都尝试强制绑定+播放，避免 Surface 回调丢失
+
                             try {
                                 if (playerView.getPlayer() != player) {
                                     playerView.setPlayer(player);
@@ -1209,7 +1150,7 @@ public class TVPlayerManager {
                                 playerView.setVisibility(View.VISIBLE);
                                 playerView.requestLayout();
                             } catch (Exception ignored) {}
-                            // 尚未就绪，继续重试（最多 maxRetries 次）
+
                             if (pendingBindPlayer && retryCount[0] < maxRetries) {
                                 mHandler.postDelayed(this, 300);
                             } else if (retryCount[0] >= maxRetries) {
@@ -1228,16 +1169,10 @@ public class TVPlayerManager {
     }
 
     public void onBackground() {
-        // ExoPlayer
+
         try {
             if (player != null) {
-                // 🔧 修复：切后台时不直接暂停，而是标记待恢复状态。
-                // 在高版本安卓（10-16）上，onPause → Surface销毁 → Surface重建 → onResume
-                // 的流程中，如果 onBackground 暂停了播放器且 Surface 销毁了，
-                // 回前台时 onForeground 需要等待 Surface 重建才能恢复，容易黑屏。
-                // 改为保持 playWhenReady=true，让播放器在 Surface 重建后自动恢复渲染。
-                // 实际的后台暂停由系统 Surface 销毁自动停止渲染来实现，
-                // 不需要我们主动 pause（删除 player.pause()，避免打断播放管道导致回前台重新缓冲）。
+
             }
             if (playerView != null && surfaceReady) {
                 pendingBindPlayer = true;
@@ -1247,10 +1182,6 @@ public class TVPlayerManager {
         }
     }
 
-    /**
-     * 确保播放器已绑定到 PlayerView，防止黑屏
-     * 在 setMediaSource/prepare/play 前调用
-     */
     private void ensurePlayerBoundToView() {
         try {
             if (player != null && playerView != null) {
@@ -1277,15 +1208,9 @@ public class TVPlayerManager {
         }
     }
 
-    /**
-     * 为指定 PlayerView 的 SurfaceView 注册 SurfaceHolder.Callback。
-     * 修复黑屏：确保在 addView 后立即注册回调（而非依赖外部滞后补注册），
-     * 否则新 SurfaceView 可能在回调注册前就完成 surfaceCreated 分发，
-     * 导致 surfaceReady 永久 false → 播放器有源但不渲染 → 黑屏。
-     */
     private void bindSurfaceCallback(final PlayerView view) {
         if (view == null) return;
-        if (surfaceCallbackBound) return; // 已注册，避免重复
+        if (surfaceCallbackBound) return;
         View videoSurfaceView = view.getVideoSurfaceView();
         if (videoSurfaceView instanceof android.view.SurfaceView) {
             android.view.SurfaceView surfaceView = (android.view.SurfaceView) videoSurfaceView;
@@ -1324,11 +1249,10 @@ public class TVPlayerManager {
     public void attachPlayerView(PlayerView view) {
         playerView = view;
 
-        // 保存 Activity 引用用于 SDK 播放器
         if (view.getContext() instanceof Activity) {
             mActivity = (Activity) view.getContext();
         }
-        // 查找 SDK 播放器容器
+
         if (mActivity != null) {
             FrameLayout container = mActivity.findViewById(R.id.sdk_player_container);
             if (container != null) {
@@ -1346,8 +1270,7 @@ public class TVPlayerManager {
             surfaceReady = true;
             pendingBindPlayer = false;
         } else {
-            // 🔧 修复黑屏：走 bindSurfaceCallback 注册 SurfaceHolder.Callback。
-            // 若 switchRenderer 重建视图时已注册（surfaceCallbackBound=true）则跳过，避免重复。
+
             bindSurfaceCallback(playerView);
             View videoSurfaceView = playerView.getVideoSurfaceView();
             if (videoSurfaceView instanceof android.view.SurfaceView) {
@@ -1373,11 +1296,6 @@ public class TVPlayerManager {
         playerView.setUseController(false);
     }
 
-    /**
-     * 获取 SDK 播放器容器（供外部绑定手势/触摸监听）
-     * 当切换到 SDK 播放器时，原 PlayerView 会被遮挡，
-     * 外部需要把触摸监听也绑到 SDK 容器上，否则手势面板无法唤起。
-     */
     public FrameLayout getSdkPlayerContainer() {
         return mSdkPlayerContainer;
     }
@@ -1429,9 +1347,6 @@ public class TVPlayerManager {
         lastStallStartTime = 0;
     }
 
-    // ================================================================
-    // 🔧 核心修改：虎牙房间号检测与解析
-    // ================================================================
     private boolean isHuyaRoomUrl(String url) {
         if (TextUtils.isEmpty(url)) return false;
         try {
@@ -1453,7 +1368,6 @@ public class TVPlayerManager {
         return url.startsWith("huya://room/");
     }
 
-    /** 🟢 主播UID协议（huya://uid/），SDK getLiveData(uid) 通道，成功率最高 */
     private boolean isHuyaUidProtocolUrl(String url) {
         if (TextUtils.isEmpty(url)) return false;
         return url.startsWith("huya://uid/");
@@ -1464,11 +1378,9 @@ public class TVPlayerManager {
     }
 
     private void playUrlInternal(String url, long initialSeekPosition) {
-        // 🔧【缓存治理】每次起播前，后台快速巡检一次 ExoPlayer 临时分片目录的水位
+
         try { AppCacheInspector.onBeforePlayback(context); } catch (Throwable ignored) {}
 
-        // 🟢 主播UID协议优先（huya://uid/）：一起看/分类列表返回的 channelId 不是可播房号时，
-        //    用 presenterUid 走 SDK getLiveData(uid) 通道，成功率最高
         if (isHuyaUidProtocolUrl(url)) {
             String uidStr = url.replace("huya://uid/", "").trim();
             long uid;
@@ -1490,7 +1402,7 @@ public class TVPlayerManager {
                 autoRetry("虎牙房间号格式错误: " + url);
                 return;
             }
-            // 优先使用 SDK 解析
+
             playHuyaStream(roomId, initialSeekPosition);
             return;
         }
@@ -1503,40 +1415,28 @@ public class TVPlayerManager {
                 autoRetry("虎牙房间号格式错误: " + url);
                 return;
             }
-            // 优先使用 SDK 解析
+
             playHuyaStream(roomId, initialSeekPosition);
             return;
         }
         doPlay(url, initialSeekPosition);
     }
 
-    /**
-     * 虎牙流播放统一入口
-     * 使用 SDK 解析获取线路+清晰度+URL，全部交给 ExoPlayer 播放。
-     * SDK 不可用/解析失败时直接提示错误。
-     *
-     * 🟢【并行加载优化】：在 AppCoreManager 加载直播源时，已与直播源显示并行地
-     * 在后台调用 HuyaSDKParser.preloadRooms() 预解析虎牙房间，命中缓存时 100~200ms
-     * 内即可进入播放（之前=点频道后才实时解析，需 3s~30s 等待）。
-     */
     private void playHuyaStream(int roomId, long initialSeekPosition) {
         playHuyaStreamDual(0, roomId, initialSeekPosition);
     }
 
-    /** 通过主播UID播放（huya://uid/ 协议，SDK getLiveData(uid) 通道） */
     private void playHuyaStreamByUid(long uid, long initialSeekPosition) {
         playHuyaStreamDual(uid, 0, initialSeekPosition);
     }
 
-    /** 双通道播放核心：uid>0 走 uid 通道（parseFullByUid），否则 roomId 通道（parseFull） */
     private void playHuyaStreamDual(final long uid, final int roomId, long initialSeekPosition) {
         final int effectiveRoomId = (roomId > 0 ? roomId : (int) uid);
-        // uid 通道缓存 key 用负数，避免与正数 roomId 冲突
+
         final int cacheKey = (uid > 0 ? (int) -uid : roomId);
         mHuyaRoomId = effectiveRoomId;
         final long parseStartTs = System.currentTimeMillis();
 
-        // 隐藏 SDK 容器，确保 ExoPlayer 可见
         if (mSdkPlayerContainer != null) {
             mSdkPlayerContainer.setVisibility(View.GONE);
         }
@@ -1544,8 +1444,6 @@ public class TVPlayerManager {
             playerView.setVisibility(View.VISIBLE);
         }
 
-        // 🔴【关键】切频道前先清掉上一个虎牙房间的 variantList/backupUrls 缓存，
-        // 避免前一个频道的清晰度/线路列表残留到新房间。
         synchronized (variantListLock) {
             variantList.clear();
         }
@@ -1555,17 +1453,15 @@ public class TVPlayerManager {
             } catch (Exception ignored) {}
         }
 
-        // 仅使用 SDK 解析完整线路+码率信息
         if (!HuyaSDKParser.isSDKAvailable()) {
-            // SDK 尚未就绪 → 不立即报错，改为等待 SDK 就绪后自动重试
-            // parseFull 内部已集成 addInitReadyListener，会在 SDK ready 后自动重试解析
+
             LogBridge.w(TAG, "【虎牙】SDK 尚未就绪, roomId=" + effectiveRoomId + " → 等待 SDK 初始化完成后自动重试");
             final long startTime = System.currentTimeMillis();
             HuyaSDKParser.addInitReadyListener(new Runnable() {
                 @Override public void run() {
                     long waitTime = System.currentTimeMillis() - startTime;
                     LogBridge.i(TAG, "【虎牙】SDK 就绪(等待" + waitTime + "ms), 开始解析 roomId=" + effectiveRoomId);
-                    // 重新进入播放流程
+
                     mHandler.post(new Runnable() {
                         @Override public void run() {
                             playHuyaStreamDual(uid, roomId, initialSeekPosition);
@@ -1573,7 +1469,7 @@ public class TVPlayerManager {
                     });
                 }
             });
-            // 超时保护：若 15s 内 SDK 仍未就绪，降级为错误提示
+
             mHandler.postDelayed(new Runnable() {
                 @Override public void run() {
                     if (!HuyaSDKParser.isSDKAvailable()) {
@@ -1588,8 +1484,6 @@ public class TVPlayerManager {
             return;
         }
 
-        // 🟢【性能诊断】：入口先检查是否命中缓存（parseFull 内部也会做，但这里打印
-        //   用户点击→开始播放的耗时感知日志，方便定位首帧速度）
         HuyaSDKParser.CachedStreams cached = HuyaSDKParser.getCachedStreams(cacheKey);
         if (cached != null && cached.streams != null && !cached.streams.isEmpty()) {
             long ageSec = (System.currentTimeMillis() - cached.timestamp) / 1000;
@@ -1612,20 +1506,15 @@ public class TVPlayerManager {
                 long costMs = System.currentTimeMillis() - parseStartTs;
                 HuyaSDKParser.CachedStreams cs = HuyaSDKParser.getCachedStreams(cacheKey);
                 boolean fromPreload = (cs != null && cs.streams == allStreams)
-                        || (costMs < 300);  // 缓存命中几乎瞬时返回，<300ms 基本是命中
+                        || (costMs < 300);
                 LogBridge.i(TAG, "⚡【虎牙解析耗时】" + costMs + "ms, roomId=" + effectiveRoomId
                         + "，缓存命中=" + fromPreload
                         + "，流数=" + (allStreams != null ? allStreams.size() : 0));
-                // 🟢【新增】使用数组包装器，允许在轮询逻辑中修改 defaultStream 引用
+
                 final HuyaSDKParser.HuyaStreamInfo[] streamHolder = {defaultStream};
 
-                // ================================================================
-                // 🟢【电视适配】根据设备能力（软解/老电视 → 优先 720p）选择默认流
-                //   - 在线路轮询之前应用，确保默认流的码率已适配设备
-                //   - 后续 lineIndex 轮询只在适配设备后的码率基础上切换线路
-                // ================================================================
                 if (defaultStream != null && allStreams != null && !allStreams.isEmpty()) {
-                    // 找到 defaultStream 所在线路的所有码率流
+
                     List<HuyaSDKParser.HuyaStreamInfo> sameLineStreams = new ArrayList<>();
                     for (HuyaSDKParser.HuyaStreamInfo s : allStreams) {
                         if (s != null && s.lineIndex == defaultStream.lineIndex
@@ -1643,9 +1532,6 @@ public class TVPlayerManager {
                     }
                 }
 
-                // ================================================================
-                // 🟢【新增】线路轮询逻辑：多次进入同一直播间时自动切换线路
-                // ================================================================
                 if (streamHolder[0] == null || TextUtils.isEmpty(streamHolder[0].getPlayUrl())) {
                     LogBridge.e(TAG, "【虎牙】SDK 解析返回空默认地址");
                     mHandler.post(() -> {
@@ -1703,14 +1589,7 @@ public class TVPlayerManager {
                         sp.edit().putInt(linePrefKey, streamHolder[0].lineIndex).apply();
                     }
                 }
-                // ================================================================
-                // 【新增结束】
-                // ================================================================
 
-                // 步骤1：填充 variantList（清晰度选择 UI 用）
-                // - 存储所有线路的所有码率（Variant 带 huyaLineIndex 区分）
-                // - 当前线路的 variant 按码率降序排列，当前 URL 排第一
-                // ================================================================
                 List<Variant> allVariants = new ArrayList<>();
                 if (allStreams != null) {
                     for (HuyaSDKParser.HuyaStreamInfo s : allStreams) {
@@ -1722,7 +1601,6 @@ public class TVPlayerManager {
                 final String defaultUrl = streamHolder[0].getPlayUrl();
                 mCurrentHuyaLineIndex = streamHolder[0].lineIndex;
 
-                // 按线路分组 + 各线路按码率降序
                 Map<Integer, List<Variant>> lineGroups = new TreeMap<>();
                 for (Variant v : allVariants) {
                     List<Variant> group = lineGroups.get(v.huyaLineIndex);
@@ -1736,7 +1614,6 @@ public class TVPlayerManager {
                     Collections.sort(group, (a, b) -> Integer.compare(b.bandwidth, a.bandwidth));
                 }
 
-                // 当前线路的 URL 排第一
                 List<Variant> currentLineVariants = lineGroups.get(mCurrentHuyaLineIndex);
                 if (currentLineVariants != null) {
                     int defIdx = -1;
@@ -1766,24 +1643,11 @@ public class TVPlayerManager {
                     LogBridge.d(TAG, sb.toString());
                 }
 
-                // ================================================================
-                // 步骤2：填充 backupUrls（扁平化所有线路×码率组合）
-                // - 与反编译版一致：将所有非主URL的变体都加入备源
-                // - 线路对话框显示: "主源", "源1", "源2", ...
-                // ================================================================
                 if (currentChannel != null) {
                     List<String> backups = currentChannel.getBackupUrls();
                     if (backups == null) { backups = new ArrayList<>(); }
                     else backups.clear();
 
-                    // 🔴【修复清晰度残留】不再把解析出的流 URL 覆写到 mainPlayUrl。
-                    // 原因：若覆写，Channel.mainPlayUrl 从 "huya://room/xxx" 变成流 URL，
-                    // 下次切回该频道时 playChannel → getPlayUrl() 返回流 URL → 直接 doPlay，
-                    // 不走 playHuyaStream → variantList 不重新填充 → 清晰度档位残留上一个房间。
-                    // mainPlayUrl 保持 huya://room/xxx 房间协议，切回时必然重新解析填充。
-                    // 线路/码率 URL 仍写入 backupUrls，供"线路选择"切换使用。
-
-                    // 扁平化：收集所有变体的URL（去重），排除主URL
                     Set<String> seenUrls = new HashSet<>();
                     if (allVariants != null) {
                         for (Variant v : allVariants) {
@@ -1824,17 +1688,12 @@ public class TVPlayerManager {
         }
     }
 
-    // ================================================================
-    // 实际播放逻辑（从原 playUrlInternal 提取）
-    // ================================================================
     private void doPlay(String url, long initialSeekPosition) {
         try {
             if (player == null || url == null || url.trim().isEmpty()) return;
 
             String playUrl = url.trim();
 
-            // 🟢【核心修复】检测是否是 m3u8 或 flv 这种可以直接播放的流地址
-            // 虎牙 FLV URL 格式: https://al.flv.huya.com/src?wsSecret=... 不以 .flv 结尾，需要额外检测
             String lowerUrl = playUrl.toLowerCase(Locale.ROOT);
             boolean isRealStream = isHlsUrl(playUrl)
                     || lowerUrl.endsWith(".flv")
@@ -1843,7 +1702,6 @@ public class TVPlayerManager {
                     || (lowerUrl.startsWith("http") && (lowerUrl.contains("/src?ws") || lowerUrl.contains("&wssecret=")));
             LogBridge.d(TAG, "doPlay: url=" + playUrl.substring(0, Math.min(100, playUrl.length())) + " isHls=" + isHlsUrl(playUrl) + " isRealStream=" + isRealStream);
 
-            // 计算最终播放 URL（处理线路切换）
             String finalUrl;
             if (currentChannel != null && !isRealStream) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
@@ -1876,7 +1734,6 @@ public class TVPlayerManager {
             }
             currentUrl = finalUrl;
 
-            // 🟢【分离式架构】正常源与虎牙源完全独立：解析方法/重定向/防盗链 各走各的
             if (isHuyaSource(finalUrl)) {
                 doPlayHuya(finalUrl, initialSeekPosition);
             } else {
@@ -1893,9 +1750,6 @@ public class TVPlayerManager {
         }
     }
 
-    /**
-     * 判断是否为虎牙源（URL 特征或频道 ID 特征）
-     */
     public boolean isHuyaSource(String url) {
         if (url != null && (url.contains(".huya.com/") || url.contains("huya.com/src"))) {
             return true;
@@ -1909,40 +1763,24 @@ public class TVPlayerManager {
         return false;
     }
 
-    /**
-     * 🟢【路径N】正常直播源播放：独立 UA / 独立重定向 / 无防盗链头
-     * - 普通 UA（Linux Android）
-     * - 标准 HttpURLConnection 重定向
-     * - 不注入 Referer/Origin/Cookie
-     */
     private void doPlayNormal(String url, long initialSeekPosition) {
         LogBridge.d(TAG, "【普通源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
         if (isHlsUrl(url)) {
             fetchAndParseMasterPlaylistNormal(url);
-            LogBridge.i(TAG, "🔴 [DEBUG-1] fetchAndParseMasterPlaylistNormal 返回！继续执行");
         } else {
             synchronized (variantListLock) { variantList.clear(); }
-            LogBridge.i(TAG, "🔴 [DEBUG-1] 非 HLS，variantList 已清空");
         }
 
-        // 🟢【优化】headers/httpFactory/MediaSource 构建移入后台线程：
-        // 1) NetUtil.getInstance() 是懒初始化（OkHttpClient + TOFU 证书绑定构建），
-        //    主线程首次调用会阻塞约 100~300ms，恰与首帧 vsync 竞争；
-        // 2) MediaSource 构建不依赖首帧前的任何 UI。
-        // 构建完成后 post 回主线程执行 setMediaSource/prepare/play（ExoPlayer 非线程安全）。
-        final String channelName = currentChannelName; // 主线程捕获，供后台线程使用
+        final String channelName = currentChannelName;
         new Thread(() -> {
             try {
-                LogBridge.i(TAG, "🔴 [DEBUG-2] 准备创建 SharedPreferences 和 httpFactory...(后台)");
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                 boolean debugEnabled = sp.getBoolean("debug_log_enable", false);
-                LogBridge.i(TAG, "🔴 [DEBUG-3] sp ready, debugEnabled=" + debugEnabled);
 
                 RedirectLoggingHttpDataSource.Factory httpFactory = new RedirectLoggingHttpDataSource.Factory();
                 httpFactory.setDebugLogEnabled(debugEnabled);
 
-                // 普通 Headers：仅默认 UA + Accept（后台构建局部 map，避免阻塞主线程）
                 Headers globalHeaders = NetUtil.getInstance().createCommonHeaders(url);
                 Map<String, String> localHeaders = new HashMap<>();
                 for (String name : globalHeaders.names()) {
@@ -1968,25 +1806,18 @@ public class TVPlayerManager {
                     mediaSource = new ProgressiveMediaSource.Factory(httpFactory).createMediaSource(mediaItem);
                 }
 
-                // 同步写回共享 map（供 PlayerContract.getReusableHeaderMap 读取）
                 synchronized (reusableHeaderMap) {
                     reusableHeaderMap.clear();
                     reusableHeaderMap.putAll(localHeaders);
                 }
 
-                // 回主线程执行 ExoPlayer 操作（ExoPlayer 必须在创建它的线程调用）
                 mHandler.post(() -> {
                     try {
                         ensurePlayerBoundToView();
-                        LogBridge.i(TAG, "🔴 [DEBUG-doPlayNormal] setMediaSource 前！player state=" + player.getPlaybackState());
                         player.setMediaSource(mediaSource, true);
-                        LogBridge.i(TAG, "🔴 [DEBUG-doPlayNormal] prepare 前！state=" + player.getPlaybackState());
                         player.prepare();
-                        LogBridge.i(TAG, "🔴 [DEBUG-doPlayNormal] prepare 后！state=" + player.getPlaybackState());
                         if (initialSeekPosition > 0) player.seekTo(initialSeekPosition);
-                        LogBridge.i(TAG, "🔴 [DEBUG-doPlayNormal] play() 前！state=" + player.getPlaybackState());
                         player.play();
-                        LogBridge.i(TAG, "🔴 [DEBUG-doPlayNormal] play() 后！state=" + player.getPlaybackState());
                         startStuckDetection();
                     } catch (Exception e) {
                         handleAsyncPlaybackError(e);
@@ -1999,27 +1830,11 @@ public class TVPlayerManager {
         }, "TVPlayer-Prepare-Normal").start();
     }
 
-    /**
-     * 🔴【路径H】虎牙源播放：完全独立的 UA / 重定向 / 防盗链
-     * - 浏览器 UA
-     * - Referer/Origin 强制注入
-     * - 解析器专用 headers（含 Cookie/签名）优先覆盖
-     * - 跨域重定向保留鉴权头（避免 302 后 403）
-     * - Cookie 与 WebView 同步
-     */
     private void doPlayHuya(String url, long initialSeekPosition) {
         LogBridge.d(TAG, "【虎牙源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
-        // 🔴【修复】不再清空 variantList！variantList 已在 playHuyaStream 中填充好，
-        // 包含所有线路×码率的清晰度选项，此处直接保留供 UI 使用。
-        // 之前的 variantList.clear() 会导致清晰度选择对话框为空。
-
-        // 🟢【优化】headers/Cookie/MediaSource 构建移入后台线程（同 doPlayNormal 优化）：
-        // NetUtil.getInstance() 懒初始化、CookieManager 访问、MediaSource 构建
-        // 均不依赖首帧前的 UI，移至后台避免阻塞主线程。
-        // 注意：mPendingPlaybackHeaders 在此处（主线程）快照并清空，后台线程只读快照。
-        final String channelName = currentChannelName; // 主线程捕获
-        final int roomId = mHuyaRoomId;               // 主线程捕获（用于 Referer）
+        final String channelName = currentChannelName;
+        final int roomId = mHuyaRoomId;
         final Map<String, String> pendingHeaders = mPendingPlaybackHeaders;
         mPendingPlaybackHeaders = null;
 
@@ -2031,34 +1846,31 @@ public class TVPlayerManager {
                 RedirectLoggingHttpDataSource.Factory httpFactory = new RedirectLoggingHttpDataSource.Factory();
                 httpFactory.setDebugLogEnabled(debugEnabled);
 
-                // 虎牙专属 headers：浏览器 UA + Referer + Origin（后台构建局部 map）
                 Headers globalHeaders = NetUtil.getInstance().createCommonHeaders(url);
                 Map<String, String> localHeaders = new HashMap<>();
                 for (String name : globalHeaders.names()) {
                     localHeaders.put(name, globalHeaders.get(name));
                 }
                 localHeaders.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
-                // 🔴【关键】Referer 必须是具体房间页 URL，主页 URL 会被 CDN 403
+
                 String huyaReferer = roomId > 0 ? "https://www.huya.com/" + roomId : "https://www.huya.com/";
                 localHeaders.put("Referer", huyaReferer);
-                // 🔴【移除 Origin】CDN 不期望非浏览器请求携带 Origin 头，可能导致 403
+
                 localHeaders.put("Accept", "*/*");
                 localHeaders.put("Accept-Language", "zh-CN,zh;q=0.9");
                 localHeaders.put("Accept-Encoding", "identity");
                 localHeaders.put("Connection", "keep-alive");
                 dLog("【虎牙源】已启用浏览器UA+Referer(" + huyaReferer + ") 防盗链头");
 
-                // 🔴【关键】SDK 返回的解析器专用头优先覆盖
-                // 这套 headers 的 UA/Referer/Origin/Cookie 与解析 PC 网页时完全一致
                 if (pendingHeaders != null && !pendingHeaders.isEmpty()) {
                     int cnt = 0;
                     for (Map.Entry<String, String> e : pendingHeaders.entrySet()) {
-                        // 🔴【跳过 Origin/Referer】Origin 触发 CDN 拦截；Referer 用房间页 URL 覆盖
+
                         if ("Origin".equalsIgnoreCase(e.getKey())) continue;
                         if ("Referer".equalsIgnoreCase(e.getKey())) continue;
                         localHeaders.put(e.getKey(), e.getValue());
                         cnt++;
-                        // 🔴【调试】打印每个 header 的名称和值前50字符
+
                         LogBridge.d(TAG, "  Header[" + e.getKey() + "] = " + e.getValue().substring(0, Math.min(50, e.getValue().length())));
                     }
                     LogBridge.d(TAG, "【虎牙源】解析器专用Headers注入 " + cnt + " 项(含Cookie="
@@ -2067,14 +1879,12 @@ public class TVPlayerManager {
                     LogBridge.d(TAG, "【虎牙源】mPendingPlaybackHeaders 为空，走默认虎牙 headers");
                 }
 
-                // Cookie 与 WebView 同步（仅当解析器未提供 Cookie 时）
                 boolean sendCookie = sp.getBoolean(KEY_REDIRECT_SEND_COOKIE, true);
                 if (sendCookie && !localHeaders.containsKey("Cookie")) {
                     String cookies = CookieManager.getInstance().getCookie(url);
                     if (cookies != null) localHeaders.put("Cookie", cookies);
                 }
 
-                // 同步写回共享 map（供 PlayerContract.getReusableHeaderMap 读取）
                 synchronized (reusableHeaderMap) {
                     reusableHeaderMap.clear();
                     reusableHeaderMap.putAll(localHeaders);
@@ -2082,7 +1892,7 @@ public class TVPlayerManager {
 
                 httpFactory.setDefaultRequestProperties(localHeaders);
                 httpFactory.setChannelName(channelName);
-                // 虎牙源强制启用跨域+跨协议+保留头重定向（防盗链要求）
+
                 httpFactory.setMaxRedirects(sp.getInt(KEY_REDIRECT_MAX_COUNT, 5))
                         .setAllowCrossDomainRedirects(true)
                         .setAllowCrossProtocolRedirects(true)
@@ -2099,7 +1909,6 @@ public class TVPlayerManager {
                     mediaSource = new ProgressiveMediaSource.Factory(httpFactory).createMediaSource(mediaItem);
                 }
 
-                // 回主线程执行 ExoPlayer 操作（ExoPlayer 非线程安全）
                 mHandler.post(() -> {
                     try {
                         ensurePlayerBoundToView();
@@ -2119,9 +1928,6 @@ public class TVPlayerManager {
         }, "TVPlayer-Prepare-Huya").start();
     }
 
-    /**
-     * 🟢【路径N】普通源主播放列表解析：普通 UA，标准重定向
-     */
     private void fetchAndParseMasterPlaylistNormal(String masterUrl) {
         if (isParsingMasterPlaylist) return;
         isParsingMasterPlaylist = true;
@@ -2180,10 +1986,6 @@ public class TVPlayerManager {
         });
     }
 
-    /**
-     * 🔴【路径H】虎牙源主播放列表解析：浏览器 UA + 防盗链头 + Cookie 同步
-     * 独立解析方法，与普通源完全分离
-     */
     private void fetchAndParseMasterPlaylistHuya(String masterUrl) {
         if (isParsingMasterPlaylist) return;
         isParsingMasterPlaylist = true;
@@ -2197,10 +1999,9 @@ public class TVPlayerManager {
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(5000);
                 connection.setReadTimeout(5000);
-                // 虎牙源手动处理重定向以保留鉴权头
+
                 connection.setInstanceFollowRedirects(false);
 
-                // 虎牙专属防盗链头
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
                 connection.setRequestProperty("Referer", "https://www.huya.com/");
                 connection.setRequestProperty("Origin", "https://www.huya.com");
@@ -2209,13 +2010,12 @@ public class TVPlayerManager {
                 connection.setRequestProperty("Accept-Encoding", "identity");
                 connection.setRequestProperty("Connection", "keep-alive");
 
-                // 优先使用解析器专用 headers（含签名 Cookie）
                 if (mPendingPlaybackHeaders != null && !mPendingPlaybackHeaders.isEmpty()) {
                     for (Map.Entry<String, String> e : mPendingPlaybackHeaders.entrySet()) {
                         connection.setRequestProperty(e.getKey(), e.getValue());
                     }
                 }
-                // Cookie 与 WebView 同步
+
                 String cookies = android.webkit.CookieManager.getInstance().getCookie(masterUrl);
                 if (cookies != null && !cookies.isEmpty()) {
                     connection.setRequestProperty("Cookie", cookies);
@@ -2236,14 +2036,10 @@ public class TVPlayerManager {
                     }
                     String playlist = content.toString();
                     LogBridge.d(TAG, "【虎牙源】主播放列表长度: " + playlist.length());
-                    // 🔴【修复】虎牙清晰度以 SDK 解析为准！
-                    // 虎牙 HLS 直接播放流（_NNNN.m3u8）拉取的内容是单码率媒体列表
-                    // （无 #EXT-X-STREAM-INF），parseMasterPlaylist 解析结果为空或仅含
-                    // 部分变体，会覆盖 SDK 解析出的完整 variantList，导致清晰度档位
-                    // 被逐步替换递减（4档→3档→1档）。这里只保留日志，不覆盖 variantList。
+
                 } else if (code == java.net.HttpURLConnection.HTTP_MOVED_TEMP
                         || code == java.net.HttpURLConnection.HTTP_MOVED_PERM) {
-                    // 手动处理重定向，保留鉴权头（关键防盗链要求）
+
                     String newUrl = connection.getHeaderField("Location");
                     LogBridge.d(TAG, "【虎牙源】手动重定向到: " + newUrl);
                     isParsingMasterPlaylist = false;
@@ -2252,7 +2048,7 @@ public class TVPlayerManager {
                         return;
                     }
                 } else {
-                    // 读取错误响应体
+
                     try (java.io.InputStream es = connection.getErrorStream()) {
                         if (es != null) {
                             StringBuilder err = new StringBuilder();
@@ -2267,12 +2063,11 @@ public class TVPlayerManager {
                         }
                     }
                     LogBridge.e(TAG, "【虎牙源】主播放列表请求失败: code=" + code);
-                    // 🔴【修复】不在此处清空 variantList：虎牙清晰度以 SDK 解析为准，
-                    // m3u8 请求失败不应清掉 SDK 解析出的完整清晰度列表。
+
                 }
             } catch (Exception e) {
                 LogBridge.e(TAG, "【虎牙源】解析主播放列表失败: ", e);
-                // 🔴【修复】同上：不在此处清空 variantList。
+
             } finally {
                 if (connection != null) {
                     try { connection.disconnect(); } catch (Exception ignored) {}
@@ -2355,9 +2150,6 @@ public class TVPlayerManager {
         return resolutions;
     }
 
-    /**
-     * 获取可用线路列表（用于线路切换 UI）
-     */
     public List<String> getAvailableLines() {
         List<String> lines = new ArrayList<>();
         Channel ch = getCurrentChannel();
@@ -2373,10 +2165,6 @@ public class TVPlayerManager {
         return lines;
     }
 
-    /**
-     * 切换到指定线路（按线路索引）
-     * @param lineIndex 0=主线路, 1+ = 备用线路索引
-     */
     public void switchToHuyaLine(int lineIndex) {
         Channel ch = getCurrentChannel();
         if (ch == null) return;
@@ -2399,9 +2187,6 @@ public class TVPlayerManager {
         }
     }
 
-    /**
-     * 根据 URL 查找对应的 huyaLineIndex
-     */
     private int findLineIndexByUrl(String url) {
         synchronized (variantListLock) {
             for (Variant v : variantList) {
@@ -2411,9 +2196,6 @@ public class TVPlayerManager {
         return -1;
     }
 
-    /**
-     * 重建 variantList：将指定线路的 variant 排在前面
-     */
     private void rebuildVariantListForLine(int lineIndex) {
         synchronized (variantListLock) {
             List<Variant> currentLine = new ArrayList<>();
@@ -2437,12 +2219,6 @@ public class TVPlayerManager {
         LogBridge.d(TAG, "【虎牙】切换到线路 " + lineIndex + ", 当前线路清晰度: " + getAvailableResolutions());
     }
 
-    /**
-     * 切换清晰度：
-     * - 与反编译版一致：在所有变体中查找（不限线路）
-     * - 优先按标签名精确匹配（"1080p高清"、"720p"等URL模式标签）
-     * - 匹配不上再按目标高度兜底
-     */
     public void switchToResolution(int targetHeight, String... matchLabelOpt) {
         List<Variant> snapshot;
         synchronized (variantListLock) {
@@ -2455,7 +2231,6 @@ public class TVPlayerManager {
         String matchLabel = (matchLabelOpt != null && matchLabelOpt.length > 0) ? matchLabelOpt[0] : null;
         Variant selected = null;
 
-        // 1) 按显示名精确匹配（所有变体中查找）
         if (!TextUtils.isEmpty(matchLabel)) {
             for (Variant v : snapshot) {
                 if (matchLabel.equals(v.getDisplayLabel())
@@ -2466,7 +2241,6 @@ public class TVPlayerManager {
             }
         }
 
-        // 2) 按高度兜底
         if (selected == null && targetHeight > 0) {
             for (Variant v : snapshot) {
                 if (v.height >= targetHeight) {
@@ -2479,7 +2253,7 @@ public class TVPlayerManager {
         if (selected == null) {
             selected = snapshot.get(0);
         }
-        // 切换到当前清晰度时保持默认线路的 Variant（避免重新 doPlay）
+
         currentResolutionLabel = selected.getDisplayLabel();
         dLog("切换清晰度到：" + selected.getDisplayLabel() + "，URL=" + (selected.url != null ? selected.url.substring(0, Math.min(60, selected.url.length())) : "(空)"));
         playUrlInternal(selected.url);
@@ -2684,16 +2458,7 @@ public class TVPlayerManager {
     }
 
     public void release() {
-        // 🔧【核心修复】黑屏Bug：原版 try-catch 把整个清理逻辑包在一起，
-        //    一旦 trackSelector.release() 抛 IllegalArgumentException
-        //    （Media3 1.7.1 + Android 14/15 SpatializerWrapperV32 已知问题），
-        //    后续的 instance = null 不会执行 → TVPlayerManager 单例残留半释放状态 →
-        //    重新打开应用时 getInstance() 返回旧实例，player/playerView/trackSelector
-        //    已为 null，无法正常初始化 → 黑屏。
-        //
-        // 修复策略：
-        //  1) instance = null 必须放在 finally，确保任何异常路径下都会清空单例引用
-        //  2) 每个资源清理步骤独立 try-catch，避免一个失败影响其他
+
         try {
             stopStuckDetection();
             cancelRetry();
@@ -2706,7 +2471,6 @@ public class TVPlayerManager {
                 LogBridge.w(TAG, "注销渲染方式广播异常: " + e.getMessage());
             }
 
-            // 清理子模块（每个独立 try-catch）
             if (decoderModeManager != null) {
                 try { decoderModeManager.release(); } catch (Exception e) {
                     LogBridge.w(TAG, "decoderModeManager.release 异常: " + e.getMessage());
@@ -2726,13 +2490,11 @@ public class TVPlayerManager {
                 huyaStreamPlayer = null;
             }
 
-            // 清理所有监听器（无副作用，直接置 null）
             onPlayerViewRecreatedListener = null;
             sourceFailedListener = null;
             liveInfoUpdateListener = null;
             listener = null;
 
-            // 清理Activity引用和SDK容器
             mActivity = null;
             if (mSdkPlayerContainer != null) {
                 try {
@@ -2742,7 +2504,6 @@ public class TVPlayerManager {
                 mSdkPlayerContainer = null;
             }
 
-            // 清理播放器（独立 try-catch 包裹 player.release）
             if (player != null) {
                 try {
                     if (playerListener != null) {
@@ -2764,69 +2525,50 @@ public class TVPlayerManager {
                 playerView = null;
             }
 
-            // 清理TrackSelector（重点修复：独立 try-catch 包裹，避免 IllegalArgumentException
-            // 破坏后续清理，导致 instance = null 不执行）
             if (trackSelector != null) {
                 try {
                     trackSelector.release();
                 } catch (Exception e) {
-                    // Media3 1.7.1 + Android 14/15 的 SpatializerWrapperV32 Bug，
-                    // 移除未注册的监听器抛 IllegalArgumentException。这里吞掉即可，
-                    // 不影响后续清理流程（instance = null 在 finally 保证执行）。
+
                     LogBridge.w(TAG, "trackSelector.release 异常（已吞掉，不影响清理）: " + e.getMessage());
                 }
                 trackSelector = null;
             }
 
-            // 清理健康检查器
             if (healthChecker != null) {
                 try { healthChecker.release(); }
                 catch (Exception e) { LogBridge.w(TAG, "healthChecker.release 异常: " + e.getMessage()); }
                 healthChecker = null;
             }
 
-            // 清空集合
             synchronized (variantListLock) {
                 variantList.clear();
             }
             reusableHeaderMap.clear();
 
-            // 清理UI组件
             channelNumberTextView = null;
             currentChannel = null;
             currentChannelName = "";
             currentUrl = null;
             mHuyaRoomId = -1;
 
-            // 清理Context引用
             context = null;
             sp = null;
         } catch (Exception e) {
-            // 顶层兜底：捕获任何漏网的异常，确保 finally 仍能执行
+
             LogBridge.e(TAG, "释放异常（顶层兜底）", e);
         } finally {
-            // 🔧【核心修复】必须放在 finally，确保即使中途异常，
-            //    TVPlayerManager 单例引用也会被清空，下次 getInstance() 会重建。
-            //    这是修复"按返回退出再重开应用黑屏"的关键。
+
             instance = null;
         }
     }
 
-    /**
-     * 关闭静态线程池（应用真正退出时调用）。
-     * 注意：只在本方法被显式调用时才真正关闭；Activity onDestroy 不会调用它，
-     * 因为进程可能未死，重开应用后仍需线程池解析播放列表。
-     */
     public static void shutdownThreadPool() {
         if (sPlaylistExecutor != null && !sPlaylistExecutor.isShutdown()) {
             sPlaylistExecutor.shutdownNow();
         }
     }
 
-    /**
-     * 确保静态线程池存活；若已被意外关闭则重建，避免重开应用后
-     * 播放器无法解析播放列表导致黑屏。
-     */
     private static ExecutorService ensurePlaylistExecutor() {
         if (sPlaylistExecutor == null || sPlaylistExecutor.isShutdown()) {
             synchronized (TVPlayerManager.class) {

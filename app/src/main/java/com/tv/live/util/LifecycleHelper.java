@@ -1,6 +1,5 @@
 package com.tv.live.util;
 
-
 import com.tv.live.util.LogBridge;
 import android.app.Activity;
 import android.app.Dialog;
@@ -13,10 +12,6 @@ import com.tv.live.TVPlayerManager;
 
 import java.lang.ref.WeakReference;
 
-/**
- * 生命周期辅助类
- * 封装 Activity 生命周期相关的资源清理逻辑
- */
 public class LifecycleHelper {
     private final WeakReference<Activity> activityRef;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -95,9 +90,6 @@ public class LifecycleHelper {
         mainHandler.removeCallbacksAndMessages(null);
     }
 
-    /**
-     * 释放所有资源
-     */
     public void releaseAll() {
         if (isDestroyed) return;
         isDestroyed = true;
@@ -142,10 +134,6 @@ public class LifecycleHelper {
 
         releaseManager(playerManager);
         playerManager = null;
-
-        // 🔧 修复：不在 releaseAll 关闭静态线程池，避免按返回退出再重开应用时
-        // 播放列表无法解析导致黑屏；线程池应随进程生命周期存活
-        // TVPlayerManager.shutdownThreadPool();
 
         Activity activity = activityRef.get();
         if (activity != null && unlockReceiver != null) {

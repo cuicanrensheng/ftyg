@@ -19,10 +19,8 @@ public class LogCollector {
     private final List<LogListener> listeners;
     private final List<DeviceInfoProvider> deviceInfoProviders;
 
-    // 🟢【新增】分割线特殊标记符
     public static final String DIVIDER_TOKEN = "###DIVIDER###";
 
-    // 日志类型常量
     public static final String TYPE_INFO = "info";
     public static final String TYPE_WARN = "warn";
     public static final String TYPE_ERROR = "error";
@@ -32,18 +30,17 @@ public class LogCollector {
     public static final String TYPE_PARSE = "parse";
     public static final String TYPE_PLAYBACK = "playback";
     public static final String TYPE_OPERATION = "operation";
-    
-    // 不应上报到Bugly的日志关键词（防止正常日志误报）
+
     private static final String[] NON_REPORTABLE_KEYWORDS = {
         "success", "GetLivingInfo", "GetLivingInfoRsp",
         "SDK-Auk", "BerryEvent", "CustomUI",
         "onResultCallback", "playUrl", "stream",
-        // 反调试相关 - 这些是安全检测的正常行为，不应作为崩溃上报
-        "检测到调试", "检测到可疑环境", "检测到模拟器", 
+
+        "检测到调试", "检测到可疑环境", "检测到模拟器",
         "检测到usb调试", "检测到模拟位置", "检测到root",
         "应用可能被逆向", "反调试检测", "安全检测发现风险",
         "安全检查未通过", "降级运行", "篡改",
-        // 网络相关 - 网络波动是外部问题
+
         "连接超时", "超时", "timeout",
         "404 not found", "http 404", "失败: http"
     };
@@ -162,16 +159,12 @@ public class LogCollector {
         addLogInternal(tag, msg, type, true);
     }
 
-    /**
-     * 仅写入缓冲 + logcat，不触发 Bugly 自动上报。
-     * 供 LogBridge 批量桥接使用，避免把普通日志误报成异常。
-     */
     public void addLogNoReport(String tag, String msg, String type) {
         addLogInternal(tag, msg, type, false);
     }
 
     private void addLogInternal(String tag, String msg, String type, boolean autoReport) {
-        // 超长日志截断：防止单条超长日志（如频道名拼接）占用大量缓冲空间
+
         if (msg != null && msg.length() > 500) {
             msg = msg.substring(0, 500) + "...[已截断]";
         }
@@ -196,8 +189,6 @@ public class LogCollector {
         }
         notifyListeners(entry);
 
-        // 自动上报 ERROR 和 CRASH 类型日志到 Bugly（用于监控）
-        // 过滤掉不应该上报的日志（如SDK成功日志、网络状态等）
         if (autoReport && (TYPE_ERROR.equals(type) || TYPE_CRASH.equals(type))) {
             if (shouldReportToBugly(msg)) {
                 try {
@@ -207,13 +198,12 @@ public class LogCollector {
                             new RuntimeException(msg != null ? msg : "Unknown error"));
                 } catch (Throwable ignored) {}
             } else {
-                // 过滤掉的日志仍记录到 logcat，但不上报Bugly
-                android.util.Log.w("LogCollector", "日志已过滤不上报Bugly: " + 
+
+                android.util.Log.w("LogCollector", "日志已过滤不上报Bugly: " +
                     (msg != null ? msg.substring(0, Math.min(100, msg.length())) : ""));
             }
         }
 
-        // 同时写入 Android logcat，确保 ADB 也能抓取到
         try {
             String logTag = TextUtils.isEmpty(tag) ? "TVLive" : tag;
             switch (type) {
@@ -248,8 +238,6 @@ public class LogCollector {
         } catch (Throwable ignored) {}
     }
 
-    // 仅上报真实异常到 Bugly（由调用方直接调用 reportCrashToBugly）
-
     public void info(String tag, String msg) { addLog(tag, msg, TYPE_INFO); }
     public void warn(String tag, String msg) { addLog(tag, msg, TYPE_WARN); }
     public void error(String tag, String msg) { addLog(tag, msg, TYPE_ERROR); }
@@ -268,70 +256,53 @@ public class LogCollector {
         }
     }
     public void network(String tag, String msg) {
-        // 网络日志仅调试版记录
+
         if (BuildConfig.IS_DEBUG) {
             addLog(tag, msg, TYPE_NETWORK);
         }
     }
     public void parse(String tag, String msg) {
-        // 解析日志仅调试版记录
+
         if (BuildConfig.IS_DEBUG) {
             addLog(tag, msg, TYPE_PARSE);
         }
     }
     public void playback(String tag, String msg) {
-        // 播放日志仅调试版记录
+
         if (BuildConfig.IS_DEBUG) {
             addLog(tag, msg, TYPE_PLAYBACK);
         }
     }
     public void operation(String tag, String msg) { addLog(tag, msg, TYPE_OPERATION); }
 
-    // ============== 运营统计事件上报 ==============
-    
-    /**
-     * 上报页面访问事件（运营统计）
-     */
     public void trackPageView(String pageName) {
         try {
             BuglyLogSender.reportPageViewSafely(pageName);
         } catch (Throwable ignored) {}
         operation("PageView", pageName);
     }
-    
-    /**
-     * 上报功能使用事件（运营统计）
-     */
+
     public void trackFeatureUse(String featureName, String detail) {
         try {
             BuglyLogSender.reportFeatureUseSafely(featureName, detail);
         } catch (Throwable ignored) {}
         operation("FeatureUse", featureName + (detail != null ? ": " + detail : ""));
     }
-    
-    /**
-     * 上报自定义统计事件
-     */
+
     public void trackEvent(String eventName, java.util.Map<String, String> params) {
         try {
             BuglyLogSender.reportEventSafely(eventName, params);
         } catch (Throwable ignored) {}
         operation("TrackEvent", eventName);
     }
-    
-    /**
-     * 上报播放开始事件
-     */
+
     public void trackPlayStart(String channelName) {
         java.util.Map<String, String> params = new java.util.HashMap<>();
         params.put("channel", channelName != null ? channelName : "unknown");
         params.put("action", "start");
         trackEvent("playback", params);
     }
-    
-    /**
-     * 上报播放结束事件
-     */
+
     public void trackPlayEnd(String channelName, long durationMs) {
         java.util.Map<String, String> params = new java.util.HashMap<>();
         params.put("channel", channelName != null ? channelName : "unknown");
@@ -339,20 +310,14 @@ public class LogCollector {
         params.put("duration_ms", String.valueOf(durationMs));
         trackEvent("playback", params);
     }
-    
-    /**
-     * 上报频道选择事件
-     */
+
     public void trackChannelSelect(String channelName, int position) {
         java.util.Map<String, String> params = new java.util.HashMap<>();
         params.put("channel", channelName != null ? channelName : "unknown");
         params.put("position", String.valueOf(position));
         trackEvent("channel_select", params);
     }
-    
-    /**
-     * 上报搜索事件
-     */
+
     public void trackSearch(String keyword, int resultCount) {
         java.util.Map<String, String> params = new java.util.HashMap<>();
         params.put("keyword", keyword != null ? keyword : "");
@@ -399,31 +364,26 @@ public class LogCollector {
             } catch (Exception ignored) {}
         }
     }
-    
-    /**
-     * 判断日志是否应该上报到Bugly
-     * 过滤掉SDK内部状态日志、成功日志等
-     */
+
     private static boolean shouldReportToBugly(String msg) {
         if (msg == null || msg.isEmpty()) return false;
-        
+
         String lowerMsg = msg.toLowerCase();
-        
-        // 检查是否包含不应上报的关键词
+
         for (String keyword : NON_REPORTABLE_KEYWORDS) {
             if (lowerMsg.contains(keyword.toLowerCase())) {
-                // 包含"success"但也包含"error"/"fail"的仍然需要上报
+
                 if (keyword.equals("success")) {
-                    if (lowerMsg.contains("error") || lowerMsg.contains("fail") || 
+                    if (lowerMsg.contains("error") || lowerMsg.contains("fail") ||
                         lowerMsg.contains("exception") || lowerMsg.contains("crash")) {
                         return true;
                     }
                 }
-                // 其他关键词直接过滤
+
                 return false;
             }
         }
-        
+
         return true;
     }
 }

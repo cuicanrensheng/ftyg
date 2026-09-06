@@ -37,7 +37,7 @@ public class AppCoreManager {
     private CacheManager cacheManager;
 
     private List<Channel> channelSourceList = new ArrayList<>();
-    private final Object channelListLock = new Object(); // 读写锁
+    private final Object channelListLock = new Object();
 
     private boolean hasPlayedWithCache = false;
     private Handler timeoutHandler = new Handler(Looper.getMainLooper());
@@ -84,7 +84,6 @@ public class AppCoreManager {
         return (existing != null) ? existing : new ArrayList<>();
     }
 
-    // ========== 1. 直播源 & EPG 加载 ==========
     public void loadLiveAndEpg() {
         log("【直播源】开始加载直播源...");
         isLoading = true;
@@ -99,7 +98,7 @@ public class AppCoreManager {
                 if (dataLoadListener != null) {
                     dataLoadListener.onLoadTimeout(hasData);
                 }
-                // 🟢 首次秒开：超时不停止后台加载，仅把 isLoading 置为 false 避免重复回调
+
                 isLoading = false;
             }
         }, LOAD_TIMEOUT);
@@ -124,8 +123,6 @@ public class AppCoreManager {
             }
         }
 
-        // 🟢 首次打开直接出画面：无缓存时也立即回调 onLiveSourceLoaded(空列表)，
-        //    让 MainActivity 立刻完成UI初始化（频道面板/播放器框架），避免黑屏等待
         if (!cacheHit && dataLoadListener != null) {
             dataLoadListener.onLiveSourceLoaded(new ArrayList<Channel>(), true);
             log("【缓存】无缓存，立即渲染空UI，后台继续网络加载");
@@ -140,27 +137,23 @@ public class AppCoreManager {
                 synchronized (channelListLock) {
                     channelSourceList = ensureChannelListNotNull(channelSourceList);
                     if (safeChannels.isEmpty()) {
-                        // 🔧 网络加载但返回 0 条频道 → 视为「源地址失效/404/返回空内容」。
-                        //   原本如果 channelSourceList 非空，会继续走 mergeChannels(safeChannels)，
-                        //   结果 merge 后仍然保留上一个源的缓存列表 → UI 显示上一个源的频道，
-                        //   用户误以为「切换按钮点了没生效」。正确行为：清空列表并回调失败。
+
                         channelSourceList.clear();
                     } else if (channelSourceList.isEmpty()) {
                         channelSourceList.addAll(safeChannels);
                     } else {
-                        // 只有 network 真正返回了有效频道数才做 merge，避免用空数据污染已有的缓存列表。
+
                         mergeChannels(safeChannels);
                     }
                 }
                 timeoutHandler.removeCallbacksAndMessages(null);
-                // 防止超时后再次回调
+
                 boolean firstTime = isLoading;
                 isLoading = false;
                 if (dataLoadListener != null) {
-                    // 即使已超时，只要列表真正加载成功就再回调一次刷新UI和播放
+
                     dataLoadListener.onLiveSourceLoaded(safeChannels, false);
-                    // 🔧 如果网络返回空频道数，额外回调 onLiveSourceFailed，让 MainActivity 弹 Toast 提示用户
-                    // （之前的代码只有 HTTP/IO 异常才 onFailed，"解析0条"被当成 onSuccess，用户毫无感知）
+
                     if (safeChannels.isEmpty()) {
                         dataLoadListener.onLiveSourceFailed("直播源返回 0 个频道，地址可能已失效或暂时不可达");
                     }
@@ -190,33 +183,24 @@ public class AppCoreManager {
         });
     }
 
-    /**
-     * 🟢【并行加载优化】从直播源列表中提取所有虎牙房间号，交给 HuyaSDKParser.preloadRooms()。
-     * 预解析与直播源显示/健康检测/EPG加载 完全并行，用户点击虎牙频道时 90%+ 命中缓存，瞬时播放。
-     *
-     * 收集策略：
-     *   - 优先 channel.getHuyaRoomId() > 0（Channel 对象自带，准确率最高）
-     *   - 其次 huya://room/xxx 协议 URL
-     *   - 最后 huya.com/纯数字 房间 URL
-     */
     private void collectAndPreloadHuyaRooms(List<Channel> channels, String source) {
         if (channels == null || channels.isEmpty()) return;
         try {
             java.util.ArrayList<Integer> roomIds = new java.util.ArrayList<>();
             java.util.regex.Pattern huyaProtocol = java.util.regex.Pattern.compile("huya://room/(\\d+)");
-            // 🟢 修复正则：扩展到 m.huya.com / huya.com / 带查询参数?xxx 的场景
+
             java.util.regex.Pattern huyaHttpRoom = java.util.regex.Pattern.compile("(?:m\\.|www\\.)?huya\\.com/(\\d+)(?:[?#/].*)?$");
             java.util.regex.Pattern huyaProfileId = java.util.regex.Pattern.compile("profileRoom=(\\d+)");
             java.util.regex.Pattern huyaRoomIdInUrl = java.util.regex.Pattern.compile("[?&]roomId=(\\d+)");
             for (Channel ch : channels) {
                 if (ch == null) continue;
                 boolean added = false;
-                // 1) 一起看专用字段（最准）
+
                 if (ch.getHuyaRoomId() > 0) {
                     roomIds.add(ch.getHuyaRoomId());
                     continue;
                 }
-                // 2) 主/备 URL 扫描
+
                 java.util.List<String> urls = new java.util.ArrayList<>();
                 if (!TextUtils.isEmpty(ch.getMainPlayUrl())) urls.add(ch.getMainPlayUrl());
                 if (ch.getBackupUrls() != null) urls.addAll(ch.getBackupUrls());
@@ -302,11 +286,6 @@ public class AppCoreManager {
             String line = rawLine == null ? "" : rawLine.trim();
             if (line.isEmpty()) continue;
 
-            // ============================================================
-            // ✅ 格式 A：DIYP TXT（本地666源格式）
-            //   1) 央卫,#genre#   → 切换分组
-            //   2) CCTV-1,http://...  → 频道条目 + 同名多源合并
-            // ============================================================
             if (line.endsWith(",#genre#") || line.endsWith("#genre#")) {
                 String group = line;
                 if (group.endsWith(",#genre#")) {
@@ -324,7 +303,7 @@ public class AppCoreManager {
 
             int httpIdx = line.indexOf("http://");
             if (httpIdx < 0) httpIdx = line.indexOf("https://");
-            // DIYP 频道行：「频道名,http://...」—— http 前面必须有逗号
+
             if (httpIdx > 1) {
                 int diypComma = line.lastIndexOf(',', httpIdx - 1);
                 if (diypComma > 0) {
@@ -339,13 +318,10 @@ public class AppCoreManager {
                 }
             }
 
-            // ============================================================
-            // 格式 B：标准 M3U (#EXTINF / group-title / tvg-id)
-            // ============================================================
             if (line.startsWith("#EXTINF:")) {
                 currentName = "";
                 currentTvgId = "";
-                // 保留之前的分组默认（#EXTINF 无 group-title 时沿用）
+
                 int commaIndex = line.indexOf(",");
                 if (commaIndex > 0 && commaIndex < line.length() - 1) {
                     currentName = line.substring(commaIndex + 1).trim();
@@ -369,11 +345,10 @@ public class AppCoreManager {
             }
 
             if (line.startsWith("#")) {
-                // 其他 M3U 注释/标记（非 #EXTINF）不触发 URL 匹配
+
                 continue;
             }
 
-            // 非注释行
             if (pendingM3uUri && line.startsWith("http")) {
                 String playUrl = line;
                 if (!TextUtils.isEmpty(currentName)) {
@@ -384,7 +359,6 @@ public class AppCoreManager {
                 continue;
             }
 
-            // 兜底：裸 URL（没分组、没#EXTINF，一行就是 URL）→ 丢未分类
             if (!pendingM3uUri && line.startsWith("http")) {
                 mergeChannelInto(channelMap, line, line, currentGroup, "");
             }
@@ -392,7 +366,6 @@ public class AppCoreManager {
         return new ArrayList<>(channelMap.values());
     }
 
-    /** parseLiveSource 内部用：同名合并备用源、不同名新建条目 */
     private static void mergeChannelInto(Map<String, Channel> channelMap,
                                          String name, String uri,
                                          String group, String tvgId) {
@@ -443,7 +416,6 @@ public class AppCoreManager {
         }
     }
 
-    // ========== 2. 广播管理 ==========
     public void registerReceivers() {
         if (receiversRegistered) return;
         toggleControllerReceiver = new BroadcastReceiver() {
@@ -530,7 +502,6 @@ public class AppCoreManager {
 
     public boolean isControllerVisible() { return isControllerVisible; }
 
-    // ========== 3. 生命周期 ==========
     public boolean onPause() {
         if (isOpeningSettings) return false;
         if (playerManager != null) {
@@ -586,7 +557,6 @@ public class AppCoreManager {
         }
     }
 
-    // ========== 4. 源失效自动切台 ==========
     public void setOnSourceSkipListener(OnSourceSkipListener listener) {
         this.sourceSkipListener = listener;
     }

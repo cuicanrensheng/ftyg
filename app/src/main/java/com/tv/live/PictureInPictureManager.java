@@ -31,7 +31,7 @@ public class PictureInPictureManager {
     private boolean isPipEntering = false;
     private boolean onStopCalled = false;
     private boolean isReturnFromBackgroundPip = false;
-    
+
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private OnPipListener listener;
@@ -234,7 +234,7 @@ public class PictureInPictureManager {
                                PlayerView playerView) {
         try {
             hideAllUi(channelPanelController, infoDisplayManager);
-            
+
             if (playerView != null) {
                 playerView.setUseController(false);
             }
@@ -269,18 +269,18 @@ public class PictureInPictureManager {
                     try {
                         playerView.requestLayout();
                         keepPlaying(playerManager, playerView, channelSourceList, currentPlayIndex);
-                        
+
                         mainHandler.postDelayed(() -> {
                             if (activity != null && !activity.isFinishing()) {
                                 restoreGestureAndChannelSwitch(activity);
                             }
                         }, 100);
-                        
+
                     } catch (Exception ignored) {}
                 }, 300);
             }
 
-            if (infoDisplayManager != null && channelSourceList != null 
+            if (infoDisplayManager != null && channelSourceList != null
                     && currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size()) {
                 Channel currChannel = channelSourceList.get(currentPlayIndex);
                 TVPlayerManager.LiveInfo liveInfo = (playerManager != null) ? playerManager.getLiveInfo() : null;
@@ -298,13 +298,13 @@ public class PictureInPictureManager {
     private void restoreGestureAndChannelSwitch(Activity activity) {
         try {
             if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-            
+
             if (interactionRestoreListener != null) {
                 interactionRestoreListener.onRestoreLandscapeUi();
                 interactionRestoreListener.onRestoreGesture();
                 interactionRestoreListener.onRestoreChannelSwitch();
             }
-            
+
             if (activity.getWindow() != null) {
                 activity.getWindow().getDecorView().setFocusable(true);
                 activity.getWindow().getDecorView().setFocusableInTouchMode(true);
@@ -342,7 +342,7 @@ public class PictureInPictureManager {
             }
         } catch (Exception e) {
             try {
-                if (channelSourceList != null && currentPlayIndex >= 0 
+                if (channelSourceList != null && currentPlayIndex >= 0
                         && currentPlayIndex < channelSourceList.size()) {
                     Channel channel = channelSourceList.get(currentPlayIndex);
                     if (channel != null && channel.getPlayUrl() != null) {

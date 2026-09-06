@@ -1,6 +1,5 @@
 package com.tv.live;
 
-
 import com.tv.live.util.LogBridge;
 import android.text.Html;
 import android.text.Spannable;
@@ -55,20 +54,20 @@ public class SettingsDialog extends android.app.Dialog {
     private TextView tv_channel_line;
     private TextView tv_resolution_status;
     private View itemResolution;
-    
+
     private View itemExitDialog;
     private TextView tv_exit_dialog_status;
 
     private View itemVersionInfo;
     private TextView tv_version_short;
-    
+
     private LinearLayout itemLiveSubscribe, itemEpgSubscribe;
-    
+
     private TextView tv_background_status;
-    
+
     private SharedPreferences sp;
     private ScrollView scrollView;
-    
+
     private BootStartManager bootStartManager;
     private SourceDialogManager sourceDialogManager;
     private QRCodeManager qrCodeManager;
@@ -76,7 +75,7 @@ public class SettingsDialog extends android.app.Dialog {
     private SettingsDialogHelper dialogHelper;
     private static final int WEB_SERVER_PORT = 10481;
     private String currentWebUrl;
-    
+
     private static final String KEY_CUSTOM_LIVE = "custom_live_url";
     private static final String KEY_CUSTOM_EPG = "custom_epg_url";
     private static final String KEY_REDIRECT_MAX_COUNT = "redirect_max_count";
@@ -124,10 +123,10 @@ public class SettingsDialog extends android.app.Dialog {
         }
 
         setContentView(R.layout.activity_settings);
-        
+
         View viewOutside = findViewById(R.id.view_outside);
         viewOutside.setOnClickListener(v -> dismiss());
-        
+
         sp = getContext().getSharedPreferences("app_settings", android.content.Context.MODE_PRIVATE);
         initRedirectDefaultConfig();
         dialogHelper = new SettingsDialogHelper(getContext());
@@ -144,7 +143,7 @@ public class SettingsDialog extends android.app.Dialog {
         tv_screen_ratio = findViewById(R.id.tv_screen_ratio);
         tv_boot_status = findViewById(R.id.tv_boot_status);
         scrollView = findViewById(R.id.settings_content);
-        
+
         itemResolution = findViewById(R.id.item_resolution);
         tv_resolution_status = findViewById(R.id.tv_resolution_status);
 
@@ -153,21 +152,21 @@ public class SettingsDialog extends android.app.Dialog {
 
         itemVersionInfo = findViewById(R.id.item_version_info);
         tv_version_short = findViewById(R.id.tv_version_short);
-        
+
         tv_background_status = findViewById(R.id.tv_background_status);
         applyPanelBackgroundForSettings();
-        
+
         bootStartManager = new BootStartManager(getContext(), sp);
         sourceDialogManager = new SourceDialogManager(getContext(), sp);
         qrCodeManager = new QRCodeManager(getContext());
         webServerManager = new WebServerManager(getContext(), WEB_SERVER_PORT);
-        
+
         itemLiveSubscribe = findViewById(R.id.item_live_subscribe);
         itemEpgSubscribe = findViewById(R.id.item_epg_subscribe);
 
         sw_boot.setChecked(sp.getBoolean("boot_auto_start", false));
         bootStartManager.updateBootStatusText(tv_boot_status);
-        // 点击自启状态文本可查看状态详情（设备/系统/自启条件诊断）
+
         tv_boot_status.setOnClickListener(v -> bootStartManager.showBootStatusDialog());
         sw_reverse.setChecked(sp.getBoolean("channel_reverse", false));
         sw_pip.setChecked(sp.getBoolean("pip_enable", false));
@@ -177,7 +176,7 @@ public class SettingsDialog extends android.app.Dialog {
         String rendererMode = sp.getString("renderer_type", "surface");
         updateRendererModeText(rendererMode);
         updateRedirectSettingText();
-        
+
         TVPlayerManager playerManager = TVPlayerManager.getInstance(getContext());
         Channel currentChannel = playerManager.getCurrentChannel();
         String savedRes = "";
@@ -229,7 +228,6 @@ public class SettingsDialog extends android.app.Dialog {
         }
     }
 
-    // ===== 以下为原有菜单代码，保持不变 =====
     private void initSettingsItemList() {
         View[] items = {
             findViewById(R.id.item_boot),
@@ -298,14 +296,14 @@ public class SettingsDialog extends android.app.Dialog {
 
         items[0].setSelected(true);
         setChildTextViewsBold(items[0], true);
-        
+
         if (scrollView != null) {
             scrollView.setFocusable(false);
             scrollView.setFocusableInTouchMode(false);
             scrollView.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
             scrollView.scrollTo(0, 0);
         }
-        
+
         mainHandler.postDelayed(() -> {
             items[0].requestFocus();
             LogBridge.d("Settings", "First item focused");
@@ -751,7 +749,7 @@ public class SettingsDialog extends android.app.Dialog {
                 TextView tv = view.findViewById(android.R.id.text1);
                 tv.setTextSize(16);
                 tv.setPadding(16, 16, 16, 16);
-                
+
                 if (position == selectedPos) {
                     tv.setTextColor(0xFF40A9FF);
                     view.setBackgroundColor(0x3340A9FF);
@@ -767,7 +765,7 @@ public class SettingsDialog extends android.app.Dialog {
                 notifyDataSetChanged();
             }
         }
-        
+
         CustomAdapter adapter = new CustomAdapter(getContext(), items, checkedItem);
         listView.setAdapter(adapter);
         listView.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
@@ -831,7 +829,7 @@ public class SettingsDialog extends android.app.Dialog {
         layout.setPadding(24, 24, 24, 24);
 
         layout.addView(titleView);
-        // 根据选项数量自适应高度，上限为屏幕70%，避免电视上子窗口偶发字体/选项被截断
+
         int itemHeightPx = (int) (55 * getContext().getResources().getDisplayMetrics().density);
         int wantH = itemHeightPx * items.length + 32;
         int maxH = (int) (getContext().getResources().getDisplayMetrics().heightPixels * 0.7f);
@@ -868,10 +866,9 @@ public class SettingsDialog extends android.app.Dialog {
         String prefKey = "channel_line_index_" + channelKey;
         int currentLineIndex = sp.getInt(prefKey, 0);
 
-        // 使用 playerManager.getAvailableLines() 获取线路列表（含 SDK 线路名）
         List<String> lineList = playerManager.getAvailableLines();
         if (lineList.isEmpty()) {
-            // 兜底：从 Channel 直接构建
+
             lineList.add("主源");
             List<String> labels = currentChannel.getHuyaLineLabels();
             List<String> backups = currentChannel.getBackupUrls();
@@ -882,7 +879,6 @@ public class SettingsDialog extends android.app.Dialog {
             }
         }
 
-        // 限幅
         if (currentLineIndex >= lineList.size()) currentLineIndex = 0;
 
         String[] lineArray = lineList.toArray(new String[0]);
@@ -893,11 +889,11 @@ public class SettingsDialog extends android.app.Dialog {
             tv_channel_line.setText(lineArray[which]);
 
             if (playerManager != null && currentChannel != null) {
-                // 如果是虎牙频道，使用 switchToHuyaLine 进行完整切换（含清晰度联动）
+
                 if (playerManager.isHuyaSource(currentChannel.getMainPlayUrl())) {
                     playerManager.switchToHuyaLine(which);
                 } else {
-                    // 普通源：直接切换 URL
+
                     String playUrl;
                     if (which == 0) {
                         playUrl = currentChannel.getMainPlayUrl();
@@ -995,12 +991,10 @@ public class SettingsDialog extends android.app.Dialog {
                 try {
                     targetHeight = Integer.parseInt(selectedLabel.replace("p", ""));
                 } catch (Exception ignored) {
-                    // 虎牙 SDK 的显示名如"蓝光4M"、"超清2M"不是数字，
-                    // 此时 targetHeight=0，switchToResolution 会直接按 label 精确匹配。
+
                 }
             }
 
-            // 优先按显示名精确匹配（虎牙"蓝光4M"等），匹配不上再按高度兜底
             playerManager.switchToResolution(targetHeight, selectedLabel);
             if (currentChannel != null) {
                 String channelKey = currentChannel.getChannelId();
@@ -1067,11 +1061,11 @@ public class SettingsDialog extends android.app.Dialog {
             String selectedMode = modeValues[which];
             sp.edit().putString("renderer_type", selectedMode).apply();
             updateRendererModeText(selectedMode);
-            
+
             Intent intent = new Intent("com.tv.live.RENDERER_TYPE_CHANGED");
             intent.setPackage(getContext().getPackageName());
             getContext().sendBroadcast(intent);
-            
+
             Toast.makeText(getContext(), "已切换到" + modes[which] + "，正在应用……", Toast.LENGTH_SHORT).show();
         });
     }
@@ -1128,7 +1122,7 @@ public class SettingsDialog extends android.app.Dialog {
             if (tvDialogTitle != null) tvDialogTitle.setText(title);
             if (llScanHeader != null) llScanHeader.setVisibility(View.VISIBLE);
             if (ivQrCode != null) ivQrCode.setVisibility(View.VISIBLE);
-            
+
             com.tv.live.util.AppExecutors.io(() -> {
                 Bitmap qrBitmap = null;
                 try {
@@ -1165,7 +1159,7 @@ public class SettingsDialog extends android.app.Dialog {
                     lvSourceList.requestFocus();
                     return true;
                 } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    // 输入框1 已在最左，无更左目标
+
                     return true;
                 } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     etUrl.requestFocus();
@@ -1183,7 +1177,7 @@ public class SettingsDialog extends android.app.Dialog {
                     etName.requestFocus();
                     return true;
                 } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    // 输入框2 按右键进入垃圾桶按钮
+
                     btnClear.requestFocus();
                     return true;
                 }
@@ -1193,27 +1187,17 @@ public class SettingsDialog extends android.app.Dialog {
 
         int currentDefault = sourceManager.indexOfUrl(sourceManager.getDefaultUrl());
         SubscriptionAdapter adapter = new SubscriptionAdapter(getContext(), sources);
-        // 🔧 不要在这里过早调用 adapter.setSelectedPosition(currentDefault)：
-        //  此时 listViewRef 还没 set（adapter.setListView 没调用），
-        //  listView 也还没 setAdapter → setSelectedPosition 什么都做不了，
-        //  后面 setAdapter 后第一次 layout 的所有 getView 里 activated/selected 都不会被写。
-        //  正确位置：setAdapter + setListView 之后立即调用（见下文）。
 
         adapter.setOnActionListener(new SubscriptionAdapter.OnActionListener() {
             @Override
             public void onSwitch(int position) {
-                // 🔧 诊断：确认 onSwitch 回调有没有被触发（最粗日志，Log.e 保证能在 logcat 里看到）
+
                 SourceManager.SourceItem pickedDiagnose = (position >= 0 && position < sources.size()) ? sources.get(position) : null;
                 LogBridge.e("SUBSCRIPTION", "onSwitch called: position=" + position
                     + " | pickedName=" + (pickedDiagnose != null ? pickedDiagnose.name : "null")
                     + " | pickedUrl=" + (pickedDiagnose != null ? pickedDiagnose.url : "null")
                     + " | spKey=" + spKey);
-                // 🔧 修复：切源后关闭重开又回源1。
-                //   - 先用 position 从「当前 adapter 的 sources」取到用户选中那项的 name+url 快照；
-                //   - 再用 sourceManager.getAllSources() 取最新经过去重合并后的列表；
-                //   - 用 name+url 双匹配定位真实索引 realPos；
-                //   - 最后 sourceManager.setDefault(realPos) 持久化。
-                //   避免 sources 与 getAllSources 顺序/数量不一致导致把「源1」错当「源3」写 isDefault=true。
+
                 if (position < 0 || position >= sources.size()) return;
                 SourceManager.SourceItem picked = sources.get(position);
 
@@ -1226,29 +1210,24 @@ public class SettingsDialog extends android.app.Dialog {
                     }
                 }
                 if (realPos < 0) {
-                    // URL 匹配不到（例如 URL 还没解密的空值占位），按名称兜底定位
+
                     for (int i = 0; i < latest.size(); i++) {
                         SourceManager.SourceItem si = latest.get(i);
                         if (si != null && TextUtils.equals(si.name, picked.name)) { realPos = i; break; }
                     }
                 }
                 if (realPos < 0) {
-                    // 再兜底：越界就返回，避免改错默认源
+
                     if (position < 0 || position >= latest.size()) return;
                     realPos = position;
                 }
                 sourceManager.setDefault(realPos);
 
-                // 🔧 修复：清除网页推送/快速切换遗留的 custom_live_url / custom_epg_url
-                // 否则 AppCoreManager.refreshReceiver 会优先读取 custom_*_url 而非 SourceManager 默认源，
-                // 导致用户在订阅列表切换的源被完全忽略（表现：切换后无任何反应）
                 SharedPreferences appSp = getContext().getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                 if ("live_history".equals(spKey)) {
                     appSp.edit().remove("custom_live_url").apply();
                     UrlConfig.LIVE_URL = latest.get(realPos).url;
-                    // 注意：LiveSourceLoader/TvEventBus/EpgSourceChangedEvent 在 com.tv.live.manager 包下，
-                    // 此处只赋值 UrlConfig 并发送广播，由 MainActivity/AppCoreManager 的 refreshReceiver
-                    // 去完成实际的重载，避免 SettingsDialog 引入过多依赖。
+
                 } else if ("epg_history".equals(spKey)) {
                     appSp.edit().remove("custom_epg_url").apply();
                     UrlConfig.EPG_URL = latest.get(realPos).url;
@@ -1273,7 +1252,7 @@ public class SettingsDialog extends android.app.Dialog {
                     return;
                 }
                 SourceManager.SourceItem item = sources.get(position);
-                
+
                 AlertDialog deleteDialog = new AlertDialog.Builder(getContext())
                         .setTitle("确认删除")
                         .setMessage("确定要删除「" + item.name + "」吗？")
@@ -1298,44 +1277,33 @@ public class SettingsDialog extends android.app.Dialog {
                             }
                         })
                         .create();
-                        
+
                 if (deleteDialog.getWindow() != null) {
                     deleteDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
                 }
                 deleteDialog.show();
-                
+
                 deleteDialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.WHITE);
                 deleteDialog.getButton(AlertDialog.BUTTON_POSITIVE).setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF55576A));
             }
         });
 
-        // 🔧 开启 CHOICE_MODE_SINGLE，让 ListView 原生管理 state_activated，
-        // 配合 item_subscription_row_content_bg / subscription_row_text 的 selector 实现纯原生高亮
         lvSourceList.setChoiceMode(android.widget.ListView.CHOICE_MODE_SINGLE);
         lvSourceList.setAdapter(adapter);
         adapter.setListView(lvSourceList);
 
-        // 🔧 正确的时机：setAdapter + setListView 「之后」立即设默认选中行，
-        // 这样 SubscriptionAdapter.setSelectedPosition 内部的 applyImmediateRowActivated
-        //  以及 postDelayed(150ms) 兜底才能真的把 activated/selected 写到可见子 View 上，
-        //  触摸模式下打开窗口「立刻」出现蓝底/蓝字/加粗，无需再点一下。
         if (currentDefault >= 0) {
             adapter.setSelectedPosition(currentDefault);
         }
 
-        // 🔧 纯原生焦点机制：DPAD 上下移动触发 onItemSelected
-        //   → setItemChecked(position, true) 激活 state_activated（蓝底 + 蓝字 + ✓ 由 selector 自动渲染）
-        //   → setSelection(position) 同步原生红框位置
-        //   → view.setSelected(true) 兜底激活 state_selected（某些 ROM activated 不触发时生效）
-        // 不再调用 adapter.notifySelected（方法已删除，改成原生状态自动生效）。
         lvSourceList.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-                // 原生 activated：配合 CHOICE_MODE_SINGLE，selectors 立刻切蓝
+
                 lvSourceList.setItemChecked(position, true);
-                // 原生 selected：兜底（TV 模拟器部分 ROM 只认 state_selected）
+
                 if (view != null) {
-                    // 先清除兄弟节点的 selected，保证同一时刻只有一行蓝
+
                     if (parent instanceof android.view.ViewGroup) {
                         android.view.ViewGroup vg = (android.view.ViewGroup) parent;
                         for (int i = 0; i < vg.getChildCount(); i++) {
@@ -1398,12 +1366,7 @@ public class SettingsDialog extends android.app.Dialog {
                     if (lvSourceList.hasFocus()) {
                         int position = adapter.getSelectedPosition();
                         if (position >= 0 && position < sources.size()) {
-                            // 🔧 与 onSwitch(position) 保持完全一致：
-                            //  - 用「name+url 双匹配」在 sourceManager.getAllSources() 里反查 realPos，
-                            //    避免 adapter.sources 快照 与 SP 中最新列表 顺序/数量不一致导致改错默认源；
-                            //  - 同步写 UrlConfig.LIVE_URL / EPG_URL 静态字段，
-                            //    防止 refreshReceiver 用 SP 读取到之前，其他读 UrlConfig 的地方拿到脏值；
-                            //  - 清除 custom_*_url，保证切源后不会被网页推送遗留地址覆盖。
+
                             SourceManager.SourceItem picked = sources.get(position);
                             List<SourceManager.SourceItem> latest = sourceManager.getAllSources();
                             int realPos = -1;
@@ -1460,9 +1423,7 @@ public class SettingsDialog extends android.app.Dialog {
                 if (currentDefault >= 0) {
                     lvSourceList.setSelection(currentDefault);
                 }
-                // 🔧 对话框实际 show 出来 + 200ms 后「最后兜底」同步一次高亮。
-                //  触摸模式下 Android 不会自动激活默认行的 activated/selected，
-                //  必须由我们写一遍，保证用户还没点任何地方时就已经看到蓝底/蓝字/加粗。
+
                 adapter.ensureActivatedImmediate();
             }
         }, 200);
@@ -1476,7 +1437,7 @@ public class SettingsDialog extends android.app.Dialog {
         boolean ignoreSsl = sp.getBoolean(KEY_REDIRECT_IGNORE_SSL,false);
         boolean sendCookie = sp.getBoolean(KEY_REDIRECT_SEND_COOKIE, true);
         final String[] currentUaMode = { sp.getString(KEY_USER_AGENT_MODE, "exo") };
-        
+
         android.view.LayoutInflater inflater = android.view.LayoutInflater.from(
                 new android.view.ContextThemeWrapper(getContext(), androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog)
         );
@@ -1492,7 +1453,6 @@ public class SettingsDialog extends android.app.Dialog {
         Button btnCancel = dialogView.findViewById(R.id.btn_redirect_cancel);
         Button btnSave = dialogView.findViewById(R.id.btn_redirect_save);
 
-        // 动态限制内容区高度：取 380dp 与 屏幕高度60% 的较小值，保证弹窗上下留有空隙
         android.widget.ScrollView svContent = dialogView.findViewById(R.id.sv_redirect_content);
         if (svContent != null) {
             android.util.DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
@@ -1966,8 +1926,6 @@ public class SettingsDialog extends android.app.Dialog {
         }
     }
 
-
-
     private void setupTwoStepTintButton(Button button, Runnable action, int normalTextColor, int normalBgColor) {
         final boolean[] pending = {false};
         final int selectedTextColor = 0xFF40A9FF;
@@ -2006,7 +1964,7 @@ public class SettingsDialog extends android.app.Dialog {
         button.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
-                    // 🔧 修复：按键按一次即执行，不再需要按两次确认（原两步确认在遥控器体验差）
+
                     pending[0] = false;
                     action.run();
                     return true;
@@ -2021,8 +1979,6 @@ public class SettingsDialog extends android.app.Dialog {
         });
     }
 
-
-    /** 递归设置View内所有TextView的粗体 */
     private void setChildTextViewsBold(android.view.View parent, boolean bold) {
         try {
             if (parent instanceof android.widget.TextView) {

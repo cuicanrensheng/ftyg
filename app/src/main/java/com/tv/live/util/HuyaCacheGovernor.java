@@ -16,58 +16,23 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * 🔧 虎牙 Berry SDK 缓存治理
- *
- * 【问题根因】
- * 虎牙 SDK 默认会把日志、崩溃 dump、设备指纹、HTTP DNS 缓存、游戏资源、xlog、MMKV、礼物表情等
- * 写入多个目录（filesDir、外部存储、sdcard 公共目录、databases），且**不受 CacheManager 管控**。
- * 长时间运行后，/data/data/com.tv.live/files + /sdcard/Android/data/com.tv.live 会增长到数百 MB，
- * 导致 "应用安装后占用变大"。
- *
- * 【治理手段】
- * ① 在 HuyaBerryConfig.Builder#build() 之前【直接调用】官方 setter，禁用崩溃上报/日志/播放器/
- *    连麦/摄像头等（isOpenBugly/debugMode/isNeedPlay/cameraMode/oneKeyGangUp/hidePauseBtn/
- *    landscapeMode = false），并把 SDK 的 cache/file 目录重定向到 App cacheDir。
- * ② 启动时递归扫描虎牙 SDK 常见写入目录，按「过期先删、超容量 LRU 再删」原则清理。
- * ③ 对已知的日志/dump/xlog/crash/native_crash/MMKV 损坏锁文件等直接清理。
- *
- * 【崩溃上报/运营统计/APM 的关闭分工】
- *   - 崩溃上报（主）：builder.isOpenBugly(false)（init 时跳过 CrashHandler/ICrashService 初始化分支，防 Bugly 类不存在崩溃）
- *   - 崩溃上报（兜底）：init 前向 ServiceCenter 注册 NoOpCrashService（SDK CrashService 硬引用已删除的 bugly 类，拦截其注册防 NoClassDefFoundError）
- *   - APM 上报：SDK init 成功后 MonitorCenter.getInstance().stopReport()
- *   - 运营统计：SDK init 成功后 BaseApi.setReportApi(NoOpReportApi)（替换为空实现）
- *   Builder 上不存在 isOpenStat/isOpenAnalytics/isOpenApm/isOpenReport/isOpenMonitor 开关。
- */
 public class HuyaCacheGovernor {
 
     private static final String TAG = "HuyaCacheGov";
 
-    /** 允许 SDK 缓存占用的最大总容量（默认 30MB），超过按 LRU 清理到 15MB */
     private static final long MAX_TOTAL_BYTES = 30L * 1024 * 1024;
     private static final long TARGET_TOTAL_BYTES = 15L * 1024 * 1024;
 
-    /** 文件可被清理的最短存活时间（2 小时内的文件不动，避免误伤正在用的缓存） */
     private static final long MIN_AGE_MS = 2 * 60 * 60 * 1000L;
 
-    /** 过期判定阈值（> 7 天的 SDK 文件直接删除，无论是否超容） */
     private static final long EXPIRE_MS = 7L * 24 * 60 * 60 * 1000L;
 
     private static final String[] LOG_EXT = {".xlog", ".log", ".txt", ".bak", ".trace"};
     private static final String[] CRASH_DIR_HINTS = {"crash", "tombstone", "dump", "anr", "dropbox", "core"};
 
-    // ===================== 对外入口 =====================
-
-    /**
-     * 启动时调用（在 HuyaSDKParser.init 之前即可）。
-     *
-     * 做两件事：
-     *   1) 清理 >7 天的老旧 SDK 文件 + 立即清理日志/崩溃/锁文件
-     *   2) 若总占用仍 > 30MB，按修改时间 LRU 清理到 15MB
-     */
     public static void startupCleanup(final Context ctx) {
         if (ctx == null) return;
-        // 用独立线程，不阻塞 Application.onCreate
+
         new Thread(() -> {
             try {
                 performCleanup(ctx);
@@ -77,24 +42,10 @@ public class HuyaCacheGovernor {
         }, "HuyaCacheCleanup").start();
     }
 
-    /**
-     * HuyaSDKParser.init 内部调用：在 Builder.build() 之前调用。
-     *
-     * 直接调用 HuyaBerryConfig.Builder 的真实开关（反编译确认的完整 setter 列表）：
-     *   - isOpenBugly(false)  → 关闭 SDK 内部 Bugly 崩溃上报（init 时跳过 CrashHandler/ICrashService 初始化）
-     *   - debugMode(false)    → 关闭 debug 日志
-     *   - isNeedPlay(false)   → 跳过 SDK 播放器模块
-     *   - cameraMode/oneKeyGangUp/hidePauseBtn/landscapeMode(false) → 关摄像头/连麦/按钮
-     * 并把 SDK 写入目录统一重定向到 context.getCacheDir()/huya_sdk（系统"清除缓存"可清掉）。
-     *
-     * ⚠️ 注意：Builder 上不存在 isOpenStat/isOpenAnalytics/isOpenApm/isOpenReport/isOpenMonitor
-     * 等"统计/APM"开关（反编译确认仅 12 个方法）。运营统计与 APM 的关闭在 SDK init 成功后
-     * 由 HuyaSDKParser 直接调用 MonitorCenter.stopReport() + BaseApi.setReportApi(NoOpReportApi) 完成。
-     */
     public static void applyOnBuilder(HuyaBerryConfig.Builder builder, Context ctx) {
         if (builder == null) return;
         try {
-            // 1) 先尝试 setRootDir / setBaseDir / setCacheDir / setLogDir / setFileDir：把 SDK 写入全部收到 cacheDir/huya_sdk
+
             try {
                 File base = new File(ctx.getCacheDir(), "huya_sdk");
                 if (!base.exists()) base.mkdirs();
@@ -134,29 +85,25 @@ public class HuyaCacheGovernor {
                 LogBridge.w(TAG, "⚠️ SDK 目录重定向失败: " + t.getMessage());
             }
 
-            // 2) 布尔型开关 — 直接调用 Builder 真实 setter（反编译确认的完整列表），
-            //    不再用反射探测（isOpenStat/isOpenAnalytics/isOpenApm 等在 Builder 上不存在）
-            builder.isOpenBugly(false);       // 关闭 SDK 内部 Bugly 崩溃上报（init 时跳过 CrashHandler/ICrashService）
-            builder.debugMode(false);         // 关闭 debug 日志
-            builder.isNeedPlay(false);        // 不需要 SDK 播放器模块
-            builder.cameraMode(false);        // 不启用摄像头推流
-            builder.oneKeyGangUp(false);      // 不启用一键连麦
-            builder.hidePauseBtn(false);      // 隐藏暂停按钮
-            builder.landscapeMode(false);     // 竖屏
+            builder.isOpenBugly(false);
+            builder.debugMode(false);
+            builder.isNeedPlay(false);
+            builder.cameraMode(false);
+            builder.oneKeyGangUp(false);
+            builder.hidePauseBtn(false);
+            builder.landscapeMode(false);
             LogBridge.i(TAG, "✅ SDK 精简开关已直接调用（isOpenBugly/debugMode/isNeedPlay/cameraMode/oneKeyGangUp/hidePauseBtn/landscapeMode = false）");
         } catch (Throwable t) {
             LogBridge.w(TAG, "applyOnBuilder failed, ignore: " + t.getMessage());
         }
     }
 
-    // ===================== 内部：目录反射 =====================
-
     private static void trySetDir(Object builder, String methodName, File dir) {
         try {
             Method m = findMethod(builder, methodName, File.class);
             if (m == null) return;
             m.invoke(builder, dir);
-        } catch (Throwable t) { /* ignore */ }
+        } catch (Throwable t) {  }
     }
 
     private static Method findMethod(Object o, String name, Class<?> paramType) {
@@ -169,13 +116,11 @@ public class HuyaCacheGovernor {
             if (pt == paramType) {
                 return m;
             }
-            // 对 Boolean 包装类型也兼容
+
             if (paramType == boolean.class && pt == Boolean.class) return m;
         }
         return null;
     }
-
-    // ===================== 内部：清理逻辑 =====================
 
     private static void performCleanup(Context ctx) {
         long start = System.currentTimeMillis();
@@ -188,7 +133,6 @@ public class HuyaCacheGovernor {
         LogBridge.i(TAG, "扫描到 SDK 候选目录 " + candidates.size() + " 个, 共 " + all.size()
                 + " 个文件, 当前占用 = " + human(beforeBytes));
 
-        // Step 1: 删除肯定安全的内容（日志/崩溃 dump / 过期 7 天）
         long deletedStep1 = 0L;
         for (FileEntry e : all) {
             boolean shouldDelete = false;
@@ -200,14 +144,13 @@ public class HuyaCacheGovernor {
                 if (e.file.delete()) deletedStep1 += e.size;
             }
         }
-        // 清理后重新统计剩余文件
+
         all.clear();
         long afterStep1 = 0L;
         for (File root : candidates) afterStep1 += walkAndCollect(root, all, false);
         LogBridge.i(TAG, "Step1(日志/崩溃/过期) 清理: " + human(deletedStep1)
                 + "  剩余 " + all.size() + " 文件 = " + human(afterStep1));
 
-        // Step 2: 如果仍大于 MAX_TOTAL_BYTES，按 LRU 清理到 TARGET_TOTAL_BYTES
         if (afterStep1 > MAX_TOTAL_BYTES) {
             Collections.sort(all, new Comparator<FileEntry>() {
                 @Override public int compare(FileEntry a, FileEntry b) {
@@ -219,7 +162,7 @@ public class HuyaCacheGovernor {
             for (FileEntry e : all) {
                 if (freed >= toFree) break;
                 long age = System.currentTimeMillis() - e.file.lastModified();
-                if (age < MIN_AGE_MS) continue;   // 近 2 小时内新文件不删
+                if (age < MIN_AGE_MS) continue;
                 if (isLogOrCrashFile(e.file) || age > MIN_AGE_MS) {
                     if (e.file.delete()) {
                         freed += e.size;
@@ -240,7 +183,6 @@ public class HuyaCacheGovernor {
         List<File> result = new ArrayList<>();
         String pkg = ctx.getPackageName();
 
-        // 1) 应用私有目录
         addDirIfExists(result, ctx.getFilesDir());
         addDirIfExists(result, ctx.getCacheDir());
         addDirIfExists(result, ctx.getDir("huya_sdk", Context.MODE_PRIVATE));
@@ -253,7 +195,6 @@ public class HuyaCacheGovernor {
         File noBackup = new File(ctx.getApplicationInfo().dataDir, "no_backup");
         addDirIfExists(result, noBackup);
 
-        // 2) 外部存储 / Android/data/<pkg>/  (读写不需要权限)
         try {
             File extFiles = ctx.getExternalFilesDir(null);
             addDirIfExists(result, extFiles);
@@ -264,14 +205,13 @@ public class HuyaCacheGovernor {
             }
         } catch (Throwable ignored) {}
 
-        // 3) 公共存储 SDK 历史遗留目录（绝大多数 Android 11+ 不可访问，列出来不报错）
         try {
             if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
                 File sd = Environment.getExternalStorageDirectory();
                 for (String legacy : new String[]{
                         "Android/data/" + pkg + "/files/huya_sdk",
                         "Android/data/" + pkg + "/files/HuyaBerry",
-                        "Android/data/" + pkg + "/files/tencent/MobileQQ",   // 不相关，避免误报
+                        "Android/data/" + pkg + "/files/tencent/MobileQQ",
                         "HuyaBerry",
                         "Huya",
                         "huya_sdk",
@@ -285,7 +225,6 @@ public class HuyaCacheGovernor {
             }
         } catch (Throwable ignored) {}
 
-        // 4) 针对我们之前在 applyOnBuilder 里主动设置的 huya_sdk 子目录
         addDirIfExists(result, new File(ctx.getCacheDir(), "huya_sdk"));
 
         return result;
@@ -308,17 +247,15 @@ public class HuyaCacheGovernor {
             if (name.contains(hint)) return true;
             if (abs.contains("/" + hint + "/") || abs.contains("\\" + hint + "\\")) return true;
         }
-        if (name.startsWith("core-") && f.length() > 1024 * 1024) return true;        // native core dump
+        if (name.startsWith("core-") && f.length() > 1024 * 1024) return true;
         if (name.endsWith(".dmp") || name.endsWith(".dmp.bak")) return true;
-        if (name.startsWith("crash_") && name.endsWith(".txt")) return true;             // 自家 CrashHandler 产物
-        if (name.endsWith(".lock") && name.contains("mmkv")) return true;                // MMKV 锁文件（失效残留）
-        if (name.startsWith("httpdns") && name.endsWith(".cache")) return true;          // hyhttpdns 缓存可删
+        if (name.startsWith("crash_") && name.endsWith(".txt")) return true;
+        if (name.endsWith(".lock") && name.contains("mmkv")) return true;
+        if (name.startsWith("httpdns") && name.endsWith(".cache")) return true;
         if (name.startsWith("dns_cache")) return true;
-        if (name.endsWith(".db-shm") || name.endsWith(".db-wal")) return true;          // SQLite 临时 journal
+        if (name.endsWith(".db-shm") || name.endsWith(".db-wal")) return true;
         return false;
     }
-
-    // ===================== 工具方法：walk =====================
 
     private static long walkAndCollect(File root, List<FileEntry> out, boolean includeDirs) {
         if (root == null || !root.exists()) return 0L;
@@ -330,10 +267,10 @@ public class HuyaCacheGovernor {
     private static void walkRecursive(File node, List<FileEntry> out, boolean includeDirs, AtomicLong sum) {
         if (node == null || !node.exists()) return;
         if (node.isDirectory()) {
-            // 不要把系统目录 / 自己的 tv_cache 也纳入（tv_cache 属于 CacheManager 自己会管）
+
             String n = node.getName();
             if ("tv_cache".equals(n)) return;
-            // 对 .nomedia / code_cache 特殊跳过
+
             File[] subs = node.listFiles();
             if (subs == null) return;
             for (File s : subs) walkRecursive(s, out, includeDirs, sum);

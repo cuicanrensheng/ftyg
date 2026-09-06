@@ -81,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean number_channel_enable;
 
     private boolean isOpeningSettings = false;
-    /** 设置变更脏标记：设置页关闭(UNLOCK_SETTINGS)后置 true，onResume 才重读 SP，避免每次切前台重复读 */
+
     private boolean settingsNeedReload = true;
     private SettingsDialog settingsDialog;
     private long settingsCloseTime = 0;
@@ -90,11 +90,11 @@ public class MainActivity extends AppCompatActivity {
     private boolean okKeyTriggered = false;
     private boolean okKeyLongPressed = false;
     private static final long OK_LONG_PRESS_DURATION = 1500;
-    // 🔧 安卓13+/16手势返回双保险：避免 OnBackPressedCallback 与系统 OnBackInvokedCallback 同时触发导致弹窗两次
+
     private long mLastBackHandleMs = 0L;
-    // 🔧 已注册的系统级 API33+ OnBackInvokedCallback（用于 onDestroy 清理或重建时去重，避免内存泄漏）
+
     private Object mSystemBackInvokedCb = null;
-    // 🔧 跟随系统"自动旋转"开关：开关开 → sensorLandscape（跟随手机旋转横屏）；关 → 固定横屏
+
     private ContentObserver autoRotateObserver = null;
 
     private static boolean isOkKey(int keyCode) {
@@ -143,7 +143,6 @@ public class MainActivity extends AppCompatActivity {
     private final StringBuilder numberInputBuffer = new StringBuilder();
     private final Runnable numberInputConfirmTask = () -> confirmNumberInputJump();
 
-    // 🟢【回看快速调节】长按左/右键重复触发进度调节
     private static final long SEEK_REPEAT_DELAY_MS = 400;
     private static final long SEEK_REPEAT_INTERVAL_MS = 200;
     private int longPressKeyCode = -1;
@@ -193,16 +192,10 @@ public class MainActivity extends AppCompatActivity {
         return playerView;
     }
 
-    /**
-     * 跟随系统"自动旋转"开关决定屏幕方向（适配 Android 5.1.1 ~ 最新版本）：
-     * - 系统"自动旋转"开启 → sensorLandscape：跟随手机重力传感器，左/右横屏自动切换；
-     * - 系统"自动旋转"关闭 → landscape：锁定固定横屏，不跟随；
-     * - TV 设备系统无"自动旋转"项（ACCELEROMETER_ROTATION 默认 0）→ 固定横屏，不影响 TV 体验。
-     */
     private void applyAutoRotateOrientation() {
         boolean autoRotate = false;
         try {
-            // API 21+（5.1.1）~ 最新版本均可读取；个别 ROM 异常时兜底按"关闭"处理
+
             autoRotate = Settings.System.getInt(
                     getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, 0) == 1;
         } catch (Exception ignored) {
@@ -215,18 +208,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // APK 签名校验（防二次打包/防反编译后重新签名）
-        // ⚡ 已移到后台线程：verifySignature 要读 APK 签名块（IO），verifyDexIntegrity
-        // 会读整个 classes.dex 计算 SHA-256（IO 大头），弱 TV 设备上合计可达数百毫秒，
-        // 同步执行会卡住首帧渲染。校验失败时内部会切回主线程 toast+退出，异步化不影响行为。
-        // （MyApplication 后台线程的 initSecurity() 也会执行一次，这里再做一次兜底。）
+
         com.tv.live.util.AppExecutors.io(() -> SecurityCheck.verifyOnStart(this));
         mInstanceRef = new WeakReference<>(this);
         sp = getSharedPreferences("app_settings", MODE_PRIVATE);
-        // 只有手机系统"自动旋转"开启时才跟随手机旋转横屏（sensorLandscape）；
-        // 关闭时锁定固定横屏（landscape）。TV 无自动旋转设置，固定横屏，不影响 TV 体验。
+
         applyAutoRotateOrientation();
-        // 监听系统"自动旋转"开关变化，切换时无需重启应用即可实时生效（ContentObserver，API21+）
+
         autoRotateObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
             @Override
             public void onChange(boolean selfChange) {
@@ -255,8 +243,7 @@ public class MainActivity extends AppCompatActivity {
         if (customLive != null && !customLive.isEmpty()) {
             UrlConfig.LIVE_URL = customLive;
         } else {
-            // 冷启动：如果没有网页推送的自定义地址，使用历史默认源
-            // （SourceManager 会自动注入两个内置源，这里取默认选中的那个）
+
             SourceManager liveMgr = new SourceManager(this, "live_history");
             String defaultLive = liveMgr.getDefaultUrl();
             if (defaultLive != null && !defaultLive.isEmpty()) {
@@ -302,8 +289,7 @@ public class MainActivity extends AppCompatActivity {
         channelPanelController.setCurrentPlayIndex(currentPlayIndex);
 
         initAppCoreManager();
-        // 🟢 首次打开直接出画面：移除全屏Loading阻塞，后台静默加载直播源
-        //    用户立刻看到播放器/频道面板UI，数据加载完毕自动刷新并续播
+
         com.tv.live.util.AppExecutors.io(appCoreManager::loadLiveAndEpg);
 
         unlockReceiver = new BroadcastReceiver() {
@@ -324,8 +310,6 @@ public class MainActivity extends AppCompatActivity {
             ContextCompat.RECEIVER_NOT_EXPORTED
         );
 
-        // 🔧 兼容安卓13+/16预测式返回（滑动退出）：注册 OnBackPressedCallback + 系统回调双保险
-        // 旧的 onBackPressed() 仅靠硬件按键触发，在荣耀/安卓16的手势边缘滑动下会被系统直接跳过，导致退出弹窗不弹出
         setupBackPressHandling();
 
         initSubModules();
@@ -473,7 +457,7 @@ public class MainActivity extends AppCompatActivity {
                         }
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                         if (isInCatchUpMode && playerControlManager != null) {
-                            // 🟢 回看模式：第一次按下立即触发一次，400ms 后开始每 200ms 重复
+
                             if (event.getRepeatCount() == 0) {
                                 playerControlManager.seekBackward();
                                 longPressKeyCode = keyCode;
@@ -530,7 +514,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             } else if (action == KeyEvent.ACTION_UP) {
-                // 🟢 长按左/右键抬起时停止重复调节
+
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     if (longPressKeyCode == keyCode) {
                         longPressKeyCode = -1;
@@ -576,23 +560,18 @@ public class MainActivity extends AppCompatActivity {
         int num = keyCode - KeyEvent.KEYCODE_0;
         if (num < 0 || num > 9) return;
 
-        // 取消之前的确认任务
         mMainHandler.removeCallbacks(numberInputConfirmTask);
 
-        // 累积输入数字
         numberInputBuffer.append(num);
 
-        // 最多保留 4 位数字（防止溢出）
         if (numberInputBuffer.length() > 4) {
             numberInputBuffer.delete(0, numberInputBuffer.length() - 4);
         }
 
-        // 显示正在输入的数字（如 "115-")
         if (infoDisplayManager != null) {
             infoDisplayManager.showChannelNumInput(numberInputBuffer.toString());
         }
 
-        // 1.5 秒后自动确认跳转
         mMainHandler.postDelayed(numberInputConfirmTask, 1500);
     }
 
@@ -605,7 +584,7 @@ public class MainActivity extends AppCompatActivity {
 
             if (channelNum <= 0) return;
 
-            int targetIndex = channelNum - 1; // 频道号从 1 开始
+            int targetIndex = channelNum - 1;
             if (targetIndex < 0) targetIndex = 0;
             if (targetIndex >= channelSourceList.size()) {
                 targetIndex = channelSourceList.size() - 1;
@@ -631,7 +610,6 @@ public class MainActivity extends AppCompatActivity {
         stopLogUpdate();
     }
 
-    // 🟢【核心修改】自动计算长度，让分割线完美铺满屏幕
     private void startLogUpdate() {
         if (logUpdateRunnable != null) return;
         logUpdateRunnable = new Runnable() {
@@ -644,21 +622,19 @@ public class MainActivity extends AppCompatActivity {
 
                 String logs = LogCollector.getInstance().getAllLogs();
 
-                // 🔴 检测并替换特殊的分割线标记
                 if (logs.contains(LogCollector.DIVIDER_TOKEN)) {
                     int viewWidth = tvLogContent.getMeasuredWidth();
-                    int eqCount = 30; // 最小兜底值
+                    int eqCount = 30;
 
                     if (viewWidth > 0) {
-                        // 测量单个 "=" 字符的像素宽度
+
                         float eqWidth = tvLogContent.getPaint().measureText("=");
                         eqCount = (int) (viewWidth / eqWidth);
-                        if (eqCount > 200) eqCount = 200; // 防止极端情况太长
+                        if (eqCount > 200) eqCount = 200;
                     }
 
-                    // 生成指定数量的 "="
                     String eqString = new String(new char[eqCount]).replace('\0', '=');
-                    // 将标记替换为生成的等号
+
                     logs = logs.replace(LogCollector.DIVIDER_TOKEN, eqString);
                 }
 
@@ -691,7 +667,7 @@ public class MainActivity extends AppCompatActivity {
     public void setCatchUpMode(boolean enabled) {
         this.isInCatchUpMode = enabled;
         if (!enabled) {
-            // 退出回看模式时清理长按状态
+
             longPressKeyCode = -1;
             mMainHandler.removeCallbacks(longPressSeekRunnable);
         }
@@ -813,7 +789,7 @@ public class MainActivity extends AppCompatActivity {
             case 4: resId = R.drawable.panel_bg_4; break;
             default: resId = R.drawable.panel_bg; break;
         }
-        panelLayout.setBackgroundColor(0x00000000); // 全屏容器保持透明，不遮挡视频画面
+        panelLayout.setBackgroundColor(0x00000000);
         if (channelPanelController != null) channelPanelController.updatePanelBackground(resId);
     }
 
@@ -878,8 +854,6 @@ public class MainActivity extends AppCompatActivity {
         touchListener.updateGestureHelper(gestureHelper);
         playerView.setOnTouchListener(touchListener);
 
-        // 🔴【关键修复】SDK 播放器容器也绑定同一套手势监听
-        // 否则切换到虎牙 SDK 播放器后，SDK 容器遮挡 PlayerView，手势面板无法唤起
         FrameLayout sdkContainer = mPlayerManager.getSdkPlayerContainer();
         if (sdkContainer != null) {
             sdkContainer.setOnTouchListener(touchListener);
@@ -894,10 +868,7 @@ public class MainActivity extends AppCompatActivity {
             infoDisplayManager.updateLiveInfo(info);
             if (pipManager != null) pipManager.updatePlayState(true);
         });
-        
-        // ================================================================
-        // ✅【核心修复 1】将 runOnUiThread 改为 mMainHandler.post，防止空指针
-        // ================================================================
+
         mPlayerManager.setOnSourceFailedListener(() -> mMainHandler.post(() -> {
             String channelName = "";
             if (currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size()) {
@@ -913,7 +884,7 @@ public class MainActivity extends AppCompatActivity {
         appCoreManager.setOnDataLoadListener(new AppCoreManager.OnDataLoadListener() {
             @Override
             public void onLiveSourceLoaded(List<Channel> channels, boolean fromCache) {
-                // ✅【核心修复 2】替换 runOnUiThread 为 mMainHandler.post
+
                 mMainHandler.post(() -> {
                     List<Channel> finalList = appCoreManager.getChannelList();
                     channelSourceList.clear();
@@ -921,14 +892,13 @@ public class MainActivity extends AppCompatActivity {
                     channelPanelController.setChannels(channelSourceList);
 
                     if (!channelSourceList.isEmpty()) {
-                        // 🔧 修复：优先匹配当前正在播放的频道名
-                        // （切源后优先续播用户之前看的频道）
+
                         String lastChannelName = null;
                         if (mPlayerManager != null
                                 && mPlayerManager.getCurrentChannel() != null) {
                             lastChannelName = mPlayerManager.getCurrentChannel().getName();
                         }
-                        // 如果播放器没有记录，回退到 AppConfig 保存的 lastPlayIndex 对应频道名
+
                         if (TextUtils.isEmpty(lastChannelName)) {
                             int savedIdx = appConfig.getLastPlayIndex();
                             if (savedIdx >= 0 && savedIdx < channelSourceList.size()) {
@@ -948,8 +918,7 @@ public class MainActivity extends AppCompatActivity {
                         if (matchedIndex >= 0) {
                             currentPlayIndex = matchedIndex;
                         } else if (currentPlayIndex < 0 || currentPlayIndex >= channelSourceList.size()) {
-                            // 如果频道名完全不匹配（换源后列表完全不同），
-                            // 并且 currentPlayIndex 越界，则使用 AppConfig 保存的索引或 0
+
                             int savedIdx = appConfig.getLastPlayIndex();
                             if (savedIdx >= 0 && savedIdx < channelSourceList.size()) {
                                 currentPlayIndex = savedIdx;
@@ -964,13 +933,11 @@ public class MainActivity extends AppCompatActivity {
                     channelPanelController.setCurrentPlayIndex(currentPlayIndex);
 
                     appCoreManager.setHasPlayedWithCache(true);
-                    // 🔧 防御式播放：确保 index 合法 且 频道有播放地址 才调用 playChannel
+
                     if (currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size()) {
                         Channel ch = channelSourceList.get(currentPlayIndex);
                         if (ch != null && !TextUtils.isEmpty(ch.getPlayUrl())) {
-                            // 🟢【核心修复】启动时"缓存回调"与"网络回调"会先后到达，都会走到这里，
-                            //    同一频道会被 playChannel 两次 → setMediaSource 两次 → 画面卡顿并重新加载直播源。
-                            //    若当前正在播放同名频道，直接跳过，不打断播放。
+
                             boolean shouldPlay = true;
                             Channel playingChannel = (mPlayerManager != null) ? mPlayerManager.getCurrentChannel() : null;
                             if (playingChannel != null) {
@@ -989,7 +956,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         } else {
                             log("【" + (fromCache ? "缓存" : "网络") + "】⚠️ 当前索引频道无播放地址，尝试从头播放");
-                            // 兜底：找到第一个有播放地址的频道播放
+
                             for (int i = 0; i < channelSourceList.size(); i++) {
                                 Channel fallback = channelSourceList.get(i);
                                 if (fallback != null && !TextUtils.isEmpty(fallback.getPlayUrl())) {
@@ -1019,7 +986,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onEpgLoaded() {
-                // ✅【核心修复 2】替换 runOnUiThread 为 mMainHandler.post
+
                 mMainHandler.post(() -> {
                     if (currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size()) {
                         Channel curr = channelSourceList.get(currentPlayIndex);
@@ -1030,7 +997,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onLoadTimeout(boolean hasData) {
-                // 🟢 已移除启动Loading阻塞，超时不再需要隐藏UI
+
                 mMainHandler.post(() -> {
                     log("【加载】超时（当前已" + (hasData ? "有缓存数据" : "空列表") + "），后台将继续加载");
                 });
@@ -1049,13 +1016,10 @@ public class MainActivity extends AppCompatActivity {
         });
 
         appCoreManager.setOnRefreshListener(() -> {
-            // ✅【核心修复 2】替换 runOnUiThread 为 mMainHandler.post
+
             mMainHandler.post(() -> {
                 List<Channel> newList = appCoreManager.getChannelList();
-                // 🔧 关键修复：如果频道列表为空（新数据还在加载中），
-                // 不做任何操作，避免把 currentPlayIndex 错误重置为 0，
-                // 也避免覆盖 AppConfig 中保存的上次播放索引。
-                // 真正的播放切换等 onLiveSourceLoaded 加载完成后再执行。
+
                 if (newList == null || newList.isEmpty()) {
                     log("【刷新】频道列表尚未就绪，等待 onLiveSourceLoaded 加载完成后自动播放");
                     return;
@@ -1080,7 +1044,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadSettings() {
-        // 🟢 脏标记优化：设置未变更时跳过 SP 读取，仅首次 / 设置页关闭 / onCreate 时真正读取
+
         if (!settingsNeedReload) {
             return;
         }
@@ -1122,7 +1086,6 @@ public class MainActivity extends AppCompatActivity {
         if (channel == null || channel.getPlayUrl() == null) return;
         currentPlayIndex = index;
 
-        // 切台时清空数字输入缓存
         numberInputBuffer.setLength(0);
         mMainHandler.removeCallbacks(numberInputConfirmTask);
 
@@ -1151,7 +1114,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 🟢【修改为自动延长分割线】
         if (sp.getBoolean("debug_log_enable", false)) {
             LogCollector.getInstance().addDivider();
         }
@@ -1219,13 +1181,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * 🔧 统一的返回处理入口。
-     * 所有路径（AndroidX OnBackPressedCallback、系统OnBackInvokedCallback、硬件KEYCODE_BACK、onBackKey远程回调）
-     * 都走这里。使用 300ms 去抖避免双路径同时触发（尤其安卓13+预测性返回场景）。
-     *
-     * @return true 表示返回事件已被消费（不再需要传递给系统默认行为）
-     */
     private boolean handleBackPressed() {
         long now = System.currentTimeMillis();
         if (now - mLastBackHandleMs < 300L) {
@@ -1234,13 +1189,12 @@ public class MainActivity extends AppCompatActivity {
         }
         mLastBackHandleMs = now;
         try {
-            // 🔘 时移回看模式 & 控制器显示中 → 先退出控制器
+
             if (isInCatchUpMode && playerControlManager != null && playerControlManager.isControllerShowing()) {
                 exitPlaybackMode();
                 return true;
             }
 
-            // 📺 频道面板打开中 → 先尝试从右侧面板返回（如节目单/历史等），否则关闭整个面板
             if (channelPanelController != null) {
                 try {
                     if (channelPanelController.isPanelOpen()) {
@@ -1255,7 +1209,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 🛑 退出菜单弹窗打开中 → 关闭它
             if (exitMenuDialog != null) {
                 try {
                     if (exitMenuDialog.isShowing()) {
@@ -1269,10 +1222,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // ⚙️ 设置面板打开中 → 关闭它
-            // NOTE: 这里不更新 settingsCloseTime，避免用户通过返回键关闭设置后
-            //       想立刻按第二次返回退出时被 1 秒保护卡住（与旧 onBackPressed 行为保持一致）。
-            //       settingsCloseTime 仅在设置自身主动关闭并在面板内部显式写入时才用于防抖。
             if (settingsDialog != null) {
                 try {
                     if (settingsDialog.isShowing()) {
@@ -1286,13 +1235,11 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // ⏱ 设置刚关闭（1 秒内）→ 忽略一次退出操作，避免用户按返回键导致设置关闭后立刻触发退出确认
             if (settingsCloseTime > 0 && System.currentTimeMillis() - settingsCloseTime < 1000) {
                 LogBridge.d("KEY_DEBUG", "设置刚关闭，忽略退出操作");
                 return true;
             }
 
-            // 🚪 主退出逻辑：根据设置判断是否弹出退出确认弹窗
             boolean exitDialogEnabled = sp != null && sp.getBoolean("exit_dialog_enable", false);
             LogBridge.d("KEY_DEBUG", "退出确认弹窗开关: " + exitDialogEnabled + "，Build.VERSION.SDK_INT=" + Build.VERSION.SDK_INT);
             if (exitDialogEnabled) {
@@ -1303,30 +1250,15 @@ public class MainActivity extends AppCompatActivity {
             return true;
         } catch (Exception e) {
             LogBridge.e("KEY_DEBUG", "handleBackPressed 异常: " + e.getMessage(), e);
-            // 出错兜底：直接退出避免卡死
+
             try { finishAffinity(); } catch (Exception ignored) {}
             return true;
         }
     }
 
-    /**
-     * 🔧 注册安卓13+预测式返回 / 滑动返回处理
-     *
-     * 问题根因：
-     * - 旧版只重写 onBackPressed() 且未调用 super.onBackPressed()，在 targetSdk=36 / 安卓16（荣耀）
-     *   手势导航「边缘滑动退出」时，系统走 OnBackInvokedDispatcher 新链路，旧的 onBackPressed()
-     *   和 dispatchKeyEvent(KEYCODE_BACK) 都不执行 → exit_dialog_enable 判断被跳过 → 退出弹窗不弹出。
-     *
-     * 修复策略（双保险）：
-     *  1) AndroidX OnBackPressedCallback — 跨所有 API 级别，谷歌官方推荐，在
-     *     ComponentActivity/AppCompatActivity 中自动桥接安卓13+预测性返回动画
-     *  2) API 33+ 系统 OnBackInvokedCallback — 直接注册到 Window 级别，应对部分 OEM（荣耀/鸿蒙）
-     *     不按 AndroidX 预期分发、直接走系统窗口层的情况
-     * 两者通过 handleBackPressed 内的 300ms 去抖避免双触发。
-     */
     private void setupBackPressHandling() {
         try {
-            // —— 保险 1：AndroidX OnBackPressedCallback（全API级别）
+
             OnBackPressedCallback callback = new OnBackPressedCallback(true) {
                 @Override
                 public void handleOnBackPressed() {
@@ -1340,12 +1272,11 @@ public class MainActivity extends AppCompatActivity {
             LogBridge.e("BackCompat", "注册 OnBackPressedCallback 失败: " + t.getMessage());
         }
 
-        // —— 保险 2：系统 API 33+ OnBackInvokedCallback（荣耀安卓16手势返回兜底）
         if (Build.VERSION.SDK_INT >= 33) {
             try {
                 android.window.OnBackInvokedDispatcher dispatcher = getOnBackInvokedDispatcher();
                 if (dispatcher != null) {
-                    // 如果上次已经注册过，先反注册避免重复（横竖屏切换 / Activity 重建时）
+
                     if (mSystemBackInvokedCb instanceof android.window.OnBackInvokedCallback) {
                         try {
                             dispatcher.unregisterOnBackInvokedCallback(
@@ -1372,10 +1303,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * @deprecated 保留仅为兼容：dispatchKeyEvent / onBackKey 等地方仍在显式调用 onBackPressed()。
-     * 新代码 / 系统手势返回现在走 handleBackPressed()（由 OnBackPressedCallback 驱动）。
-     */
     @Override
     @Deprecated
     public void onBackPressed() {
@@ -1431,16 +1358,15 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 🔧 刷新配置
     public void refreshSettings() {
-        // ✅【核心修复 3】将 runOnUiThread 改为 mMainHandler.post
+
         mMainHandler.post(() -> {
             loadSettings();
-            
+
             if (screenRatioManager != null) {
                 screenRatioManager.apply();
             }
-            
+
             if (pipManager != null) {
                 pipManager.setPipEnabled(pipEnable);
             }
@@ -1448,7 +1374,7 @@ public class MainActivity extends AppCompatActivity {
             if (channelPanelController != null) {
                 channelPanelController.setReverse(channel_reverse);
             }
-            
+
             LogBridge.d("MainActivity", "设置已主动刷新，无需切后台");
         });
     }
@@ -1484,13 +1410,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 🔴【核心修改】严格控制的日志写入
     private void log(String msg) {
         if (!sp.getBoolean("debug_log_enable", false)) {
-            return; // 没开记录开关，直接拦截
+            return;
         }
         LogBridge.d("MainActivity", msg);
-        // 传入 "播放" tag 以通过白名单过滤
+
         LogCollector.getInstance().addLog("播放", msg);
     }
 
@@ -1552,14 +1477,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 🔧 修复：小窗/自由窗口模式调整窗口大小时保持播放不中断。
-    // AndroidManifest 已配置 configChanges 包含 screenSize|smallestScreenSize|screenLayout，
-    // 所以窗口大小变化不会重建 Activity，但 Surface 可能被销毁重建。
-    // 在这里主动恢复播放器，避免黑屏或停止播放。
     @Override
     public void onConfigurationChanged(android.content.res.Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        // 窗口大小变化后，延迟恢复播放器，给 Surface 重建留出时间
+
         mMainHandler.postDelayed(() -> {
             if (mPlayerManager != null) {
                 mPlayerManager.onForeground();
@@ -1621,15 +1542,7 @@ public class MainActivity extends AppCompatActivity {
                 mPlayerManager.resume();
             }
         } else {
-            // 🔧 修复：失去窗口焦点时不暂停播放器。
-            // 在高版本安卓（10-16）上，以下场景会触发失去焦点：
-            // - 通知栏下拉
-            // - 系统对话框弹出（权限请求等）
-            // - 多窗口/自由窗口模式切换
-            // - 最近任务键
-            // 如果在这里暂停播放器，回前台时容易黑屏（Surface 已销毁需要重建）。
-            // 播放器的暂停应该由 onPause/onStop 生命周期控制，而不是窗口焦点。
-            // 仅在非多窗口/非画中画模式下才考虑暂停。
+
             if (mPlayerManager != null && !isOpeningSettings) {
                 boolean isSystemVisible = false;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -1644,9 +1557,6 @@ public class MainActivity extends AppCompatActivity {
         appCoreManager.onWindowFocusChanged(hasFocus);
     }
 
-    // ================================================================
-    // ✅【核心修复 4】移除全部 Message，解除播放器的所有监听器
-    // ================================================================
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -1667,7 +1577,6 @@ public class MainActivity extends AppCompatActivity {
             lifecycleHelper = null;
         }
 
-        // 清理触摸监听器中的手势辅助
         if (touchListener != null) {
             touchListener.updateGestureHelper(null);
             if (playerView != null) {
@@ -1676,7 +1585,6 @@ public class MainActivity extends AppCompatActivity {
             touchListener = null;
         }
 
-        // 清理Dialogs
         if (settingsDialog != null) {
             try {
                 if (settingsDialog.isShowing()) {
@@ -1694,7 +1602,6 @@ public class MainActivity extends AppCompatActivity {
             exitMenuDialog = null;
         }
 
-        // 释放管理器
         if (infoDisplayManager != null) {
             infoDisplayManager.release();
             infoDisplayManager = null;
@@ -1716,7 +1623,6 @@ public class MainActivity extends AppCompatActivity {
             pipManager = null;
         }
 
-        // 释放播放器
         if (playerControlManager != null) {
             playerControlManager.release();
             playerControlManager = null;
@@ -1730,11 +1636,6 @@ public class MainActivity extends AppCompatActivity {
             mPlayerManager = null;
         }
 
-        // 关闭TVPlayerManager的静态线程池
-        // 🔧 修复：不在 onDestroy 关闭静态线程池，避免重开应用后播放列表无法解析导致黑屏
-        // TVPlayerManager.shutdownThreadPool();
-
-        // 注销广播接收器
         if (unlockReceiver != null) {
             try {
                 unregisterReceiver(unlockReceiver);
@@ -1742,7 +1643,6 @@ public class MainActivity extends AppCompatActivity {
             unlockReceiver = null;
         }
 
-        // 注销系统"自动旋转"开关监听
         if (autoRotateObserver != null) {
             try {
                 getContentResolver().unregisterContentObserver(autoRotateObserver);
@@ -1750,7 +1650,6 @@ public class MainActivity extends AppCompatActivity {
             autoRotateObserver = null;
         }
 
-        // 清理其他引用
         gestureManager = null;
         screenRatioManager = null;
         playerStateListener = null;

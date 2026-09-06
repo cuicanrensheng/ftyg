@@ -50,7 +50,7 @@ public class LogServer {
     private volatile boolean isRunning;
     private Thread serverThread;
     private java.net.ServerSocket serverSocket;
-    private ExecutorService clientExecutor; // 连接处理线程池（避免每连接一线程）
+    private ExecutorService clientExecutor;
     private int port;
     private String deviceId;
     private String deviceName;
@@ -151,7 +151,7 @@ public class LogServer {
 
     public void start() {
         if (isRunning) {
-            // 即使正在运行，也要清理过多的残留连接
+
             if (webSockets.size() > MAX_CLIENTS) {
                 LogBridge.w(TAG, "Clearing " + webSockets.size() + " stale connections (max " + MAX_CLIENTS + ")");
                 for (WebSocket ws : webSockets) {
@@ -163,15 +163,14 @@ public class LogServer {
             }
             return;
         }
-        
-        // 清理所有残留连接
+
         for (WebSocket ws : webSockets) {
             try {
                 ws.close(1000, "Restarting");
             } catch (Exception ignored) {}
         }
         webSockets.clear();
-        
+
         isRunning = true;
         clientExecutor = Executors.newFixedThreadPool(8, r -> {
             Thread t = new Thread(r, "LogServer-Client");
@@ -189,17 +188,16 @@ public class LogServer {
         serverThread.setDaemon(true);
         serverThread.start();
         LogBridge.i(TAG, "LogServer starting on port " + port + " (cleared " + webSockets.size() + " old connections)");
-        
-        // 启动定期清理任务
+
         startConnectionCleaner();
     }
-    
+
     private void startConnectionCleaner() {
         Thread cleaner = new Thread(() -> {
             while (isRunning) {
                 try {
-                    Thread.sleep(30000); // 每30秒清理一次
-                    // 只保留最近的 MAX_CLIENTS 个连接
+                    Thread.sleep(30000);
+
                     while (webSockets.size() > MAX_CLIENTS) {
                         WebSocket oldest = webSockets.get(0);
                         try {
@@ -326,7 +324,7 @@ public class LogServer {
             sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(result));
             return;
         }
-        // 返回结构化日志数据
+
         List<LogCollector.LogEntry> structuredLogs = LogCollector.getInstance().getStructuredLogs();
         Map<String, Object> result = new HashMap<>();
         result.put("logs", structuredLogs);
@@ -335,10 +333,6 @@ public class LogServer {
         sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(result));
     }
 
-    /**
-     * 返回持久化自启日志（files/boot_logs.txt）
-     * 用于诊断"开机自启失败"：广播是否到达、开关状态、启动链路各节点
-     */
     private void handleApiBootLog(java.io.OutputStream out) throws Exception {
         Map<String, Object> result = new HashMap<>();
         java.io.File bootLog = new java.io.File(context.getFilesDir(), "boot_logs.txt");
@@ -368,9 +362,8 @@ public class LogServer {
             return;
         }
 
-        // 限制最大连接数
         if (webSockets.size() >= MAX_CLIENTS) {
-            // 关闭最旧的连接
+
             WebSocket oldest = webSockets.get(0);
             oldest.close(1000, "Too many connections");
             webSockets.remove(0);
@@ -386,7 +379,6 @@ public class LogServer {
         out.write(upgradeResponse.getBytes("UTF-8"));
         out.flush();
 
-        // 立即关闭原始 socket，防止连接泄漏
         try {
             clientSocket.close();
         } catch (Exception ignored) {}

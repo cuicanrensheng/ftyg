@@ -12,11 +12,6 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 清晰度/线路管理器
- * 负责 variantList 管理、清晰度切换、线路切换、
- * M3U 播放列表解析、URL 解析等
- */
 public class VariantManager {
     private static final String TAG = "VariantManager";
 

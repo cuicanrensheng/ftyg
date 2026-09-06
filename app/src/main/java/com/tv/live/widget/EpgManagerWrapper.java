@@ -37,9 +37,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * EPG 节目单包装管理器（修复：统一焦点与选中样式，去除播放中背景冲突）
- */
 public class EpgManagerWrapper {
     private final ListView lvEpg;
     private Context context;
@@ -62,7 +59,7 @@ public class EpgManagerWrapper {
     public EpgManagerWrapper(Context context, ListView lvEpg) {
         this.context = context;
         this.lvEpg = lvEpg;
-        // lvEpg.setItemsCanFocus(true); // 移除此行，让ListView正常触发onItemSelected以更新选中状态加粗
+
         lvEpg.setFocusable(true);
         lvEpg.setFocusableInTouchMode(false);
         lvEpg.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
@@ -82,13 +79,13 @@ public class EpgManagerWrapper {
 
         lvEpg.setOnItemClickListener((parent, view, position, id) -> {
             if (position == selectedPosition) {
-                // 第二次点击：确认执行回看/预约
+
                 TextView actionBtn = view.findViewById(R.id.tv_action);
                 if (actionBtn != null && actionBtn.isEnabled()) {
                     actionBtn.performClick();
                 }
             } else {
-                // 第一次点击：仅选中高亮（浅蓝背景+蓝字），不触发回看
+
                 selectedPosition = position;
                 if (adapter != null) {
                     adapter.notifyDataSetChanged();
@@ -117,12 +114,11 @@ public class EpgManagerWrapper {
             if (!originEpgList.isEmpty()) {
                 String targetDay;
                 String targetWeekDay = null;
-                // 🟢 日期偏移：新列表第0位 = 今天(today+0) 第1位 = 明天(today+1) 第2位 = 后天(today+2)
-                // 所以实际相对今天的 dayOffset = dateIndex
+
                 int dayOffset = dateIndex;
                 Calendar cal = Calendar.getInstance();
-                cal.add(Calendar.DAY_OF_YEAR, dayOffset);   // 计算真实日期
-                // 🔧 计算目标日期的精确 YYYYMMDD 整数键，优先与 item.dateYMD 匹配，消除中文字符串歧义
+                cal.add(Calendar.DAY_OF_YEAR, dayOffset);
+
                 int targetYMD = cal.get(Calendar.YEAR) * 10000
                         + (cal.get(Calendar.MONTH) + 1) * 100
                         + cal.get(Calendar.DAY_OF_MONTH);
@@ -139,15 +135,15 @@ public class EpgManagerWrapper {
                     if (item.dayName == null) continue;
                     String dayName = item.dayName.trim();
                     boolean match = false;
-                    // 1️⃣ 优先精确 dateYMD 匹配（最可靠）
+
                     if (item.dateYMD > 0 && targetYMD > 0) {
                         match = (item.dateYMD == targetYMD);
                     }
-                    // 2️⃣ 回退：中文昵称匹配（今天/周日~周六）
+
                     if (!match) match = targetDay.equals(dayName);
-                    // 3️⃣ 回退：周几字符串匹配
+
                     if (!match && targetWeekDay != null) match = targetWeekDay.equals(dayName);
-                    // 4️⃣ 最终回退：用 item.dateYMD 与 targetYMD 的年份+月日精确比较
+
                     if (!match && item.dateYMD > 0 && targetYMD > 0) {
                         match = (item.dateYMD == targetYMD);
                     }
@@ -156,7 +152,7 @@ public class EpgManagerWrapper {
                     }
                 }
                 Collections.sort(data, (a, b) -> a.time.compareTo(b.time));
-                if (dateIndex == 0) {    // 🟢 今天才判断当前播放中 & 实时时间对比
+                if (dateIndex == 0) {
                     String now = getNow();
                     Channel.EpgItem playing = null;
                     for (int i = 0; i < data.size(); i++) {
@@ -236,7 +232,7 @@ public class EpgManagerWrapper {
                     selectedPosition = focusPos;
                     lvEpg.setSelection(focusPos);
                 }
-                
+
                 adapter.notifyDataSetChanged();
                 if (!finalData.isEmpty()) {
                     lvEpg.post(() -> lvEpg.setSelection(selectedPosition));
@@ -247,7 +243,7 @@ public class EpgManagerWrapper {
     }
 
     private void scrollToCurrentProgram(List<Channel.EpgItem> epgList) {
-        if (epgList == null || epgList.isEmpty() || selectDayIndex != 0) {  // 🟢 今天才滚动到当前节目 (今天位置=0)
+        if (epgList == null || epgList.isEmpty() || selectDayIndex != 0) {
             return;
         }
         String now = getNow();
@@ -363,15 +359,12 @@ public class EpgManagerWrapper {
                             return;
                         }
 
-                        // 🟢 严格遵守用户：只改虎牙的，自己的不要动
                         boolean isHuyaChannel = (currentChannel.isTogetherWatch()
                                 || currentChannel.getHuyaRoomId() > 0
                                 || liveUrl.contains("huya.com") || liveUrl.contains("huya.cn"));
 
                         if (isHuyaChannel) {
-                            // 虎牙不支持PLTV→TVOD playseek拼接（不是运营商IPTV直播）
-                            // 用户说"随时可以调用回放" — 这里退化为"切回该频道直播"，
-                            // 让用户从当前直播点继续观看
+
                             if (ctx instanceof MainActivity) {
                                 MainActivity activity = (MainActivity) ctx;
                                 ChannelPanelController controller = activity.getChannelPanelController();
@@ -379,7 +372,7 @@ public class EpgManagerWrapper {
                                     if (controller.isPanelOpen()) controller.hidePanel();
                                     activity.setCatchUpMode(false);
                                     activity.showExoController();
-                                    // 直接用原频道播放虎牙流（会走playHuyaStream，重新获取最新签名）
+
                                     activity.mPlayerManager.playUrl(liveUrl, currentChannel.getName(), currentChannel);
                                 }
                             }
@@ -387,9 +380,8 @@ public class EpgManagerWrapper {
                             return;
                         }
 
-                        // —— 非虎牙频道（用户自己的CCTV/卫视等）完全保留原有 playseek 逻辑 ——
                         Calendar playDay = Calendar.getInstance();
-                        playDay.add(Calendar.DAY_OF_YEAR, dayIndex);   // 🟢 修正偏移：0=今天(+0) 1=明天(+1) ... 6=周一(+6)
+                        playDay.add(Calendar.DAY_OF_YEAR, dayIndex);
                         String[] startHm = item.time.split(":");
                         Calendar startCal = (Calendar) playDay.clone();
                         startCal.set(Calendar.HOUR_OF_DAY, Integer.parseInt(startHm[0].trim()));
@@ -499,7 +491,7 @@ public class EpgManagerWrapper {
             String key = currentChannel.getName() + "_" + position;
             boolean isPast = false;
             if (dayIndex == 0) {
-                // 🟢 今天(0) → 按时间点判断是否已过
+
                 if (currentNowStr == null) currentNowStr = getNow();
                 try {
                     if (item.time != null) {
@@ -507,7 +499,6 @@ public class EpgManagerWrapper {
                     }
                 } catch (Exception ignored) {}
             }
-            // dayIndex >= 1 (明天及以后) → isPast = false (默认值)，全部都是预约
 
             ItemActionTag tag = new ItemActionTag();
             tag.item = item;
@@ -517,7 +508,7 @@ public class EpgManagerWrapper {
             holder.tv_action.setOnClickListener(actionClickListener);
 
             if (dayIndex == 0) {
-                // 🟢 今天(0) → 播放中/回看/预约 三态按钮
+
                 if (item.isPlaying) {
                     holder.tv_action.setText("播放中");
                     holder.tv_action.setBackgroundColor(0xFFFF9800);
@@ -532,7 +523,7 @@ public class EpgManagerWrapper {
                     holder.tv_action.setEnabled(true);
                 }
             } else {
-                // 🟢 明天及以后(>=1) → 预约按钮
+
                 holder.tv_action.setText(bookedSet.contains(key) ? "已预约" : "预约");
                 holder.tv_action.setBackgroundColor(0xFF4CAF50);
                 holder.tv_action.setEnabled(true);
@@ -545,7 +536,7 @@ public class EpgManagerWrapper {
             TextView actionBtn = rootView.findViewById(R.id.tv_action);
             if (actionBtn == null) return;
             if (tag.isPast) {
-                // 回看按钮无状态变化
+
             } else {
                 boolean isBooked = bookedSet.contains(tag.key);
                 actionBtn.setText(isBooked ? "已预约" : "预约");

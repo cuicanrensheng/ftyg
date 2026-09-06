@@ -22,12 +22,9 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * 信息展示管理器（已恢复频道号显示与自动隐藏）
- */
 public class InfoDisplayManager {
     private static final long INFO_BAR_HIDE_DELAY = 3000;
-    private static final long CHANNEL_NUM_HIDE_DELAY = 3000; // ✅ 新增：频道号隐藏延迟
+    private static final long CHANNEL_NUM_HIDE_DELAY = 3000;
     private static final long PROGRAM_PROGRESS_INTERVAL = 30000;
 
     private Context context;
@@ -45,7 +42,7 @@ public class InfoDisplayManager {
     private TextView tvNextTimeRange;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    // 🔧 修复卡顿：复用单线程池执行 EPG 后台查询，避免每次切台 new Thread 的创建开销
+
     private final ExecutorService epgExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "InfoDisplay-Epg");
         t.setDaemon(true);
@@ -62,7 +59,6 @@ public class InfoDisplayManager {
         }
     };
 
-    // ✅【恢复】频道号自动隐藏任务
     private final Runnable hideChannelNumTask = new Runnable() {
         @Override
         public void run() {
@@ -111,26 +107,21 @@ public class InfoDisplayManager {
         }
     }
 
-    // ✅【恢复】显示频道号并开始倒计时隐藏
     public void showChannelNum(int num){
         if(tvChannelNum == null) return;
         tvChannelNum.setText(String.valueOf(num));
         tvChannelNum.setVisibility(View.VISIBLE);
-        // 取消之前的隐藏任务，重新开始计时
+
         mainHandler.removeCallbacks(hideChannelNumTask);
         mainHandler.postDelayed(hideChannelNumTask, CHANNEL_NUM_HIDE_DELAY);
     }
 
-    // ✅【恢复】手动隐藏频道号
     public void hideChannelNum(){
         if(tvChannelNum == null) return;
         mainHandler.removeCallbacks(hideChannelNumTask);
         tvChannelNum.setVisibility(View.GONE);
     }
 
-    /**
-     * 显示频道号输入中的数字（如 "115-"），用于快速跳转
-     */
     public void showChannelNumInput(String input){
         if(tvChannelNum == null) return;
         tvChannelNum.setText(input + "-");
@@ -194,7 +185,7 @@ public class InfoDisplayManager {
         epgExecutor.execute(() -> {
             try {
                 List<Channel.EpgItem> epgList = EpgManager.getInstance().getEpg(channel.getName());
-                
+
                 EpgCalculationResult result = calculateEpgData(epgList, channel);
 
                 mainHandler.post(() -> {

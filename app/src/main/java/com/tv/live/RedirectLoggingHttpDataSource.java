@@ -23,6 +23,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -33,6 +35,7 @@ import com.tv.live.BuildConfig;
 @SuppressLint("UnsafeOptInUsageError")
 public class RedirectLoggingHttpDataSource extends BaseDataSource implements HttpDataSource {
     private static final String TAG = "RedirectHttp";
+    private static final Map<String, Long> LAST_FAIL_LOG = new ConcurrentHashMap<>();
 
     private int maxRedirects = 5;
     private int connectTimeout = 10000;
@@ -55,7 +58,6 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
         return sdf.format(new Date());
     }
 
-    // 🟢【辅助方法】将文字包裹在红色 HTML 标签中
     private String red(String text) {
         return "<font color='#FF0000'>" + text + "</font>";
     }
@@ -63,11 +65,20 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
     private void printLog(boolean isError, String msg) {
         String finalMsg = "[" + getTimeStr() + "] " + msg;
         if (isError) {
-            // 错误日志：正式版和调试版都记录
+            // 同一失败消息 60s 内只打一条 E 级（中继不可达时探测会周期重试，避免刷屏），
+            // 后续降级为 D 级。map 有界防增长（key 含端口/地址，目标集合有限）。
+            long now = System.currentTimeMillis();
+            Long last = LAST_FAIL_LOG.get(msg);
+            if (last != null && now - last < 60000L) {
+                LogBridge.d(TAG, finalMsg);
+                return;
+            }
+            if (LAST_FAIL_LOG.size() > 32) LAST_FAIL_LOG.clear();
+            LAST_FAIL_LOG.put(msg, now);
             LogBridge.e(TAG, finalMsg);
             LogCollector.getInstance().error(TAG, msg);
         } else {
-            // 网络日志：仅调试版记录
+
             if (BuildConfig.IS_DEBUG) {
                 LogBridge.d(TAG, finalMsg);
                 LogCollector.getInstance().network(TAG, msg);
@@ -109,9 +120,9 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             connection = openConnection(dataSpec);
             responseCode = connection.getResponseCode();
             syncResponseCookies(connection, dataSpec.uri.toString());
-            
+
             if (responseCode >= 200 && responseCode < 300) {
-                // 记录响应头信息
+
                 long contentLength = getContentLength(connection);
                 String contentType = connection.getContentType();
                 String contentEncoding = connection.getContentEncoding();
@@ -124,7 +135,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
 
             if (responseCode < 200 || responseCode > 299) {
                 String responseMessage = connection.getResponseMessage();
-                // 🟢【标红】失败状态码显示为红色
+
                 printLog(true, "失败: HTTP " + red(responseCode + " " + responseMessage));
                 throw new HttpDataSource.HttpDataSourceException(
                         "HTTP " + responseCode + " " + responseMessage,
@@ -179,7 +190,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
         String currentUrl = originalUrl;
         int redirectCount = 0;
         Map<String, String> originHeaders = new HashMap<>(defaultRequestProperties);
-        
+
         long startTime = System.currentTimeMillis();
         final long MAX_TOTAL_DELAY = 15000;
 
@@ -193,7 +204,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             }
 
             if (redirectCount > maxRedirects) {
-                // 🟢【标红 + 修复】将 int 转为 String 再传参
+
                 printLog(true, "失败: 重定向次数超过限制(" + red(String.valueOf(maxRedirects)) + "次)");
                 throw new RedirectFailedException("重定向次数超限", -1, originalUrl, currentUrl);
             }
@@ -226,7 +237,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             redirectCount++;
             String location = conn.getHeaderField("Location");
             if (TextUtils.isEmpty(location)) {
-                // 🟢【标红 + 修复】将 int 转为 String 再传参
+
                 printLog(true, "失败: 第" + red(String.valueOf(redirectCount)) + "次重定向无Location头");
                 conn.disconnect();
                 throw new RedirectFailedException("重定向Location为空", respCode, originalUrl, currentUrl);
@@ -248,11 +259,11 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
                 throw new RedirectFailedException("跨域名重定向被禁用", respCode, originalUrl, redirectUrl);
             }
             if (ignoreSslErrorRedirect && "https".equals(targetUri.getScheme())) {
-                // 信任管理器扩展预留
+
             }
-            
+
             printLog(false, prefix + "重定向" + redirectCount + "次~ 状态码 " + respCode + ": " + redirectUrl);
-            
+
             conn.disconnect();
             currentUrl = redirectUrl;
         }
@@ -365,7 +376,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
         if (opened) {
             opened = false;
             transferEnded();
-            // 记录传输统计信息
+
             if (bytesRead > 0) {
                 printLog(false, "传输完成，共读取 " + bytesRead + " 字节 (" + (bytesRead / 1024) + " KB)");
             }
@@ -397,7 +408,6 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
 
         public Factory() {}
 
-        // 保留方法用于兼容性，现在日志始终记录
         @Deprecated
         public Factory setDebugLogEnabled(boolean enabled) {
             return this;

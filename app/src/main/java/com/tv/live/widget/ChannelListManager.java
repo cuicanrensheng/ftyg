@@ -1,6 +1,5 @@
 package com.tv.live.widget;
 
-
 import com.tv.live.util.LogBridge;
 import android.content.Context;
 import android.graphics.Color;
@@ -19,9 +18,6 @@ import com.tv.live.R;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 频道列表管理器（已恢复遥控器焦点）
- */
 public class ChannelListManager {
     private final ListView lvChannelList;
     private int selectedPosition = 0;
@@ -54,12 +50,10 @@ public class ChannelListManager {
     public ChannelListManager(Context context, ListView lvChannelList) {
         this.lvChannelList = lvChannelList;
 
-        // ✅ 恢复焦点，支持遥控器方向键移动
         lvChannelList.setItemsCanFocus(true);
         lvChannelList.setFocusable(true);
         lvChannelList.setFocusableInTouchMode(true);
 
-        // ✅ 恢复 OnItemSelectedListener，同步焦点位置
         lvChannelList.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -68,7 +62,7 @@ public class ChannelListManager {
             }
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-                // 无焦点时保持当前选中
+
             }
         });
 
@@ -160,8 +154,7 @@ public class ChannelListManager {
         int realIndex = 0;
         for (int i = 0; i < channelSourceList.size(); i++) {
             Channel c = channelSourceList.get(i);
-            // 🟢 修复分组空白问题：必须走 GroupListManager.getNormalizedGroup(c) 做匹配
-            //    否则合并后的大组（如"经典影视"）无法命中任何频道的原始group，导致显示空白
+
             if (group == null || group.isEmpty() || group.equals(GroupListManager.getNormalizedGroup(c))) {
                 names.add(c.getName());
                 if (i == currentPlayIndex) {

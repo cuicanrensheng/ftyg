@@ -1,6 +1,5 @@
 package com.tv.live.util;
 
-
 import com.tv.live.util.LogBridge;
 import android.os.Handler;
 import android.os.Looper;
@@ -8,10 +7,6 @@ import android.view.KeyEvent;
 
 import java.util.List;
 
-/**
- * 远程按键处理器
- * 封装按键类型判断、数字键输入、长按按键等逻辑
- */
 public class RemoteKeyHandler {
     public interface OnKeyAction {
         void onMenuKey();
@@ -107,9 +102,6 @@ public class RemoteKeyHandler {
         return numberInputBuffer.toString();
     }
 
-    /**
-     * 判断是否为OK键
-     */
     public static boolean isOkKey(int keyCode) {
         return keyCode == KeyEvent.KEYCODE_DPAD_CENTER
                 || keyCode == KeyEvent.KEYCODE_ENTER
@@ -117,9 +109,6 @@ public class RemoteKeyHandler {
                 || keyCode == 100;
     }
 
-    /**
-     * 判断是否为菜单键
-     */
     public static boolean isMenuKey(int keyCode) {
         return keyCode == KeyEvent.KEYCODE_MENU
                 || keyCode == KeyEvent.KEYCODE_HELP
@@ -128,28 +117,18 @@ public class RemoteKeyHandler {
                 || keyCode == 101;
     }
 
-    /**
-     * 判断是否为频道上键
-     */
     public static boolean isChannelUpKey(int keyCode) {
         return keyCode == KeyEvent.KEYCODE_DPAD_UP
                 || keyCode == KeyEvent.KEYCODE_CHANNEL_UP
                 || keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS;
     }
 
-    /**
-     * 判断是否为频道下键
-     */
     public static boolean isChannelDownKey(int keyCode) {
         return keyCode == KeyEvent.KEYCODE_DPAD_DOWN
                 || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN
                 || keyCode == KeyEvent.KEYCODE_MEDIA_NEXT;
     }
 
-    /**
-     * 处理按键事件
-     * @return 如果事件已处理返回true
-     */
     public boolean handleKeyEvent(KeyEvent event, boolean panelOpen) {
         if (event == null || keyAction == null) {
             return false;

@@ -8,15 +8,12 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
-import com.tv.live.util.LogBridge; // 🟢 替换为原生日志
+import com.tv.live.util.LogBridge;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Locale;
 
-/**
- * 开机自启管理器
- */
 public class BootStartManager {
 
     private static final String TAG = "BootStartManager";
@@ -102,7 +99,7 @@ public class BootStartManager {
                 LogBridge.d(TAG, "【自启】检测到 OriginOS 系统，需手动开启自启");
                 return BootStatus.SYSTEM_RESTRICTED;
             }
-            // 创维 / 酷开 / 康佳等同属国产电视阵营，系统限制类似
+
             if (manufacturer.contains("skyworth") || manufacturer.contains("coocaa")
                     || (brand != null && (brand.toLowerCase(Locale.ROOT).contains("skyworth")
                                           || brand.toLowerCase(Locale.ROOT).contains("coocaa")))) {
@@ -116,13 +113,6 @@ public class BootStartManager {
         return BootStatus.NORMAL;
     }
 
-    /**
-     * 显示系统自启授权引导对话框
-     *
-     * 创维/酷开/小米/华为等国产电视 ROM 自带"自启管理"白名单，
-     * 即使应用内开关已打开，系统也可能拦截 BOOT_COMPLETED 广播。
-     * 必须引导用户到系统设置中手动允许本应用开机自启，自启才会生效。
-     */
     public void showBootGuideDialog() {
         if (!(context instanceof android.app.Activity)) {
             return;
@@ -169,9 +159,6 @@ public class BootStartManager {
         }
     }
 
-    /**
-     * 显示开机自启状态详情对话框（诊断用）
-     */
     public void showBootStatusDialog() {
         if (!(context instanceof android.app.Activity)) {
             return;
@@ -240,7 +227,7 @@ public class BootStartManager {
         BootReceiver.writeBootLog(context, "toggleBoot: 用户" + (isChecked ? "开启" : "关闭") + "应用内自启开关");
         updateBootStatusText(tvStatus);
         if (isChecked) {
-            // 开启自启时立即拉起常驻保活服务（START_STICKY）
+
             try {
                 Intent svc = new Intent(context, BootStartForegroundService.class);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -260,7 +247,7 @@ public class BootStartManager {
                 showBootGuideDialog();
             }
         } else {
-            // 关闭自启时停止常驻保活服务
+
             try {
                 context.stopService(new Intent(context, BootStartForegroundService.class));
                 BootReceiver.writeBootLog(context, "toggleBoot: 已停止常驻保活服务");

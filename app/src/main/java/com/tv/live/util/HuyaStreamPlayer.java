@@ -40,12 +40,6 @@ import java.util.concurrent.ExecutorService;
 
 import okhttp3.Headers;
 
-/**
- * 虎牙流播放器
- * 负责虎牙 SDK 解析、线路轮询、清晰度变体填充、
- * 虎牙专属播放（浏览器 UA/Referer/防盗链）、
- * M3U 播放列表解析（普通源和虎牙源）
- */
 public class HuyaStreamPlayer {
     private static final String TAG = "HuyaStreamPlayer";
 
@@ -359,10 +353,6 @@ public class HuyaStreamPlayer {
                         if (backups == null) { backups = new ArrayList<>(); }
                         else backups.clear();
 
-                        // 🔴【修复清晰度残留】同 TVPlayerManager：不覆写 mainPlayUrl，
-                        // 保持 huya://room/xxx 房间协议，切回该频道时重新解析填充 variantList。
-                        // 线路/码率 URL 仍写入 backupUrls，供"线路选择"切换使用。
-
                         Set<String> seenUrls = new HashSet<>();
                         if (allVariants != null) {
                             for (Variant v : allVariants) {
@@ -394,8 +384,7 @@ public class HuyaStreamPlayer {
                 }
             });
         } catch (Throwable t) {
-            // 🔴【关键修复】捕获 SDK 调用时直接抛出的 UnsatisfiedLinkError 等致命错误，
-            // 避免未捕获异常走到 CrashHandler 弹出崩溃页面。
+
             String msg = t instanceof UnsatisfiedLinkError
                     ? "虎牙 SDK 原生库与当前系统不兼容"
                     : "虎牙 SDK 调用异常: " + t.getMessage();

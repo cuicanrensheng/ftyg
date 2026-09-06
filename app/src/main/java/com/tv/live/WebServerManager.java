@@ -23,50 +23,33 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/**
- * 网页后台管理器
- *
- * 【职责】
- * 负责管理自建的 HTTP 服务器，包括：
- * 1. 启动/停止 ServerSocket
- * 2. 处理 HTTP 请求（GET/POST）
- * 3. 构建 HTML 页面（配置页/日志页/成功页）
- * 4. 保存配置到 SharedPreferences
- */
 public class WebServerManager {
 
-    // ====================== 常量 ======================
     private static final String KEY_CUSTOM_LIVE = "custom_live_url";
     private static final String KEY_CUSTOM_EPG = "custom_epg_url";
     private static final String KEY_CUSTOM_UA = "custom_user_agent";
     private static final String SP_NAME = "app_settings";
 
-    // 🟢 防刷新冷却时间
-    private static final long SUBMIT_COOLDOWN = 2000; 
+    private static final long SUBMIT_COOLDOWN = 2000;
 
-    // ====================== 成员变量 ======================
     private Context context;
     private int port;
     private ServerSocket serverSocket;
     private Handler handler = new Handler(Looper.getMainLooper());
     private boolean isRunning = false;
 
-    // 🟢 线程池：避免每个 HTTP 连接新建线程导致线程无上限
-    private ExecutorService acceptExecutor;   // 单线程：accept 循环
-    private ExecutorService requestExecutor;  // 固定池：处理并发连接
+    private ExecutorService acceptExecutor;
+    private ExecutorService requestExecutor;
 
     private static WebServerManager runningInstance;
 
-    // 🟢 记录最后一次提交配置的时间，用于防连点锁
     private long lastSubmitTime = 0;
 
-    // ====================== 构造函数 ======================
     public WebServerManager(Context context, int port) {
         this.context = context.getApplicationContext();
         this.port = port;
     }
 
-    // ====================== 公共方法 ======================
     public void start() {
         if (isRunning) return;
 
@@ -104,7 +87,7 @@ public class WebServerManager {
                         requestExecutor.execute(() -> handleHttpRequest(socket));
                     } catch (Exception e) {
                         if (!serverSocket.isClosed()) {
-                            // 忽略正常关闭导致的异常
+
                         }
                     }
                 }
@@ -168,7 +151,6 @@ public class WebServerManager {
         return isRunning;
     }
 
-    // ====================== HTTP 请求处理 ======================
     private void handleHttpRequest(Socket socket) {
         try {
             BufferedReader reader = new BufferedReader(
@@ -228,7 +210,7 @@ public class WebServerManager {
             if ("GET".equals(method) && ("/".equals(purePath) || "/index.html".equals(purePath))) {
                 responseBody = buildConfigPage();
             } else if ("POST".equals(method) && "/submit".equals(purePath)) {
-                // 防连点锁
+
                 long currentTime = System.currentTimeMillis();
                 if (currentTime - lastSubmitTime < SUBMIT_COOLDOWN) {
                     sendResponse(socket, "429 Too Many Requests", "text/plain", "操作过于频繁，请稍后再试！");
@@ -261,12 +243,12 @@ public class WebServerManager {
                     }
 
                     if (hasUpdate) {
-                        // 🔧【核心修复】优先直接通知主界面，比广播更可靠、更实时
+
                         MainActivity activity = MainActivity.getRunningInstance();
                         if (activity != null && !activity.isFinishing()) {
                             activity.onReceiveConfig(liveUrl, epgUrl);
                         } else {
-                            // 如果主界面没在运行，才走广播兜底
+
                             Intent refreshIntent = new Intent("com.tv.live.REFRESH_LIVE_AND_EPG");
                             refreshIntent.setPackage(context.getPackageName());
                             context.sendBroadcast(refreshIntent);
@@ -325,12 +307,6 @@ public class WebServerManager {
         return params;
     }
 
-    // ====================== HTML 页面构建 ======================
-
-    /**
-     * 构建配置页面 HTML
-     * 配置页：仅保留远程推送（直播源/节目单/UA 三张卡片 + 单 Tab）
-     */
     private String buildConfigPage() {
         SharedPreferences sp = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
         String currentLive = sp.getString(KEY_CUSTOM_LIVE, "");

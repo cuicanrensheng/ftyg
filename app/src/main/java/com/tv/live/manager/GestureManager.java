@@ -6,15 +6,11 @@ import android.os.Looper;
 import com.tv.live.MainActivity;
 import com.tv.live.PlayerGestureHelper;
 
-/**
- * 手势管理器
- */
 public class GestureManager {
 
     private final MainActivity activity;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    
-    // ✅【修改】防抖时长延长至 500ms，与长按判定时长对齐，进一步降低误触概率
+
     private static final long DEBOUNCE_DELAY_MS = 500;
     private boolean isGestureLocked = false;
 

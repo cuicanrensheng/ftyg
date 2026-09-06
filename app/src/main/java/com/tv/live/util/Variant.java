@@ -2,19 +2,15 @@ package com.tv.live.util;
 
 import android.text.TextUtils;
 
-/**
- * 清晰度变体数据类，表示一个可播放的视频流变体
- * 支持普通流和虎牙SDK流两种来源
- */
 public class Variant {
     public String url;
     public int bandwidth;
     public int width;
     public int height;
     public String resolutionLabel;
-    // 虎牙专用：码率显示名（如"蓝光4M"、"超清2M"），为空则回退 resolutionLabel
+
     public String huyaBitRateDisplayName;
-    // 虎牙专用：线路索引和码率，用于切线路时找对应流
+
     public int huyaLineIndex = -1;
     public int huyaBitRate = -1;
 
@@ -30,26 +26,24 @@ public class Variant {
         else resolutionLabel = "自适应";
     }
 
-    /** 虎牙 SDK 创建清晰度变体 */
     public static Variant fromHuyaStreamInfo(HuyaSDKParser.HuyaStreamInfo s) {
         Variant v = new Variant(
                 s.getPlayUrl(),
-                s.bitRate * 1000,     // Kbps → bps
+                s.bitRate * 1000,
                 0, 0
         );
-        // 🔴【对接SDK清晰度接口】优先使用 SDK 官方清晰度名（"蓝光6M"/"蓝光4M"/"超清"/"流畅"）
-        // 作为 UI 标签，避免用 URL 码率推断导致档位合并/显示名与 SDK 不一致。
+
         if (!TextUtils.isEmpty(s.bitRateDisplayName)) {
             v.huyaBitRateDisplayName = s.bitRateDisplayName;
             v.resolutionLabel = s.bitRateDisplayName;
-            // height 仅用于"按高度兜底"匹配，估算即可
+
             v.height = s.bitRate >= 6000 ? 1080
                     : s.bitRate >= 4000 ? 1080
                     : s.bitRate >= 2000 ? 720
                     : s.bitRate >= 1000 ? 480
                     : 360;
         } else {
-            // 无 SDK 名时才回退 URL 模式匹配推导分辨率标签（与反编译版一致）
+
             String url = s.getPlayUrl();
             if (!TextUtils.isEmpty(url)) {
                 v.height = inferHeightFromUrl(url, s.bitRate);
@@ -64,7 +58,6 @@ public class Variant {
         return v;
     }
 
-    /** 从URL模式推导分辨率标签（与反编译版setupHuyaVariants一致） */
     private static String inferResolutionLabelFromUrl(String url, int bitRate) {
         if (url.contains("_6000.") || bitRate >= 6000) return "1080p高清";
         if (url.contains("_4000.") || bitRate >= 4000) return "1080p";
@@ -74,7 +67,6 @@ public class Variant {
         return "360p";
     }
 
-    /** 从URL模式推导高度 */
     private static int inferHeightFromUrl(String url, int bitRate) {
         if (url.contains("_6000.") || bitRate >= 6000) return 1080;
         if (url.contains("_4000.") || bitRate >= 4000) return 1080;
@@ -84,7 +76,6 @@ public class Variant {
         return 360;
     }
 
-    /** 获取用于 UI 列表和存储的标签 */
     public String getDisplayLabel() {
         return resolutionLabel != null ? resolutionLabel :
                 (!TextUtils.isEmpty(huyaBitRateDisplayName) ? huyaBitRateDisplayName : "未知");

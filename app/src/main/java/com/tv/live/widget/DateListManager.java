@@ -1,6 +1,5 @@
 package com.tv.live.widget;
 
-
 import com.tv.live.util.LogBridge;
 import android.content.Context;
 import android.graphics.Color;
@@ -19,9 +18,6 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * 日期列表管理器（已恢复遥控器焦点）
- */
 public class DateListManager {
     private final ListView lvDate;
     private Context context;
@@ -47,7 +43,6 @@ public class DateListManager {
         this.context = context;
         this.lvDate = lvDate;
 
-        // ✅ 恢复焦点，支持遥控器方向键
         lvDate.setItemsCanFocus(true);
         lvDate.setFocusable(true);
         lvDate.setFocusableInTouchMode(true);
@@ -77,14 +72,13 @@ public class DateListManager {
 
     public void initDate() {
         dateDisplayList = new ArrayList<>();
-        // 🟢 删除"前天/昨天/下周二（末项）"：改为从今天开始，共 7 天 [今天, 周三~下周一]
+
         Calendar cal = Calendar.getInstance();
         String[] week = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
 
-        // 🟢 默认选中「今天」，对应新索引 = 0
         selectedPosition = 0;
 
-        for (int i = 0; i < 7; i++) {                 // 7 天：today(0) ~ today+6(周一)
+        for (int i = 0; i < 7; i++) {
             String weekStr;
             if (i == 0) {
                 weekStr = "今天";
@@ -128,7 +122,7 @@ public class DateListManager {
         };
 
         lvDate.setAdapter(adapter);
-        // 🔧 关键修复：D-pad遥控器方向键导航也会触发刷新（之前只在点击OK时触发，导致左侧视觉高亮切换，右侧节目单不更新，显示错位）
+
         lvDate.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {

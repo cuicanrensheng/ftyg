@@ -1,6 +1,3 @@
-// AES-256-CBC 实现（紧凑、无依赖）
-// 密钥 32 字节、IV 16 字节、PKCS7 padding
-// 仅用于本项目字符串解密，体积小、纯静态、无表依赖
 #include <cstring>
 #include <cstdint>
 #include <cstdlib>
@@ -53,7 +50,7 @@ static inline uint8_t xtime(uint8_t x) {
 
 static void key_expansion_256(const uint8_t key[32], uint8_t out[240]) {
     for (int i = 0; i < 32; ++i) out[i] = key[i];
-    int i = 8;  // Nb*(Nr+1) = 4*(14+1) = 60, but 256-bit = 8 32-bit words
+    int i = 8;
     uint8_t temp[4];
     while (i < 60) {
         for (int j = 0; j < 4; ++j) temp[j] = out[(i - 1) * 4 + j];
@@ -77,12 +74,12 @@ static void inv_sub_bytes(uint8_t state[16]) {
 
 static void inv_shift_rows(uint8_t s[16]) {
     uint8_t t;
-    // row 1: shift right by 1
+
     t = s[13]; s[13] = s[9]; s[9] = s[5]; s[5] = s[1]; s[1] = t;
-    // row 2: shift right by 2
+
     t = s[2]; s[2] = s[10]; s[10] = t;
     t = s[6]; s[6] = s[14]; s[14] = t;
-    // row 3: shift right by 3
+
     t = s[3]; s[3] = s[7]; s[7] = s[11]; s[11] = s[15]; s[15] = t;
 }
 
@@ -127,13 +124,6 @@ static void inv_cipher_block(uint8_t in[16], uint8_t out[16], const uint8_t* rou
     memcpy(out, state, 16);
 }
 
-// AES-256-CBC 解密
-// in: 密文（含 16 字节 IV 在最前）
-// in_len: 密文总长（>=32 且是 16 倍数）
-// key: 32 字节
-// out: 明文输出
-// out_len: 输出长度
-// 返回 0 成功
 extern "C" int aes256_cbc_decrypt(const uint8_t* in, int in_len,
                                    const uint8_t key[32], uint8_t* out, int* out_len) {
     if (!in || !out || !out_len) return -1;
@@ -142,7 +132,6 @@ extern "C" int aes256_cbc_decrypt(const uint8_t* in, int in_len,
     uint8_t round_keys[240];
     key_expansion_256(key, round_keys);
 
-    // 提取 IV
     uint8_t iv[16];
     memcpy(iv, in, 16);
 
@@ -163,14 +152,13 @@ extern "C" int aes256_cbc_decrypt(const uint8_t* in, int in_len,
         memcpy(prev, in + off, 16);
     }
 
-    // 去除 PKCS7 padding
     if (*out_len == 0) return -4;
     uint8_t pad = out[*out_len - 1];
     if (pad < 1 || pad > 16) {
-        // 可能是无 padding（旧数据兼容）
+
         return 0;
     }
-    // 校验 padding
+
     bool ok = true;
     for (int i = 0; i < pad; ++i) {
         if (out[*out_len - 1 - i] != pad) { ok = false; break; }

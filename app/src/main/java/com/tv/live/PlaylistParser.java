@@ -39,7 +39,6 @@ public class PlaylistParser {
         String line;
         String currentGroup = "未分类";
 
-        // —— M3U 解析用临时状态 ——
         String m3uName = "";
         String m3uTvgId = "";
         String m3uGroup = "";
@@ -49,14 +48,8 @@ public class PlaylistParser {
             line = line.trim();
             if (line.isEmpty()) continue;
 
-            // ============================================================
-            // ✅ 格式 A：DIYP TXT（666 源使用此格式）
-            //   1) 分组标记：  央卫,#genre#
-            //   2) 频道条目：  CCTV-1,http://xxx.m3u8
-            //   3) 同名多源：  CCTV-1,http://a  后面再跟  CCTV-1,http://b → 合并备用源
-            // ============================================================
             if (line.endsWith(",#genre#") || line.endsWith("#genre#")) {
-                // 分组切换
+
                 String group = line;
                 if (group.endsWith(",#genre#")) {
                     group = group.substring(0, group.length() - ",#genre#".length()).trim();
@@ -67,13 +60,11 @@ public class PlaylistParser {
                 }
                 if (!group.isEmpty()) currentGroup = group;
 
-                // 若有 M3U #EXTINF 等待的 uri，清除状态（避免与下一行混淆）
                 pendingM3uUri = false;
                 m3uName = ""; m3uTvgId = ""; m3uGroup = "";
                 continue;
             }
 
-            // DIYP 频道行：匹配「名称,http(s)://...」（第一个逗号前是频道名）
             int diypComma = findFirstHttpComma(line);
             if (diypComma > 0) {
                 String diypName = line.substring(0, diypComma).trim();
@@ -86,9 +77,6 @@ public class PlaylistParser {
                 }
             }
 
-            // ============================================================
-            // 格式 B：标准 M3U (#EXTM3U / #EXTINF / #EXTGRP)
-            // ============================================================
             if (line.startsWith("#EXTM3U")) continue;
 
             if (line.startsWith("#EXTGRP:")) {
@@ -118,7 +106,6 @@ public class PlaylistParser {
                 continue;
             }
 
-            // 非注释行 + M3U 等待 uri：下一行就是 URL
             if (!line.startsWith("#") && pendingM3uUri) {
                 String uri = line;
                 if (uri.startsWith("http")) {
@@ -132,8 +119,6 @@ public class PlaylistParser {
                 continue;
             }
 
-            // 兜底：既不是 M3U 也不是 DIYP，但直接就是一个 URL（无逗号、非注释）
-            // —— 按 URL 本身当临时名加入未分类，避免漏项
             if (!line.startsWith("#") && line.startsWith("http")) {
                 addOrMergeChannel(channelMap, line, line, currentGroup, "");
             }
@@ -142,7 +127,6 @@ public class PlaylistParser {
         return new ArrayList<>(channelMap.values());
     }
 
-    /** 在 channelMap 里新增或合并频道（同名多源 → 备用 URL 列表） */
     private static void addOrMergeChannel(Map<String, Channel> channelMap,
                                           String name, String uri,
                                           String group, String tvgId) {
@@ -162,13 +146,12 @@ public class PlaylistParser {
         }
     }
 
-    /** 寻找 DIYP TXT 行里「频道名,http://...」的第一个逗号位置（URL 不会包含逗号，安全取第一个 http 前的逗号） */
     private static int findFirstHttpComma(String line) {
         if (line == null || line.isEmpty()) return -1;
         int httpIdx = line.indexOf("http://");
         if (httpIdx < 0) httpIdx = line.indexOf("https://");
         if (httpIdx <= 1) return -1;
-        // 找 httpIdx 之前最后一个逗号（支持 频道名里有逗号的极端情况，以 http 前第一个逗号为界）
+
         int comma = line.lastIndexOf(',', httpIdx - 1);
         if (comma <= 0) return -1;
         return comma;

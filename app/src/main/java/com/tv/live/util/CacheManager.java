@@ -14,29 +14,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Locale;
-/**
- * ✅ 缓存管理工具类（内存优化版）
- *
- * 【2026-06-21 内存优化】
- * 【优化原因】
- * 原来的 saveFileCache(String) 会调用 content.getBytes()，
- * 瞬间分配一个和字符串一样大的 byte 数组，大文件时容易 OOM。
- *
- * 【优化方案】
- * 1. 新增 saveFileCache(String, InputStream) 流式保存方法
- * 2. 新增 getFileCacheStream(String) 流式读取方法
- * 3. 大文件用流式方法，内存占用只有几 KB
- * 4. 原来的 String 版本保留，兼容小文件和旧代码
- *
- * 【功能】
- * 1. 文件缓存：缓存直播源、EPG等大文本数据
- * 2. SP缓存：缓存上次播放地址、设置等小数据
- *
- * 【缓存策略】
- * 1. 先读缓存，快速显示
- * 2. 后台刷新最新数据
- * 3. 文件缓存24小时过期，SP缓存永久有效
- */
+
 public class CacheManager {
 
     private static final String CACHE_DIR = "tv_cache";
@@ -46,16 +24,13 @@ public class CacheManager {
     private static final String KEY_LAST_PLAY_NAME = "last_play_name";
     private static final String KEY_LAST_PLAY_INDEX = "last_play_index";
 
-    private static final long MAX_CACHE_SIZE = 20 * 1024 * 1024; // 最大缓存：20MB
+    private static final long MAX_CACHE_SIZE = 20 * 1024 * 1024;
     private static final int BUFFER_SIZE = 8192;
 
     private Context context;
     private SharedPreferences sp;
     private static CacheManager instance;
 
-    /**
-     * 获取单例
-     */
     public static CacheManager getInstance(Context ctx) {
         if (instance == null) {
             instance = new CacheManager(ctx);
@@ -68,28 +43,6 @@ public class CacheManager {
         sp = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
     }
 
-    // ================================================
-    // 文件缓存（用于直播源、EPG等大文本）
-    // ================================================
-
-    // ------------------------------------------------
-    // ✅ 新增：流式保存（推荐大文件使用，内存占用极小）
-    // ------------------------------------------------
-
-    /**
-     * ✅ 流式保存文件缓存
-     *
-     * 【推荐场景】
-     * 大文件（EPG、直播源等），用这个方法不会 OOM。
-     *
-     * 【内存对比】
-     * 原来的 String 版本：峰值内存 = 文件大小 × 2（String + byte[]）
-     * 这个流式版本：峰值内存 = 8KB（只有缓冲区）
-     *
-     * @param key 缓存键（如 "live_source"、"epg"）
-     * @param is 输入流，从这个流读取数据写入缓存
-     * @return 保存的字节数，失败返回 -1
-     */
     public long saveFileCache(String key, InputStream is) {
         if (is == null) {
             return -1;
@@ -97,11 +50,10 @@ public class CacheManager {
         trimCacheIfNeeded();
 
         File cacheFile = getCacheFile(key);
-        // 🔧【缓存治理】写入前先删除同 key 的旧文件，避免多版本同存，也避免替换过程中 FileOutputStream(new File)
-        //     如果写入失败残留 0 字节占位 —— 也统一在 trim / Inspector 清理时删掉。
+
         try {
             if (cacheFile.exists()) {
-                //noinspection ResultOfMethodCallIgnored
+
                 cacheFile.delete();
             }
         } catch (Throwable ignored) {}
@@ -120,10 +72,10 @@ public class CacheManager {
             }
 
             fos.flush();
-            // 🔧【缓存治理】写成功才留，失败立即清掉（防止半写入的半截文件下次 getFileCache 按"没过期"被错误使用）
+
             if (totalBytes <= 0) {
                 try { fos.close(); fos = null; } catch (Throwable ignored) {}
-                //noinspection ResultOfMethodCallIgnored
+
                 cacheFile.delete();
                 return -1;
             }
@@ -131,45 +83,30 @@ public class CacheManager {
 
         } catch (IOException e) {
             e.printStackTrace();
-            // 🔧【缓存治理】IO 异常一律删，不留半截
+
             try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
             fos = null;
-            //noinspection ResultOfMethodCallIgnored
+
             cacheFile.delete();
             return -1;
         } finally {
             if (fos != null) {
                 try { fos.close(); } catch (IOException ignored) {}
             }
-            // 🔧【缓存治理】写入后再跑一次 trim，保证立刻回到安全水位
+
             try { trimCacheIfNeeded(); } catch (Throwable ignored) {}
         }
     }
 
-    // ------------------------------------------------
-    // ✅ 新增：流式读取（推荐大文件使用）
-    // ------------------------------------------------
-
-    /**
-     * ✅ 获取缓存文件的输入流（流式读取）
-     *
-     * 【推荐场景】
-     * 大文件（EPG等），用这个方法不会 OOM。
-     * 配合 XmlPullParser 等流式解析器使用效果最佳。
-     *
-     * @param key 缓存键
-     * @return 缓存文件的输入流，过期或不存在返回 null
-     */
     public InputStream getFileCacheStream(String key) {
         File cacheFile = getCacheFile(key);
         if (!cacheFile.exists()) {
             return null;
         }
 
-        // 检查是否过期
         long age = System.currentTimeMillis() - cacheFile.lastModified();
         if (age > CACHE_VALID_TIME) {
-            return null; // 过期了
+            return null;
         }
 
         try {
@@ -180,33 +117,17 @@ public class CacheManager {
         }
     }
 
-    // ------------------------------------------------
-    // 原来的 String 版本（保留，兼容小文件和旧代码）
-    // ------------------------------------------------
-
-    /**
-     * 读取文件缓存（String 版本）
-     *
-     * 【注意】
-     * 大文件请用 getFileCacheStream()，避免 OOM。
-     * 这个方法适合小文件（几十 KB 以内）。
-     *
-     * @param key 缓存键（如 "live_source"、"epg"）
-     * @return 缓存内容，过期或不存在返回null
-     */
     public String getFileCache(String key) {
         File cacheFile = getCacheFile(key);
         if (!cacheFile.exists()) {
             return null;
         }
 
-        // 检查是否过期
         long age = System.currentTimeMillis() - cacheFile.lastModified();
         if (age > CACHE_VALID_TIME) {
-            return null; // 过期了
+            return null;
         }
 
-        // 读取文件内容
         StringBuilder sb = new StringBuilder();
         BufferedReader reader = null;
         try {
@@ -226,26 +147,16 @@ public class CacheManager {
         }
     }
 
-    /**
-     * 保存文件缓存（String 版本）
-     *
-     * 【注意】
-     * 大文件请用 saveFileCache(String, InputStream)，避免 OOM。
-     * 这个方法适合小文件（几十 KB 以内）。
-     *
-     * @param key 缓存键
-     * @param content 缓存内容
-     */
     public void saveFileCache(String key, String content) {
         if (TextUtils.isEmpty(content)) {
             return;
         }
 
         File cacheFile = getCacheFile(key);
-        // 🔧【缓存治理】写入前先删旧版本、避免新旧覆盖；写入失败不留半截文件
+
         try {
             if (cacheFile.exists()) {
-                //noinspection ResultOfMethodCallIgnored
+
                 cacheFile.delete();
             }
         } catch (Throwable ignored) {}
@@ -264,7 +175,7 @@ public class CacheManager {
                 try { fos.close(); } catch (IOException ignored) {}
             }
             if (!success) {
-                //noinspection ResultOfMethodCallIgnored
+
                 cacheFile.delete();
             } else {
                 try { trimCacheIfNeeded(); } catch (Throwable ignored) {}
@@ -272,13 +183,6 @@ public class CacheManager {
         }
     }
 
-    // ------------------------------------------------
-    // 新增：获取缓存文件对象（供外部直接操作文件）
-    // ------------------------------------------------
-
-    /**
-     * 获取缓存文件对象
-     */
     public File getCacheFile(String key) {
         File cacheDir = new File(context.getCacheDir(), CACHE_DIR);
         if (!cacheDir.exists()) {
@@ -324,17 +228,11 @@ public class CacheManager {
         return size;
     }
 
-    /**
-     * 获取当前缓存总大小（字节）
-     */
     public long getCacheTotalSize() {
         File cacheDir = new File(context.getCacheDir(), CACHE_DIR);
         return getCacheDirSize(cacheDir);
     }
 
-    /**
-     * 获取当前缓存总大小（可读字符串）
-     */
     public String getCacheTotalSizeReadable() {
         long size = getCacheTotalSize();
         if (size < 1024) return size + " B";
@@ -342,16 +240,6 @@ public class CacheManager {
         return String.format(Locale.ROOT, "%.2f MB", size / (1024.0 * 1024));
     }
 
-    // ------------------------------------------------
-    // 新增：检查缓存是否有效
-    // ------------------------------------------------
-
-    /**
-     * 检查缓存是否有效（存在且未过期）
-     *
-     * @param key 缓存键
-     * @return true=有效，false=不存在或已过期
-     */
     public boolean isCacheValid(String key) {
         File cacheFile = getCacheFile(key);
         if (!cacheFile.exists()) {
@@ -361,13 +249,6 @@ public class CacheManager {
         return age <= CACHE_VALID_TIME;
     }
 
-    // ================================================
-    // SP缓存（用于上次播放地址等小数据）
-    // ================================================
-
-    /**
-     * 保存上次播放的频道信息
-     */
     public void saveLastPlay(String url, String name, int index) {
         SharedPreferences.Editor editor = sp.edit();
         editor.putString(KEY_LAST_PLAY_URL, url);
@@ -376,34 +257,18 @@ public class CacheManager {
         editor.apply();
     }
 
-    /**
-     * 获取上次播放的地址
-     */
     public String getLastPlayUrl() {
         return sp.getString(KEY_LAST_PLAY_URL, "");
     }
 
-    /**
-     * 获取上次播放的频道名称
-     */
     public String getLastPlayName() {
         return sp.getString(KEY_LAST_PLAY_NAME, "");
     }
 
-    /**
-     * 获取上次播放的索引
-     */
     public int getLastPlayIndex() {
         return sp.getInt(KEY_LAST_PLAY_INDEX, 0);
     }
 
-    // ================================================
-    // 清除缓存
-    // ================================================
-
-    /**
-     * 清除所有文件缓存
-     */
     public void clearAllFileCache() {
         File cacheDir = new File(context.getCacheDir(), CACHE_DIR);
         if (cacheDir.exists() && cacheDir.isDirectory()) {
@@ -416,9 +281,6 @@ public class CacheManager {
         }
     }
 
-    /**
-     * 清除所有缓存（包括SP）
-     */
     public void clearAll() {
         clearAllFileCache();
         sp.edit().clear().apply();

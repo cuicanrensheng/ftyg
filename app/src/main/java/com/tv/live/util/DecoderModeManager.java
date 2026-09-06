@@ -36,11 +36,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * 解码器模式管理器
- * 负责硬解/软解/自动模式切换、渲染器(Surface/Texture)切换、
- * 解码器广播接收器、Codec策略过滤等
- */
 public class DecoderModeManager {
     private static final String TAG = "DecoderModeManager";
 

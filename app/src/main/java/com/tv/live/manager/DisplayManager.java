@@ -12,47 +12,27 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-/**
- * 显示管理器
- *
- * 【功能说明】
- * 统一管理所有和显示相关的功能，包括：
- * 1. 全面屏适配（刘海屏、沉浸式、系统栏隐藏）
- * 2. 加载动画（动态创建、显示、隐藏）
- */
 public class DisplayManager {
 
-    // ====================== 成员变量 ======================
     private final Activity activity;
     private View loadingView;
     private TextView tvLoadingText;
     private boolean loadingViewInitialized = false;
 
-    // 🟢【新增缓存】防止重复触发系统窗口重绘
     private boolean fullScreenApplied = false;
 
-    // ====================== 构造函数 ======================
     public DisplayManager(Activity activity) {
         this.activity = activity;
     }
 
-    // ====================================================================
-    // ✅ 功能一：全面屏适配
-    // ====================================================================
-
-    /**
-     * 应用全面屏适配
-     */
     public void applyFullScreen() {
-        // 🟢【优化】如果已经应用过，且没有重置，直接返回，避免系统窗口重复重绘
+
         if (fullScreenApplied) {
             return;
         }
 
         try {
-            // ================================================
-            // 第一部分：刘海屏适配 + 全屏标志 + 旧版沉浸式
-            // ================================================
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 WindowManager.LayoutParams lp = activity.getWindow().getAttributes();
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -81,9 +61,6 @@ public class DisplayManager {
                 );
             }
 
-            // ================================================
-            // 第二部分：Android 11+ 的 WindowInsetsController
-            // ================================================
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
                     android.view.WindowInsetsController controller =
@@ -96,12 +73,11 @@ public class DisplayManager {
                     }
                     activity.getWindow().setDecorFitsSystemWindows(false);
                 } catch (Exception e) {
-                    // ✅ 电视盒子兼容：部分电视系统WindowInsetsController实现不完整，忽略异常
+
                     e.printStackTrace();
                 }
             }
 
-            // 🟢【缓存】标记已成功应用全屏，防止后续重复调用
             fullScreenApplied = true;
 
         } catch (Exception e) {
@@ -109,23 +85,12 @@ public class DisplayManager {
         }
     }
 
-    /**
-     * 重新应用全面屏（页面获得焦点时调用）
-     * 🟢【优化】重置标记位，确保再次应用生效
-     */
     public void reapplyFullScreen() {
-        // 重置缓存，允许下二次调用时重新应用系统属性
+
         fullScreenApplied = false;
         applyFullScreen();
     }
 
-    // ====================================================================
-    // ✅ 功能二：加载动画
-    // ====================================================================
-
-    /**
-     * 初始化加载视图（动态创建）
-     */
     private void initLoadingView() {
         if (loadingViewInitialized) return;
 
@@ -173,9 +138,6 @@ public class DisplayManager {
         }
     }
 
-    /**
-     * 显示加载动画
-     */
     public void showLoading(String text) {
         if (!loadingViewInitialized) {
             initLoadingView();
@@ -209,20 +171,13 @@ public class DisplayManager {
         return loadingView != null && loadingView.getVisibility() == View.VISIBLE;
     }
 
-    // ====================================================================
-    // 资源释放
-    // ====================================================================
-
-    /**
-     * 释放资源
-     */
     public void release() {
-        // 🟢【优化】先判空，避免 getParent 为 null 时导致的崩溃
+
         if (loadingView != null && loadingView.getParent() != null) {
             try {
                 ((ViewGroup) loadingView.getParent()).removeView(loadingView);
             } catch (Exception e) {
-                // 忽略移除失败
+
             }
         }
         loadingView = null;

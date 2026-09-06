@@ -8,26 +8,22 @@ import java.util.List;
 
 public class Channel implements Parcelable {
     private String name;
-    // 主播放地址
+
     private String mainPlayUrl;
-    // 备用播放地址列表
+
     private List<String> backupUrls;
-    // 虎牙线路名称列表（与 backupUrls 一一对应，如 "线路2", "线路3"）
+
     private List<String> huyaLineLabels;
     private String group;
     private String channelId;
 
-    // 🟢【新增】记录当前选中的线路索引 (0=主源, 1及以上=备用源)
     private int currentLineIndex = 0;
 
-    // 🟢【虎牙一起看】标识是否为虎牙一起看频道，及对应房间号
     private boolean isTogetherWatch = false;
     private int huyaRoomId = 0;
 
-    // 🆕【SDK独立一起看分组】标识该频道来自 SDK 内部一起看列表（独立分组，不受其他源影响）
     private boolean isHuyaSdkTogetherWatch = false;
 
-    // 🟢 一起看/游戏直播频道：完整长整型 uid（presenterUid），用作该频道的开播 key（huya://uid/ 协议）
     private long huyaUid = 0;
 
     public Channel(String name, String mainPlayUrl, String group, String channelId) {
@@ -51,14 +47,12 @@ public class Channel implements Parcelable {
         this.huyaRoomId = huyaRoomId;
     }
 
-    // 添加备用源，自动去重
     public void addBackupUrl(String url) {
         if (url != null && !backupUrls.contains(url)) {
             backupUrls.add(url);
         }
     }
 
-    // 添加备用源+线路名
     public void addBackupUrl(String url, String lineLabel) {
         if (url != null && !backupUrls.contains(url)) {
             backupUrls.add(url);
@@ -79,7 +73,6 @@ public class Channel implements Parcelable {
         huyaLineLabels.clear();
     }
 
-    // ====== 根据选中的线路索引返回对应的播放地址 ======
     public String getPlayUrl() {
         if (currentLineIndex > 0 && currentLineIndex - 1 < backupUrls.size()) {
             return backupUrls.get(currentLineIndex - 1);
@@ -155,7 +148,6 @@ public class Channel implements Parcelable {
         this.huyaUid = huyaUid;
     }
 
-    // ==================== Parcelable 实现 ====================
     protected Channel(Parcel in) {
         name = in.readString();
         mainPlayUrl = in.readString();
@@ -207,7 +199,7 @@ public class Channel implements Parcelable {
         public String time;
         public String title;
         public boolean isPlaying;
-        // 🔧 新增：精确日期键 YYYYMMDD（如 20260815），用于日期匹配时绕过中文周几标签的不一致问题
+
         public int dateYMD;
 
         public EpgItem(String dayName, String time, String title, boolean isPlaying) {

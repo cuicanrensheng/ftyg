@@ -16,57 +16,33 @@ import com.tv.live.security.TamperReporter;
 
 import java.security.MessageDigest;
 
-/**
- * APK 防二次打包 + 完整性校验：
- * 1. 校验包名（防止被改名后重新签名）
- * 2. 校验签名 SHA-256（防止二次签名）
- * 3. 校验 classes.dex SHA-256（防止 SO 注入 / 类篡改）
- * 4. NDK 反调试（ptrace + TracerPid）
- * 5. Anti-Frida / Anti-Xposed / Anti-root / 模拟器粗检测
- *
- * 关键类已加 final，防 Xposed/Substrate 替换整个类。
- */
 public final class SecurityCheck {
 
     private static final String TAG = "SecChk";
     private static final String EXPECTED_PKG = "com.tv.live";
 
-    // 期望的 classes.dex SHA-256（Base64）；每次 release 重新编译后必须更新
-    // 启动期若不匹配 → 立即退出
     private static final String EXPECTED_DEX_B64 = "REPLACE_WITH_DEX_SHA256_BASE64";
 
-    // 期望的签名 SHA-256（Base64）- release 签名
     private static final String EXPECTED_SIG_BASE64 = "xQdedEk3xbKAsqg0WqDdH0qmjiYAkARaVVtrTVXdQAQ=";
 
     private SecurityCheck() {}
 
-    /**
-     * 启动时调用一次
-     * 正式版启用签名校验，调试版跳过
-     *
-     * 注意：安全检查失败时不再直接杀进程，而是：
-     * 1. 记录详细日志供调试
-     * 2. 上报篡改事件到监控平台
-     * 3. 返回 false 让调用方降级处理
-     */
     public static boolean verifyOnStart(Context ctx) {
         if (BuildConfig.IS_DEBUG) {
             LogBridge.i(TAG, "🔓 调试版：跳过签名校验");
             return true;
         }
-        
+
         LogBridge.i(TAG, "🔒 正式版：启用签名校验");
-        
-        // 初始化篡改上报
+
         try {
             TamperReporter.init(ctx);
         } catch (Throwable t) {
             LogBridge.w(TAG, "TamperReporter 初始化失败: " + t.getMessage());
         }
-        
+
         boolean allPassed = true;
-        
-        // 1. 校验签名
+
         if (!verifySignature(ctx)) {
             LogBridge.e(TAG, "⚠️ 签名校验未通过，将上报但不阻断启动");
             try {
@@ -79,8 +55,7 @@ public final class SecurityCheck {
             }
             allPassed = false;
         }
-        
-        // 2. 校验包名
+
         String pkgName = ctx.getPackageName();
         if (!EXPECTED_PKG.equals(pkgName)) {
             LogBridge.e(TAG, "❌ 包名不匹配! expected=" + EXPECTED_PKG + " current=" + pkgName);
@@ -96,8 +71,7 @@ public final class SecurityCheck {
         } else {
             LogBridge.i(TAG, "✅ 包名校验通过");
         }
-        
-        // 3. 校验 DEX 完整性（可选，占位符未设置时只打印 hash）
+
         if (!verifyDexIntegrity(ctx)) {
             LogBridge.e(TAG, "⚠️ DEX 完整性校验未通过");
             try {
@@ -110,7 +84,7 @@ public final class SecurityCheck {
             }
             allPassed = false;
         }
-        
+
         if (!allPassed) {
             LogBridge.w(TAG, "⚠️ 部分安全检查未通过，但应用将继续运行（降级模式）");
         }
@@ -146,7 +120,6 @@ public final class SecurityCheck {
             String currentB64 = Base64.encodeToString(shaBytes, Base64.NO_WRAP);
             LogBridge.i(TAG, "当前签名 SHA256=" + currentB64);
 
-            // 严格校验签名
             if (!EXPECTED_SIG_BASE64.equals(currentB64)) {
                 LogBridge.e(TAG, "❌ 签名校验失败! expected=" + EXPECTED_SIG_BASE64 + " current=" + currentB64);
                 toastAndExit(appCtx, "签名校验失败，APK 被修改");
@@ -161,27 +134,24 @@ public final class SecurityCheck {
     }
 
     private static boolean verifyDexIntegrity(Context appCtx) {
-        // ⚡ 占位符未配置时直接短路：computeDexHash 要读整个 classes.dex 算 SHA-256，
-        // 弱 TV 设备上耗时数百毫秒，且结果只用于打印人工对比、不影响任何逻辑。
-        // 发布版把 EXPECTED_DEX_B64 填成真实 SHA-256（Base64）后自动恢复严格校验。
-        // 需要获取 hash：解包 release apk，对 classes.dex 执行  sha256sum | base64
+
         if ("REPLACE_WITH_DEX_SHA256_BASE64".equals(EXPECTED_DEX_B64)) {
             return true;
         }
         try {
             byte[] hash = IntegrityCheck.computeDexHash(appCtx);
-            if (hash == null) return true; // 计算失败不阻塞
+            if (hash == null) return true;
             String currentB64 = Base64.encodeToString(hash, Base64.NO_WRAP);
             LogBridge.i(TAG, "EXPECTED_DEX_SHA256=" + currentB64);
             if (!"REPLACE_WITH_DEX_SHA256_BASE64".equals(EXPECTED_DEX_B64)) {
-                // 已配置真实值 → 严格校验（仅在不启用资源混淆的最终发布版使用）
+
                 if (!EXPECTED_DEX_B64.equals(currentB64)) {
                     LogBridge.e(TAG, "dex hash 不匹配！expected=" + EXPECTED_DEX_B64 + " current=" + currentB64);
                     return false;
                 }
                 LogBridge.w(TAG, "✅ dex 完整性校验通过");
             } else {
-                // 默认：仅打印 hash 用于人工对比，不阻塞启动
+
                 LogBridge.w(TAG, "dex hash (人工对比) = " + currentB64);
             }
             return true;

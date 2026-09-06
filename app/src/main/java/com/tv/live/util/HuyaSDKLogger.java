@@ -17,40 +17,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * 虎牙 SDK 统一日志中心
- *
- * <p>直接接入 SDK 内部所有日志的枢纽：
- * <ol>
- *   <li>通过同名类 {@link com.duowan.auk.util.L} 存根直接接管 SDK 全部日志输出（零反射）</li>
- *   <li>捕获 SDK {@link com.huya.berry.client.HuyaBerry.BerryEvent} 事件回调</li>
- *   <li>汇总 {@link com.huya.berry.client.customui.CustomUICallback} 回调日志</li>
- *   <li>将所有日志转发到 LogCollector 以便在日志监控面板显示</li>
- *   <li>提供日志记录缓冲 + 观察者订阅机制</li>
- * </ol>
- *
- * <p>使用方式：
- * <pre>
- *   HuyaSDKLogger.init();          // 在 Application.onCreate 调用一次
- *   HuyaSDKLogger.observe(...)      // 注册日志观察者
- *   HuyaSDKLogger.getRecentLogs()  // 获取最近日志
- * </pre>
- */
 public class HuyaSDKLogger {
 
     private static final String TAG = "HuyaSDKLogger";
 
-    /** 最近日志最大保留条数 */
     private static final int MAX_RECENT = 1000;
 
-    /** 日志级别常量（与 L 类一致） */
     public static final int VERBOSE = 0;
     public static final int DEBUG   = 1;
     public static final int INFO    = 2;
     public static final int WARN    = 3;
     public static final int ERROR   = 4;
 
-    /** 一条日志记录 */
     public static class LogEntry {
         public final long timestamp;
         public final int level;
@@ -81,7 +59,6 @@ public class HuyaSDKLogger {
         }
     }
 
-    /** 日志观察者接口 */
     public interface OnLogListener {
         void onLog(LogEntry entry);
     }
@@ -95,7 +72,6 @@ public class HuyaSDKLogger {
     private static volatile boolean sLogcatEnabled = true;
     private static volatile boolean sForwardToLogCollector = true;
 
-    /** SDK 事件类型 -> 可读名称映射 */
     private static final ConcurrentHashMap<String, String> sEventNames = new ConcurrentHashMap<>();
     static {
         sEventNames.put("init", "SDK初始化");
@@ -123,16 +99,9 @@ public class HuyaSDKLogger {
         sEventNames.put("setReceiveDanmuData", "设置弹幕接收");
     }
 
-    /**
-     * 初始化日志中心
-     *
-     * 通过 logcat 监听捕获 SDK 内部日志（标签: auk），
-     * 以及接收应用层主动记录的 SDK 回调日志。
-     */
     public static void init() {
         if (!sInitialized.compareAndSet(false, true)) return;
 
-        // 注册到 LogCollector
         if (sForwardToLogCollector) {
             addLogListener(new OnLogListener() {
                 @Override
@@ -142,20 +111,11 @@ public class HuyaSDKLogger {
             });
         }
 
-        // 启动 logcat 监听，捕获 SDK 的 auk 标签日志
         startAukLogCapture();
 
         LogBridge.i(TAG, "✅ HuyaSDKLogger 初始化完成（logcat 监听 SDK 日志）");
     }
 
-    /**
-     * 启动 logcat 监听，捕获 SDK 的 auk 标签日志
-     *
-     * <p>注意：读取 logcat 需要 READ_LOGS 权限（signature|privileged，普通应用无法获得）。
-     * Android 13+（尤其小米 ROM）上，无权限应用调用 logcat 会触发系统
-     * "要允许...访问所有设备日志吗" 弹窗（SystemUI 的 LogAccessDialogActivity）。
-     * 因此仅在系统已授予该权限时才启动监听，避免每次初始化 SDK 都弹窗。
-     */
     private static void startAukLogCapture() {
         if (ContextCompat.checkSelfPermission(MyApplication.getInstance(),
                 Manifest.permission.READ_LOGS) != PackageManager.PERMISSION_GRANTED) {
@@ -166,12 +126,11 @@ public class HuyaSDKLogger {
             Process process = null;
             BufferedReader reader = null;
             try {
-                // 清空旧日志
+
                 try {
                     Runtime.getRuntime().exec("logcat -c").waitFor();
                 } catch (Exception ignored) {}
 
-                // 启动 logcat 读取 auk 标签日志
                 process = Runtime.getRuntime().exec(new String[]{"logcat", "-s", "auk:D", "HuyaSDKLogger:I"});
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
@@ -192,30 +151,22 @@ public class HuyaSDKLogger {
         captureThread.start();
     }
 
-    /**
-     * 解析 logcat 行并分发到日志系统
-     */
     private static void parseAndDispatchAukLog(String line) {
         if (line == null || line.isEmpty()) return;
 
         try {
-            // 跳过我们自己输出的日志（避免反馈循环）
-            // 英文括号格式（dispatch 之前输出的）
+
             if (line.contains("[SDK-Auk]") || line.contains("[HuyaSDKLogger]")) return;
-            // 中文括号格式（forwardToLogCollector 中生成的）
+
             if (line.contains("【SDK-Auk】")) return;
 
-            // 跳过时间戳等前缀，提取标签和消息
-            // 格式: "08-20 12:48:01.789  4162  4287 I auk     : GetLivingInfo success..."
             int colonIndex = line.indexOf(": ");
             if (colonIndex <= 0) return;
 
-            // 检查是否是 auk 标签的日志
             if (!line.contains(" auk ") && !line.contains(": auk")) return;
 
             String logContent = line.substring(colonIndex + 2).trim();
 
-            // 判断日志级别
             int level = DEBUG;
             if (line.contains(" E auk ")) level = ERROR;
             else if (line.contains(" W auk ")) level = WARN;
@@ -223,20 +174,15 @@ public class HuyaSDKLogger {
             else if (line.contains(" D auk ")) level = DEBUG;
             else if (line.contains(" V auk ")) level = VERBOSE;
 
-            // 过滤 SDK 内部噪音日志，只保留有意义的
             if (shouldCaptureLog(logContent)) {
                 dispatch(level, "auk", logContent, "SDK-Auk");
             }
         } catch (Exception ignored) {}
     }
 
-    /**
-     * 判断是否应该捕获这条日志（过滤噪音）
-     */
     private static boolean shouldCaptureLog(String msg) {
         if (msg == null) return false;
 
-        // 重要日志总是捕获
         if (msg.contains("success") || msg.contains("error") || msg.contains("fail") ||
             msg.contains("GetLivingInfo") || msg.contains("GetLivingInfoRsp") ||
             msg.contains("onResultCallback") || msg.contains("startLive") ||
@@ -245,7 +191,6 @@ public class HuyaSDKLogger {
             return true;
         }
 
-        // API 请求相关日志
         if (msg.contains("cgi:/") || msg.contains("NS request") ||
             msg.contains("WupRsp") || msg.contains("WupReq") ||
             msg.contains("deliverResponse") || msg.contains("execute")) {
@@ -255,9 +200,6 @@ public class HuyaSDKLogger {
         return false;
     }
 
-    /**
-     * 转发日志到 LogCollector
-     */
     private static void forwardToLogCollector(LogEntry entry) {
         if (!sForwardToLogCollector) return;
 
@@ -285,9 +227,6 @@ public class HuyaSDKLogger {
         }
     }
 
-    /**
-     * 记录一条日志（应用层主动调用）
-     */
     public static void log(int level, String tag, String msg) {
         dispatch(level, tag, msg, "App");
     }
@@ -296,7 +235,6 @@ public class HuyaSDKLogger {
         dispatch(ERROR, tag, msg, "App");
     }
 
-    /** 携带 Throwable 的 ERROR：按用户规则「只 Throwable 才上传 Bugly」→ 直接上报虎牙 SDK 专属异常中心 */
     public static void error(String tag, String msg, Throwable throwable) {
         if (throwable != null) {
             BuglyLogSender.reportHuyaExceptionSafely(tag, throwable, msg);
@@ -322,7 +260,6 @@ public class HuyaSDKLogger {
         dispatch(WARN, tag, msg, "App");
     }
 
-    /** 携带 Throwable 的 WARN：按用户规则「只 Throwable 才上传 Bugly」→ 直接上报 */
     public static void warn(String tag, String msg, Throwable throwable) {
         if (throwable != null) {
             BuglyLogSender.reportHuyaExceptionSafely(tag, throwable, msg);
@@ -336,9 +273,6 @@ public class HuyaSDKLogger {
         dispatch(WARN, tag, sb.toString(), "App");
     }
 
-    /**
-     * 记录 SDK BerryEvent 事件
-     */
     public static void onBerryEvent(String eventType, Map<String, String> eventData) {
         String readableName = sEventNames.containsKey(eventType)
                 ? sEventNames.get(eventType)
@@ -361,34 +295,26 @@ public class HuyaSDKLogger {
         dispatch(level, "BerryEvent", sb.toString(), "BerryEvent");
     }
 
-    /**
-     * 记录 SDK 回调信息。
-     * 按用户规则：code != 0 但没有 Throwable 时，**不上传 Bugly**，
-     * 仅通过 ExceptionReporter.reportHuyaBusinessFailure 写本地 Log + LogCollector。
-     * （如果未来想上传，需要手动包装 RuntimeException 或改为允许运营统计）
-     */
     public static void onCustomUICallback(String callbackName, int code, String detail) {
         StringBuilder sb = new StringBuilder();
         sb.append("【CustomUI:").append(callbackName).append("】code=").append(code);
         if (!TextUtils.isEmpty(detail)) {
             sb.append(" ").append(detail);
         }
-        int level = (code == 0) ? DEBUG : ERROR;
+        // 已知 SDK 误报：onResultCallback 在业务正常时仍可能返回非 0 code，
+        // 降级为 DEBUG 并不再触发业务失败上报，避免污染崩溃分组与远端上报。
+        boolean falseAlarm = "onResultCallback".equals(callbackName);
+        int level = (code == 0) ? DEBUG : (falseAlarm ? DEBUG : ERROR);
         dispatch(level, "CustomUI", sb.toString(), "CustomUICallback");
 
-        if (code != 0) {
+        if (code != 0 && !falseAlarm) {
             ExceptionReporter.reportHuyaBusinessFailure(
                     "CustomUI." + callbackName, code, detail, null);
         }
     }
 
-    /**
-     * 记录 SDK 内部错误日志。
-     * 按用户规则「只上传异常/崩溃」：仅当 throwable != null 时上传 Bugly；
-     * 其它（纯文字 SDK error）只写本地 Log / LogCollector 环形缓冲，不上传 Bugly。
-     */
     public static void onSDKError(String tag, String errorMsg, Throwable throwable) {
-        // Step 1: 仅 Throwable 上传到 Bugly（虎牙SDK专属场景 10001）
+
         if (throwable != null) {
             BuglyLogSender.reportHuyaExceptionSafely(tag, throwable, errorMsg);
         }
@@ -401,84 +327,57 @@ public class HuyaSDKLogger {
         }
         dispatch(ERROR, tag, sb.toString(), "Internal");
 
-        // 无 Throwable 的 SDK 业务错误 → 本地+LogCollector 记录（不上传Bugly）
         if (throwable == null) {
             ExceptionReporter.reportHuyaBusinessFailure(
                     tag == null ? "HuyaSDK" : tag, 0, errorMsg, null);
         }
     }
 
-    /**
-     * 记录 SDK 内部状态日志
-     */
     public static void onSDKState(String tag, String stateMsg) {
         dispatch(DEBUG, tag, "【SDK-State】" + stateMsg, "Internal");
     }
 
-    /**
-     * 添加日志观察者
-     */
     public static void addLogListener(OnLogListener listener) {
         if (listener != null && !sListeners.contains(listener)) {
             sListeners.add(listener);
         }
     }
 
-    /**
-     * 移除日志观察者
-     */
     public static void removeLogListener(OnLogListener listener) {
         if (listener != null) {
             sListeners.remove(listener);
         }
     }
 
-    /**
-     * 获取最近的日志副本
-     */
     public static List<LogEntry> getRecentLogs() {
         synchronized (sRecentLogs) {
             return new ArrayList<>(sRecentLogs);
         }
     }
 
-    /**
-     * 清空日志缓冲
-     */
     public static void clearLogs() {
         synchronized (sRecentLogs) {
             sRecentLogs.clear();
         }
     }
 
-    /**
-     * 设置最低输出级别
-     */
     public static void setMinLevel(int level) {
         sMinLevel = level;
     }
 
-    /**
-     * 设置是否同时输出到 logcat
-     */
     public static void setLogcatEnabled(boolean enabled) {
         sLogcatEnabled = enabled;
     }
 
-    /**
-     * 设置是否转发到 LogCollector
-     */
     public static void setForwardToLogCollector(boolean enabled) {
         sForwardToLogCollector = enabled;
     }
 
-    // ============ 日志分发（public 供 L 存根类直接调用） ============
     public static void dispatch(int level, String tag, String msg, String source) {
         if (level < sMinLevel) return;
 
         LogEntry entry = new LogEntry(System.currentTimeMillis(), level, tag, msg, source);
 
-        // 写入环形缓冲
         synchronized (sRecentLogs) {
             sRecentLogs.add(entry);
             if (sRecentLogs.size() > MAX_RECENT) {
@@ -486,7 +385,6 @@ public class HuyaSDKLogger {
             }
         }
 
-        // 通知观察者
         for (OnLogListener l : sListeners) {
             try {
                 l.onLog(entry);
@@ -494,12 +392,8 @@ public class HuyaSDKLogger {
             }
         }
 
-        // 转发到 LogCollector（默认开，sForwardToLogCollector=true）
-        // —— 没有这一步，HuyaSDK 内部日志不会出现在日志监控工具的「🐯 虎牙SDK」Tab
         forwardToLogCollector(entry);
 
-        // 注意：不再写回 logcat，避免与 logcat 监听形成反馈循环
-        // 所有日志通过 LogCollector 和日志监控面板展示
     }
 
     private HuyaSDKLogger() {

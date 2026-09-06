@@ -9,22 +9,6 @@ import android.os.Build;
 import android.os.IBinder;
 import com.tv.live.util.LogBridge;
 
-/**
- * 开机自启 + 常驻保活前台服务
- *
- * 【作用】
- * 1. Android 10+ 对后台启动 Activity 有严格限制，
- *    先启动一个前台服务（有通知栏），再从前台服务中启动 Activity，
- *    系统更可能允许。
- * 2. 常驻保活：返回 START_STICKY。进程被系统回收
- *    （酷开等电视系统待机/内存清理时会杀掉第三方后台进程）后，
- *    系统会在条件允许时自动重建本服务进程，并再次进入
- *    onStartCommand 拉起 MainActivity，实现"待机唤醒后自动回到应用"。
- *
- * 【生命周期】
- * 启动后拉起 MainActivity，并保持前台服务常驻（不自我停止），
- * 进程被杀后由 START_STICKY 机制重建。
- */
 public class BootStartForegroundService extends Service {
 
     private static final String TAG = "BootStartFgService";
@@ -41,19 +25,16 @@ public class BootStartForegroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         LogBridge.d(TAG, "保活服务启动(sticky)，尝试拉起 MainActivity");
 
-        // 尝试启动 MainActivity
         boolean success = startMainActivity();
 
         if (!success) {
-            // 如果直接启动失败，延迟 500ms 再试一次（等通知栏完全展示）
+
             try {
                 Thread.sleep(500);
             } catch (InterruptedException ignored) {}
             startMainActivity();
         }
 
-        // 常驻：不自我停止。START_STICKY 保证进程被系统回收后重建本服务，
-        // 重建时 intent 为 null，仍会再次进入本方法拉起 MainActivity。
         return START_STICKY;
     }
 

@@ -10,9 +10,6 @@ import androidx.media3.ui.PlayerView;
 import com.tv.live.MainActivity;
 import com.tv.live.PlayerGestureHelper;
 
-/**
- * 播放器控制栏管理器
- */
 @SuppressLint("UnsafeOptInUsageError")
 public class PlayerControlManager {
 

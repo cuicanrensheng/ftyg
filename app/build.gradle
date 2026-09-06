@@ -23,7 +23,7 @@ android {
         abi {
             enable true
             reset()
-            // ⚠️ 已剔除 x86 / x86_64：仅保留 ARM 架构（覆盖 Android 5.1.1~最新版真机/主流模拟器）
+
             include 'arm64-v8a', 'armeabi-v7a'
             universalApk false
         }
@@ -36,9 +36,7 @@ android {
         versionName "2.0.179"
         resConfigs "zh"
         multiDexEnabled true
-        // 关键：开启 vector 支持库。否则 AppCompat 在启动加载 <vector> 资源（adaptive icon/
-        // windowBackground/windowSplashscreen）时会抛 IllegalStateException（卡启动界面），
-        // 且 R8 缩减 + aapt2 资源混淆后易触发。开启后由 androidx.vectordrawable 兜底解压 PNG。
+
         vectorDrawables {
             useSupportLibrary true
         }
@@ -46,8 +44,7 @@ android {
         buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
         ndkVersion '25.2.9519653'
         ndk {
-            // ⚠️ 注意：splits.abi 已按架构分包，AGP 不允许同时设置 ndk.abiFilters
-            // abiFilters 在此留空，ABI 过滤完全由 splits.abi 控制
+
             debugSymbolLevel 'NONE'
         }
     }
@@ -68,7 +65,7 @@ android {
             zipAlignEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
-            // 正式版移除 SourceFile 和 LineNumberTable，增加反编译难度
+
             buildConfigField "boolean", "IS_DEBUG", "false"
         }
         debug {
@@ -84,9 +81,12 @@ android {
                          'META-INF/license.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt',
                          'META-INF/notice.txt', 'META-INF/ASL2.0', 'META-INF/*.kotlin_module',
                          'META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
+
+            '**/publicsuffixes.gz',
                          'assets/huya_berry_protocol_license.txt',
                          'assets/huya_berry_third_party_license.html',
                          'assets/webgame/*.html', 'assets/webgame/*.js', 'assets/webgame/*.css',
+
                          'META-INF/services/*',
                          'META-INF/proguard/*.pro',
                          'META-INF/*.version',
@@ -98,10 +98,7 @@ android {
                          'DebugProbesKt.bin']
         }
         jniLibs {
-            // true = SO 以 deflate 压缩进 APK（安装时由系统解压到 /data/app/.../lib/）
-            // ⚠️ 必须用 true：extractNativeLibs=false（useLegacyPackaging=false）是 API 23+ 特性，
-            // 在 Android 5.x (API 22) 上 so 无法正确从 APK 映射加载 → libmarsstn.so JNI 符号注册失败
-            // → java.lang.UnsatisfiedLinkError: No implementation found for StnLogic.startTask_2（实测崩溃）
+
             useLegacyPackaging true
             pickFirsts += [
                     'lib/arm64-v8a/libhyaudioengine.so',
@@ -109,17 +106,24 @@ android {
                     'lib/arm64-v8a/libc++_shared.so',
                     'lib/armeabi-v7a/libc++_shared.so',
                     'lib/x86/libc++_shared.so',
-                    'lib/x86_64/libc++_shared.so'
+                    'lib/x86_64/libc++_shared.so',
+
+                    'lib/arm64-v8a/libudbauthunify.so',
+                    'lib/armeabi-v7a/libudbauthunify.so',
+                    'lib/arm64-v8a/libhyquic.so',
+                    'lib/armeabi-v7a/libhyquic.so',
+
+                    'lib/arm64-v8a/libnsdt.so',
+                    'lib/armeabi-v7a/libnsdt.so',
+
+                    'lib/arm64-v8a/libhyssl.so',
+                    'lib/armeabi-v7a/libhyssl.so',
+                    'lib/arm64-v8a/libhycrypto.so',
+                    'lib/armeabi-v7a/libhycrypto.so'
             ]
-            // 安全网：排除 libBugly_Native.so（Bugly 普通版引用已移除，实验）。
-            // 该 so 内置崩溃诊断会在上报路径执行 logcat（Android 13+/小米 ROM 触发
-            // "允许访问所有设备日志"系统弹窗）；保留此排除以防 SDK aar 传递引入。
+
             excludes += ['**/libBugly_Native.so']
-            // ⚠️ 勿剔除 libmarsxlog.so / libstlport_shared.so（xlog 链路）！
-            // 实测剔除后：mars.Mars.loadDefaultMarsLibrary 加载 libmarsxlog.so 失败
-            // → 整个 mars 网络栈（StnLogic/HySignal/MtpMarsTransporter）不可用，取流失败。
-            // libc++_shared.so 同样不可剔除（libmmkv.so + libmarsstn.so 的 DT_NEEDED 硬依赖）。
-            // 这两条链是 SDK init 的强制加载项（ArkValue.initLog → Xlog.<clinit>）。
+
         }
     }
     androidResources {
@@ -132,74 +136,6 @@ android {
     }
 }
 
-// ============== ⛔ 资源名混淆（aapt2 optimize）已停用 ==============
-// 【为什么停用】
-//   aapt2 optimize --collapse-resource-names 会重排/压缩资源 ID，
-//   而 虎牙 SDK（HuyaBerryImpl.initBaseApi）与 AppCompat/vector drawable
-//   都是通过**编译期硬编码的资源 ID / getIdentifier()** 访问资源。
-//   资源 ID 一变，SDK 内部临时引用全部失效：
-//     - 虎牙：NotFoundException: String resource ID #0x0（SDK 失效）
-//     - AppCompat/vector：IllegalStateException VectorDrawableCompat（启动崩溃+图标丢）
-//   Debug 版（不跑资源混淆）里两者都正常，证实资源混淆是元凶。
-// 【结论】反编译保护改用：R8 代码混淆（-keep 类+签名）+ NDK 反调试 + 字符串加密，
-//   不再做资源名混淆（会破坏第三方 SDK）。如需资源保护，只能接加固壳。
-// ==============
-/*
-project.afterEvaluate {
-    tasks.matching { it.name == 'assembleRelease' }.configureEach { task ->
-        task.doLast {
-            def buildTools = android.buildToolsVersion
-            def aapt2 = "${android.sdkDirectory}/build-tools/${buildTools}/aapt2"
-            def apksigner = "${android.sdkDirectory}/build-tools/${buildTools}/apksigner.bat"
-            def zipalign = "${android.sdkDirectory}/build-tools/${buildTools}/zipalign.exe"
-            def ks = android.signingConfigs.release.storeFile
-            def ksPwd = android.signingConfigs.release.storePassword
-            def keyAlias = android.signingConfigs.release.keyAlias
-            def keyPwd = android.signingConfigs.release.keyPassword
-
-            def apkDir = file("${buildDir}/outputs/apk/release")
-            apkDir.eachFileMatch(~/.*\.apk/) { apk ->
-                if (apk.name.contains('-unsigned')) return
-                def collapsed = file("${apk.parent}/${apk.name.replace('.apk', '-collapsed.apk')}")
-                def aligned   = file("${apk.parent}/${apk.name.replace('.apk', '-aligned.apk')}")
-                logger.lifecycle "[ResGuard] aapt2 optimize: ${apk.name}"
-                def opt = [aapt2, 'optimize',
-                           '--collapse-resource-names',
-                           '-o', collapsed.absolutePath,
-                           apk.absolutePath].execute()
-                opt.waitFor()
-                if (opt.exitValue() != 0 || !collapsed.exists()) {
-                    logger.warn "[ResGuard] aapt2 optimize FAILED, keep original"
-                    return
-                }
-                def za = [zipalign, '-p', '-f', '4',
-                          collapsed.absolutePath,
-                          aligned.absolutePath].execute()
-                za.waitFor()
-                collapsed.delete()
-                def sg = [apksigner, 'sign',
-                          '--ks', ks.absolutePath,
-                          '--ks-pass', "pass:${ksPwd}",
-                          '--ks-key-alias', keyAlias,
-                          '--key-pass', "pass:${keyPwd}",
-                          '--v1-signing-enabled', 'true',
-                          '--v2-signing-enabled', 'true',
-                          aligned.absolutePath].execute()
-                sg.waitFor()
-                if (sg.exitValue() == 0) {
-                    apk.delete()
-                    aligned.renameTo(apk)
-                    logger.lifecycle "[ResGuard] OK → ${apk.name} (${apk.length() / 1024} KB, re-signed)"
-                } else {
-                    logger.warn "[ResGuard] sign FAILED, keep original"
-                    aligned.delete()
-                }
-            }
-        }
-    }
-}
-*/
-
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.zxing:core:3.5.1'
@@ -209,36 +145,11 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'], exclude: [
-            'audioengineencode-1.1.80.aar',
-            'audioenginecapture-1.1.80.aar',
-            'imagefilter-1.1.80.aar',
-            'rtmpupload-1.1.80.aar',
-            // ⚠️ 以下 8 个 AAR 为「开播推流/云游戏」模块（com/huya/force + com/huya/mtp/hycloudgame），
-            // 本应用为纯观看场景，不调用开播功能。已验证（2026-08-28，正确 ZIP 解压 + 类级/子串级
-            // 双向引用扫描 + HuyaBerryImpl.init 字节码检查 + manifest 组件检查）：
-            //   · 保留侧 34 个模块对它们零引用；
-            //   · HuyaBerryImpl.init 字节码不引用；
-            //   · 各自 so 无外部 System.loadLibrary 点，res 无外部 R 引用。
-            // 排除后 SDK 初始化与播放不受影响。
-            'audiocapture-1.1.80.aar',
-            'audiohardencode-1.1.80.aar',
-            'cameracapture-1.1.80.aar',
-            'screencapture-1.1.80.aar',
-            'videohardencode-1.1.80.aar',
-            'client-1.1.80.aar',
-            'export-1.1.80.aar',
-            'hycloudgame-base-1.9.105-exvolley.aar',
-            // utils-1.1.80.aar（2.2MB）为推流引擎工具库（50 类全在 com/huya/force 包：
-            // gles/gpuimage/log/collect），同为开播链路，核心 34 模块零引用，一并排除。
-            'utils-1.1.80.aar',
-            // Bugly 专业版 aar（crashreport-3.0.0 / nativecrashreport-3.7.1）已删除（实验 2026-08-28），
-            // 备份于 _backup/。SDK 侧 isOpenBugly(false) 已禁用其初始化，删除不影响编译与运行。
-            // ⚠️ statistics/livestatistics/apm 必须保留打包：SDK init 链路强依赖这些类，
-            // 排除会导致 NoClassDefFoundError 使 SDK 失效。改为由 HuyaCacheGovernor
-            // 反射关闭 isOpenStat/isOpenAnalytics/isOpenApm 等开关，运行时禁用其功能。
-            // NSEasy 完整实现由 hynswrapper-1.9.105-exvolley.aar 提供，
-            // classes.jar（仅 NSEasy+BuildConfig 的 stub）会造成重复类冲突。
-            'classes.jar'
+
+            'sdkplayer-impl-release.aar',
+            'login-sdk-release.aar',
+            'base-noblegift-release.aar',
+
     ])
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 }
@@ -306,9 +217,3 @@ configurations.all {
     exclude group: 'com.squareup.picasso'
     exclude group: 'com.github.bumptech.glide'
 }
-
-// ====================================================================
-// SO 压缩：AGP 内置 stripReleaseDebugSymbols 已自动剥离 debug 符号
-// （debugSymbolLevel NONE），useLegacyPackaging=true 使 SO 以 deflate
-// 压缩进 APK（安装时解压）。无需自定义脚本。
-// ====================================================================

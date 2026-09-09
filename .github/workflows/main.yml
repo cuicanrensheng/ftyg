@@ -88,6 +88,12 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: 清理构建产物
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          echo "🧹 清理构建产物..."
+          ./gradlew clean
+
       - name: 解码签名证书并构建
         if: steps.skip_check.outputs.skip == 'false'
         run: |

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：虎牙子分组条目。
+     与顶部分类 Tab 完全同规格：单行 14sp + padding 18/7dp + ott_tab_item_bg 胶囊底、高度 wrap。
+     子分组与"直播源分组"(顶部 Tab) 视觉完全一致，不再是双行大卡片。
+     焦点框由 GridView 的 listSelector(ott_channel_focus) 叠加绘制 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/tv_ott_group_name"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/ott_tab_item_bg"
+    android:ellipsize="marquee"
+    android:gravity="center"
+    android:paddingStart="18dp"
+    android:paddingEnd="18dp"
+    android:paddingTop="7dp"
+    android:paddingBottom="7dp"
+    android:singleLine="true"
+    android:textColor="#FFFFFFFF"
+    android:textSize="14sp" />

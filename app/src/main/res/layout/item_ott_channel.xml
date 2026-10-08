@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：频道网格卡片。焦点框由 GridView 的 listSelector(ott_channel_focus) 叠加绘制 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="68dp"
+    android:background="@drawable/ott_channel_item_bg"
+    android:clickable="true"
+    android:focusable="false"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <!-- 【2026-09-29 频道台标】频道台标图片；占位图在代码中按加载状态设置 -->
+    <ImageView
+        android:id="@+id/iv_ott_item_logo"
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter" />
+
+    <!-- 【2026-09-29 频道台标】字号 16sp → 13sp、加 marginTop，为台标让出空间（卡片总高保持 68dp） -->
+    <TextView
+        android:id="@+id/tv_ott_item_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="marquee"
+        android:gravity="center"
+        android:singleLine="true"
+        android:textColor="#FFFFFFFF"
+        android:textSize="13sp" />
+</LinearLayout>

@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  OTT 模式首页（横屏电视版式）
+  参考：YM OTT 首页（fragment_horizontal_home.xml 顶部 Logo + 分类 Tab + 频道网格）
+        并在主体左侧补 16:9 实时播放预览（完整版需求）
+  遥控焦点顺序：菜单按钮 -> 分类 Tab -> 频道网格
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/ott_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF071229">
+
+    <LinearLayout
+        android:id="@+id/ll_ott_outer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <!-- ============ 顶部栏：Logo + 分类 Tab + 菜单 ============ -->
+        <LinearLayout
+            android:id="@+id/ott_top_bar"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tv_ott_logo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name"
+                android:textColor="#FFFFFFFF"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/ott_home_subtitle"
+                android:textColor="#993AA0FF"
+                android:textSize="13sp" />
+
+            <HorizontalScrollView
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="16dp"
+                android:focusable="false"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/ll_ott_category"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
+                android:id="@+id/btn_ott_fullscreen"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/ott_menu_btn_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:text="@string/ott_fullscreen"
+                android:textColor="#FFFFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btn_ott_menu"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/ott_menu_btn_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:text="@string/ott_menu"
+                android:textColor="#FFFFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- ============ 主体：左侧播放预览 + 右侧频道网格 ============ -->
+        <LinearLayout
+            android:id="@+id/ott_content_row"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal">
+
+            <!-- 左侧：播放器预览卡 -->
+            <LinearLayout
+                android:id="@+id/ott_left_panel"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.35"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:id="@+id/fl_ott_preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp"
+                    android:background="@drawable/ott_card_bg"
+                    android:focusable="true"
+                    android:nextFocusRight="@+id/gv_ott_channel"
+                    android:nextFocusDown="@+id/gv_ott_channel">
+
+                    <androidx.media3.ui.PlayerView
+                        android:id="@+id/ott_player_view"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        app:keep_content_on_player_reset="true"
+                        app:resize_mode="fit"
+                        app:surface_type="surface_view"
+                        app:use_controller="false" />
+
+                    <!-- 虎牙 SDK 原生播放器容器（TVPlayerManager.attachPlayerView 会按此 id 查找） -->
+                    <FrameLayout
+                        android:id="@+id/sdk_player_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <TextView
+                        android:id="@+id/tv_ott_preview_tip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="@string/ott_preview_loading"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="13sp" />
+
+                    <!-- 焦点提示：仅播放器获焦时显示 -->
+                    <TextView
+                        android:id="@+id/tv_ott_preview_focus_hint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom|end"
+                        android:layout_marginEnd="14dp"
+                        android:layout_marginBottom="12dp"
+                        android:background="#99000000"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"
+                        android:text="@string/ott_preview_focus_hint"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+
+                    <!-- 焦点环：必须是最后一个子视图，才能绘制在 PlayerView 之上 -->
+                    <View
+                        android:id="@+id/v_ott_preview_focus_ring"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/ott_preview_focus_ring"
+                        android:clickable="false"
+                        android:focusable="false"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/tv_ott_now_channel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:ellipsize="marquee"
+                    android:singleLine="true"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tv_ott_now_program"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:textColor="#B3FFFFFF"
+                    android:textSize="13sp" />
+
+                <!-- 【2026-09-29 方案 A 电信 IPTV 风格】当前节目 + 接下来 2 条 + 元数据 -->
+                <LinearLayout
+                    android:id="@+id/ll_ott_epg_panel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical">
+
+                    <!-- 节目单 3 行（动态填充：tv_ott_epg_panel_row 模板 × 3）-->
+                    <LinearLayout
+                        android:id="@+id/ll_ott_epg_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+
+                    <!-- 元数据小字：分辨率 · 码率 · 视频编码 · 音频 -->
+                    <TextView
+                        android:id="@+id/tv_ott_metadata"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:ellipsize="end"
+                        android:singleLine="true"
+                        android:textColor="#80FFFFFF"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 右侧：频道网格 / 虎牙子分组列表 -->
+            <LinearLayout
+                android:id="@+id/ott_right_panel"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="18dp"
+                android:layout_weight="2.0"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_ott_breadcrumb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:textColor="#993AA0FF"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical">
+
+                        <!-- 虎牙子分组胶囊条（仅「虎牙频道」页可见）。
+                             单行横向滚动：无论分组多少，恒占 1 行高度（wrap≈31dp），
+                             绝不因分组变多而多占行、把下方频道网格往下挤。 -->
+                        <HorizontalScrollView
+                            android:id="@+id/sv_ott_subgroup"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="12dp"
+                            android:clipToPadding="false"
+                            android:focusable="false"
+                            android:scrollbars="none"
+                            android:visibility="gone">
+
+                            <LinearLayout
+                                android:id="@+id/ll_ott_subgroup"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:paddingEnd="8dp" />
+                        </HorizontalScrollView>
+
+                        <GridView
+                            android:id="@+id/gv_ott_channel"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:clipToPadding="false"
+                            android:columnWidth="150dp"
+                            android:descendantFocusability="beforeDescendants"
+                            android:horizontalSpacing="12dp"
+                            android:listSelector="@drawable/ott_channel_focus"
+                            android:nextFocusLeft="@+id/fl_ott_preview"
+                            android:numColumns="4"
+                            android:paddingEnd="8dp"
+                            android:scrollbars="none"
+                            android:stretchMode="columnWidth"
+                            android:verticalSpacing="12dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tv_ott_empty"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:text="@string/ott_channel_loading"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="15sp"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 【2026-09-29 自动全屏提示】仅"5s 无操作自动进全屏"时短暂显示 3s；
+         必须是 ott_root 的最后一个子节点，才能绘制在 ll_ott_outer 之上（真全屏时才可见） -->
+    <TextView
+        android:id="@+id/tv_ott_fullscreen_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="28dp"
+        android:background="#CC000000"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:text="@string/ott_fullscreen_hint"
+        android:textColor="#FFFFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <!-- 【2026-09-29 频道号 OSD】口径同直播模式（全局编号 = allChannels 下标 + 1），3s 自动隐藏。
+         layout_marginTop 不得小于 64dp：右上角有 btn_ott_fullscreen / btn_ott_menu，
+         位于 ll_ott_outer 的 paddingTop(16dp) + ott_top_bar(48dp) 之内（y≈16–64dp），压上去会挡按钮。 -->
+    <TextView
+        android:id="@+id/tv_ott_channel_num"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="64dp"
+        android:layout_marginEnd="40dp"
+        android:alpha="0.8"
+        android:textColor="#FFFFFFFF"
+        android:textSize="50sp"
+        android:visibility="gone" />
+</FrameLayout>

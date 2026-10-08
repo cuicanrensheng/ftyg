@@ -1,0 +1,224 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace "com.tv.live"
+    compileSdk 36
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+    splits {
+        abi {
+            enable true
+            reset()
+
+            include 'arm64-v8a', 'armeabi-v7a'
+            universalApk false
+        }
+    }
+    defaultConfig {
+        applicationId "com.tv.live"
+        minSdk 21
+        targetSdk 36
+        versionCode 3
+        versionName "2.0.3"
+        resConfigs "zh"
+        multiDexEnabled true
+
+        vectorDrawables {
+            useSupportLibrary true
+        }
+        buildConfigField "int", "VERSION_CODE", "${versionCode}"
+        buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
+        // 【2026-10-08 去SDK化】原 HUYA_REPORT_CLASSES_PRESENT 反射探测开关已随虎牙 SDK 拆除
+        ndkVersion '25.2.9519653'
+        ndk {
+
+            debugSymbolLevel 'NONE'
+        }
+    }
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword project.findProperty("storePassword")
+            keyAlias project.findProperty("keyAlias")
+            keyPassword project.findProperty("keyPassword")
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            zipAlignEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+
+            buildConfigField "boolean", "IS_DEBUG", "false"
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            // 【2026-09-29 调试专用】复用 release 签名，使 debug 包可**覆盖安装**已装的 release 包：
+            // 1) 免去卸载 → 保留应用数据（SDK 加密凭证 / 内置源配置 / cookie），
+            // 2) 保留 IS_DEBUG=true 的详细日志（虎牙 CDN 403 重试、建连耗时等只在 debug 包打印）。
+            // 仅影响签名，不改任何运行时行为；正式出包仍走 release。
+            signingConfig signingConfigs.release
+            buildConfigField "boolean", "IS_DEBUG", "true"
+        }
+    }
+    packagingOptions {
+        resources {
+            pickFirsts += ['META-INF/com.android.tools/proguard/coroutines.pro']
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt',
+                         'META-INF/license.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt',
+                         'META-INF/notice.txt', 'META-INF/ASL2.0', 'META-INF/*.kotlin_module',
+                         'META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
+
+            '**/publicsuffixes.gz',
+
+            'META-INF/services/*',
+                         'META-INF/proguard/*.pro',
+                         'META-INF/*.version',
+                         'META-INF/versions/**',
+                         '**/*.kotlin_builtins',
+                         '**/*.kotlin_metadata',
+                         '**/*.proto',
+                         '**/*.aidl',
+                         'DebugProbesKt.bin']
+        }
+        jniLibs {
+
+            // ⚠️ useLegacyPackaging 说明：应设为 true（保持未压缩 STORED）。
+            //   实测设 false 无压缩收益：minSdk=21(<23) 时 AGP 强制 extractNativeLibs=true，
+            //   so 仍以 STORED 进包；若想压缩 so 需把 minSdk 提到 23（放弃 Android 5.x），
+            //   当前保留 minSdk 21 以兼容更多设备。
+            useLegacyPackaging true
+            pickFirsts += [
+                    'lib/arm64-v8a/libc++_shared.so',
+                    'lib/armeabi-v7a/libc++_shared.so',
+                    'lib/x86/libc++_shared.so',
+                    'lib/x86_64/libc++_shared.so'
+            ]
+
+            // 【2026-10-08 去SDK化】原虎牙系 SO 排除清单（libhycrypto/libhyssl/libstlport_shared/
+            //   libmarsxlog/libhyquic/libnsdt/libudbauthunify/libmarsstn/libBugly_Native）
+            //   及配套 ASM 插桩说明已随虎牙 SDK 一并删除，不再需要。
+            // libc++_shared - 静态分析: 不被任何存活 so 引用，属传递依赖带入的死代码 → 排除
+            excludes += ['**/libc++_shared.so']
+
+        }
+    }
+    androidResources {
+        generateLocaleConfig false
+    }
+    lint {
+        baseline = file("lint-baseline.xml")
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.zxing:core:3.5.1'
+    implementation "androidx.media3:media3-exoplayer:1.7.1"
+    implementation "androidx.media3:media3-ui:1.7.1"
+    implementation "androidx.media3:media3-exoplayer-hls:1.7.1"
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+    // 【2026-10-08 去SDK化】原 fileTree(dir: 'libs') 的虎牙 Berry SDK AAR/JAR 已全部移除，
+    // libs 目录已清空删除；播放地址解析一律走自研 HuyaParser（纯 HTTP）。
+    // ⚠️ 必须使用 full 版脱糖库, 不可换 minimal 版:
+    //   minimal 只回填 java.util.concurrent / java.util.function, 不回填 java.util.stream /
+    //   java.time / java.util.Base64 / java.util.Map 等集合默认方法;
+    //   这些方法在 Android 5.0~7.1 (API 21~25) 上不存在, 换 minimal 会导致
+    //   minSdk=21 的设备运行到相关代码路径时 NoSuchMethodError → 破坏旧系统兼容性.
+    //   代价: 多出 j$ 回填类 (classes2.dex, 约 178KB 压缩) 属于必要成本.
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.outputs.forEach { output ->
+            try {
+                def currentName = output.outputFileName.get()
+                def abiName = currentName.find(/arm64-v8a|armeabi-v7a/)
+                if (!abiName) {
+                    abiName = variant.name
+                }
+                def verName = project.android.defaultConfig.versionName
+                def newName = "tv_live_${variant.buildType}_${abiName}_${verName}.apk"
+                logger.lifecycle "Renaming APK: ${currentName} -> ${newName}"
+                output.outputFileName.set(newName)
+            } catch (Exception e) {
+                logger.warn "Rename failed for ${variant.name}: ${e.message}"
+            }
+        }
+    }
+}
+
+// 【2026-10-08 去SDK化】原三套 ASM 字节码插桩（SafeClinitClassVisitorFactory 包裹
+//   NSDT/HuyaAuthCore <clinit>、OptionalNativeLoadClassVisitorFactory 重定向第三方
+//   System.loadLibrary、JCE 反射采集说明）已随虎牙 SDK 移除——没有第三方库再需要这些防御。
+
+// 2026-09-10 体积优化: 在 mergeReleaseAssets 后删除 cacert.pem
+//   （原来自 hyhal AAR；去SDK后该资产不再出现，此任务保留为无害兜底）
+project.afterEvaluate {
+    tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach {
+        doLast {
+            def cacert = file("$buildDir/intermediates/assets/release/mergeReleaseAssets/cacert.pem")
+            if (cacert.exists()) {
+                cacert.delete()
+                println "[体积优化] 已删除 mergeReleaseAssets/cacert.pem (222KB)"
+            }
+        }
+    }
+    tasks.matching { it.name == 'assembleRelease' }.configureEach {
+        doLast {
+            def outputDir = file("$buildDir/outputs/apk/release")
+            if (outputDir.exists()) {
+                def abis = ['arm64-v8a', 'armeabi-v7a']
+                abis.each { abi ->
+                    def pattern = "*-${abi}-release.apk"
+                    fileTree(dir: outputDir, include: pattern).each { apk ->
+                        def verName = project.android.defaultConfig.versionName
+                        def newName = "tv_live_release_${abi}_${verName}.apk"
+                        def newFile = new File(outputDir, newName)
+                        if (!apk.name.equals(newName) && !newFile.exists()) {
+                            apk.renameTo(newFile)
+                            logger.lifecycle "Post-build renamed: ${apk.name} -> ${newName}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force "androidx.media3:media3-common:1.7.1"
+        force "androidx.media3:media3-exoplayer:1.7.1"
+        force "androidx.media3:media3-ui:1.7.1"
+        force "androidx.media3:media3-exoplayer-hls:1.7.1"
+        force "androidx.lifecycle:lifecycle-process:2.6.2"
+    }
+    exclude group: 'org.webrtc'
+    exclude group: 'com.squareup.picasso'
+    exclude group: 'com.github.bumptech.glide'
+    // 【2026-10-08 去SDK化】原 com.huya.berry 系列模块 exclude 已无对象（libs 已删），保留无意义，删除
+}

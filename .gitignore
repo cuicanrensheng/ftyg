@@ -1,0 +1,94 @@
+# Built by Android Studio
+*.iml
+.gradle
+/local.properties
+/.idea
+.vscode/
+
+# Native build
+app/.cxx/
+app/.externalNativeBuild/
+
+# Decompiled output
+decompiled_hardened/
+decompiled/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Built outputs
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+keystore.properties
+app/build/
+*/build/
+
+# Gradle wrapper
+gradle/wrapper/gradle-wrapper.jar
+
+# Temporary files
+*.png
+*.zip
+*.apk
+mapping_output/
+mapping_release_v10/
+*.tmp
+*.bak
+*.swp
+*~
+
+# Log monitor
+log-monitor/node_modules/
+log-monitor/dist*/
+log-monitor/platform-tools/
+log-monitor/vercel/
+
+# Monitor
+monitor/node_modules/
+
+# Security tools
+security-tools/
+
+# dpt-shell 独立仓库（仅仓库内的 jiagu/dpt/ 工具需要跟踪，见下方 ! 强制）
+/dpt-shell/
+/dpt-shell/**
+
+# Packaging outputs
+dist*/
+
+# Decompiled classes
+*.class
+app/libs/*-classes/
+app/libs/*-extract/
+
+# Logs
+*.log
+build_*.log
+
+# Sensitive files (never commit)
+gradle.properties
+app/release.keystore
+keystore.properties
+*.keystore
+*.jks
+
+# Debug temp files
+log_*.txt
+ui_honor.xml
+tools/
+
+# 临时验证产物（脚本截图 / 日志采集 / uiautomator dump）
+verify_shots/
+repro_logs/
+
+# 本机配置（含 SDK/NDK 路径，不跨设备）
+/local.properties
+local.properties
+
+# 项目工作数据 / 开发记录（不公开）
+.workbuddy/
+开发记录会话文档/

@@ -1,0 +1,6 @@
+// 【2026-10-08 去SDK化】原 buildscript classpath（buildSrc.jar + ASM，供虎牙 SDK
+//   字节码插桩使用）已随 buildSrc 目录一并移除；AGP 版本改为在 plugins 块显式声明。
+plugins {
+    id 'com.android.application' version '8.8.0' apply false
+    id 'com.android.library' version '8.8.0' apply false
+}

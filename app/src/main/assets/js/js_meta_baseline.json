@@ -1,0 +1,31 @@
+{
+  "source": "http://nowtv.xiaoyouzb.cn/list_android_js_meta_v2.php?version=4.1.6",
+  "app": "yuntu",
+  "version": 696,
+  "capturedAt": "2026-10-06T17:10:08Z",
+  "_note": "内置插件的「线上密文 md5」基线。md5 = 服务端下发 encrypt_<name>.js 密文文件的 md5（已用原版设备抓包逐字节验证）。热更时先与本清单比对：远端 md5 一致 => 内置即最新 => 零下载。",
+  "files": {
+    "fymb_live.js": "7454d327046ddd21e238b69f4a90c10d",
+    "gw_live.js": "29bc69c6b3632d0e1d09affb9867eceb",
+    "iqy_live.js": "10fd0f5afe8f903218c05ef18ed277cb",
+    "iyf_live.js": "2a3470ae1ba70a485c5b034e3e025cd2",
+    "lunbo.js": "e039ac3fe9390ada9809b7e0e710cea6",
+    "replay.js": "3e50c7d0d5c3495d54846a316658ffb8",
+    "tvpass_live.js": "f340f2ad0fcb38ea47b055198603fc75",
+    "ysp_live.js": "76fd67cf12ec9cabd71ffb65ea7a8fa7",
+    "bili_vod.js": "d9c911cc8fa82f48e1283a0f8dc84d53",
+    "letv_vod.js": "cfce0bd3d7a002dc049af7a38e36ed25",
+    "mgtv_vod.js": "d9b120cf05038a13c63e691912e23fd2",
+    "migu_sport.js": "3c547d8a5e998c84da036a4f99e6da7c",
+    "other_live.js": "afec21415b490c51bd4de9dde7eac17e",
+    "pptv_vod.js": "b085465b45c9204723a16c3129af0bd1",
+    "sohu_vod.js": "aed6f0a6e032007e5ad950ba3b2e78bf",
+    "qq_vod.js": "04b50e79a8736088754dba80f60af89c",
+    "fun_vod.js": "2cdff3e2508e468527c1da427a03b534",
+    "other_vod.js": "0dc9bde49aec1503e7da77e57a1fdc95",
+    "web_parse_filter.json": "5b5d9a99a552d6a3f42228093f024dfc",
+    "tv_live.js": "9d53cff69c0a425f0ab6b3910974d121",
+    "yt_source_root.js": "470d3f08cb1db3df00974866e192b741",
+    "block.js": "cf2aa971f79fe37b515481cded429ee5"
+  }
+}

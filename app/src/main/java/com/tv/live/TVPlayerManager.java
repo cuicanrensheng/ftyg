@@ -2481,6 +2481,9 @@ public class TVPlayerManager {
                 mHandler.post(() -> {
                     isRetrying = false;
                     mCurrentHuyaLineIndex = switchLine;
+                    // 【2026-10-10】用户手选线路真的失效时，自动兜底换到的线路要同步写回偏好：
+                    //   否则每次换台回来都会按偏好再起播那条死线路 → 又是 403 → 再兜底，反复黑屏。
+                    if (mHuyaRoomId > 0) setUserChosenLine(mHuyaRoomId, switchLine);
                     // 直接播放新线路地址；同时清缓存防止后续重新解析又回到旧线路
                     HuyaSDKParser.invalidateCachedStreams(mHuyaRoomId);
                     if (!TextUtils.isEmpty(switchUrl)) {
@@ -2499,6 +2502,16 @@ public class TVPlayerManager {
         mHandler.post(() -> {
             isRetrying = false;
             if (mHuyaRoomId > 0) {
+                // 【2026-10-10 安全阀】若刚失败的正是一条**用户手选线路**，清掉该房间的线路偏好：
+                //   否则重解析后 applyHuyaMatrix/起播又会回到同一条死线路 → 再 403 → 触发
+                //   "自动换线/自动跳台"，表现为反复黑屏+莫名换台。清掉后重解析回落到探活采用的默认线路。
+                // ⚠️ 只在「确认失效」时清：虎牙 403 是**逐请求随机**的（同一 token 间隔数秒连拉照样随机 403），
+                //   首次失败不足以判定线路已死。此处 mHuya404Streak 已在上面自增，达到
+                //   HUYA_404_SWITCH_LINE_THRESHOLD(=2) 说明连续两次失效、且无其它存活线路可切，
+                //   这才是真失效 —— 避免"一次抖动就静默丢掉用户手选的线路"。
+                if (mHuya404Streak >= HUYA_404_SWITCH_LINE_THRESHOLD) {
+                    dropUserChosenLineIfFailed();
+                }
                 // 【2026-09-29 自研解析】清自研解析器 60s 缓存，确保 403/404 重试拿到新签名地址
                 HuyaStreamPlayer.HuyaParser.clearCache(mHuyaRoomId);
                 playHuyaStream(mHuyaRoomId, 0);
@@ -3721,8 +3734,15 @@ public class TVPlayerManager {
                                 // 「当前直播源不支持清晰度切换」。现在解析器已回传完整矩阵，
                                 // 用它填充线路表 + 清晰度档位（TX 线路取 master 的 STREAM-INF 子条目）。
                                 applyHuyaMatrix(pendingMatrix, httpUrl);
-                                doPlay(httpUrl, initialSeekPosition);
-                                startProbeWatch(httpUrl, effectiveRoomId);
+                                // 【2026-10-10 修复「换台回来没保存手选线路」】
+                                //   applyHuyaMatrix 只把用户线路恢复进“矩阵”（勾选/排序），起播用的仍是
+                                //   解析器探活采用的 httpUrl → 换走再换回时画面回到默认线路，UI 打勾又按
+                                //   currentUrl 匹配（getCurrentHuyaMultiLineUiIndex ①）跟着跑到默认线路，
+                                //   用户感知为「我选的源3/源2 没保存」。这里显式改用用户线路地址起播。
+                                String preferredLineUrl = huyaUserChosenPlayUrl(effectiveRoomId);
+                                String playUrl = (preferredLineUrl != null) ? preferredLineUrl : httpUrl;
+                                doPlay(playUrl, initialSeekPosition);
+                                startProbeWatch(playUrl, effectiveRoomId);
                             });
                         }
 
@@ -4654,21 +4674,39 @@ public class TVPlayerManager {
         int effLine = mx.adoptedLineIndex;
         String effQuality = mx.adoptedQuality;
         int userLineD = getUserChosenLine(mHuyaRoomId);
+        int userResD = getUserChosenResolution(mHuyaRoomId);
         if (userLineD >= 0 && lineOrderTmp.contains(userLineD)) {
             effLine = userLineD;
-            // 该线路内选档：优先沿用当前清晰度，否则取最高码率
             Variant best = null;
-            for (Variant v : variants) {
-                if (v.huyaLineIndex != userLineD) continue;
-                if (!TextUtils.isEmpty(currentResolutionLabel)
-                        && currentResolutionLabel.equals(v.getDisplayLabel())) {
-                    best = v;
-                    break;
+            // ① 用户持久化清晰度（换台回来要用它）—— 按 ratio 精确匹配，免受展示名抖动影响
+            if (userResD > 0) {
+                for (Variant v : variants) {
+                    if (v.huyaLineIndex == userLineD && v.huyaBitRate == userResD) {
+                        best = v;
+                        break;
+                    }
                 }
-                if (best == null || v.huyaBitRate > best.huyaBitRate) best = v;
+            }
+            // ② 内存当前档（无偏好时保持旧行为）
+            if (best == null && !TextUtils.isEmpty(currentResolutionLabel)) {
+                for (Variant v : variants) {
+                    if (v.huyaLineIndex == userLineD
+                            && currentResolutionLabel.equals(v.getDisplayLabel())) {
+                        best = v;
+                        break;
+                    }
+                }
+            }
+            // ③ 最高码率兜底
+            if (best == null) {
+                for (Variant v : variants) {
+                    if (v.huyaLineIndex == userLineD
+                            && (best == null || v.huyaBitRate > best.huyaBitRate)) best = v;
+                }
             }
             if (best != null) effQuality = best.getDisplayLabel();
-            LogBridge.i(TAG, "【虎牙】沿用用户上次选择的线路 lineIndex=" + userLineD);
+            LogBridge.i(TAG, "【虎牙】沿用用户上次选择的线路 lineIndex=" + userLineD
+                    + (userResD > 0 ? " 清晰度 ratio=" + userResD : ""));
         } else if (userLineD >= 0) {
             LogBridge.i(TAG, "【虎牙】用户线路 lineIndex=" + userLineD + " 本次缺席，回落默认线路");
         }
@@ -5022,6 +5060,166 @@ public class TVPlayerManager {
         SharedPreferences p = sp;
         if (p == null) return -1;
         return p.getInt("huya_user_line_" + roomId, -1);
+    }
+
+    /** 清除某房间的「用户手选线路」偏好。 */
+    private void clearUserChosenLine(int roomId) {
+        if (roomId <= 0) return;
+        SharedPreferences p = sp;
+        if (p == null) return;
+        p.edit().remove("huya_user_line_" + roomId).apply();
+    }
+
+    /**
+     * 【2026-10-10 新增】记录用户手动选择的**清晰度**（按房间持久化）。
+     *
+     * <p>存**码率 ratio** 而不是展示名：展示名会抖（服务端对同一 2000kbps 档可能叫「蓝光」
+     * 也可能叫「蓝光4M」），存名字换台回来就对不上；码率是稳定的匹配键。
+     * 与线路偏好（{@code huya_user_line_<roomId>}）配套使用，两个轴各自独立持久化。
+     *
+     * @param roomId 虎牙房间号，&gt; 0
+     * @param ratio 该档码率（kbps），&gt; 0
+     */
+    private void setUserChosenResolution(int roomId, int ratio) {
+        if (roomId <= 0 || ratio <= 0) return;
+        SharedPreferences p = sp;
+        if (p == null) return;
+        p.edit().putInt("huya_user_resolution_" + roomId, ratio).apply();
+    }
+
+    /** 读取用户手动选择的清晰度码率；未选择过或 prefs 不可用时返回 -1。 */
+    private int getUserChosenResolution(int roomId) {
+        if (roomId <= 0) return -1;
+        SharedPreferences p = sp;
+        if (p == null) return -1;
+        return p.getInt("huya_user_resolution_" + roomId, -1);
+    }
+
+    /** 清除某房间的「用户手选清晰度」偏好。 */
+    private void clearUserChosenResolution(int roomId) {
+        if (roomId <= 0) return;
+        SharedPreferences p = sp;
+        if (p == null) return;
+        p.edit().remove("huya_user_resolution_" + roomId).apply();
+    }
+
+    /**
+     * 【2026-10-10 安全阀】若**刚失败的那条地址**正是本房间用户手选的线路地址，则清掉该偏好。
+     *
+     * <p>为什么需要：起播会优先用用户手选线路（见 {@link #huyaUserChosenPlayUrl}）。若那条线路
+     * 已失效，重解析后又会回到它 → 再 403/404 → 连击到阈值后走"自动换线/自动跳台"，
+     * 用户看到的是"反复黑屏 + 莫名换台"。清掉偏好后重解析回落到探活采用的默认线路，从源头掐断。
+     *
+     * <p>只在**确认失败地址 == 用户线路地址**时才清（用 {@link #normalizeUrlHead} 抹平 query/协议，
+     * 因为播放会经 CDN 重定向），避免"一次网络抖动就丢掉用户的选择"。
+     */
+    private void dropUserChosenLineIfFailed() {
+        if (mHuyaRoomId <= 0) return;
+        int uc = getUserChosenLine(mHuyaRoomId);
+        if (uc < 0) return;
+        final String failedHead = normalizeUrlHead(currentUrl);
+        if (TextUtils.isEmpty(failedHead)) return;
+        for (HuyaStreamPlayer.MultiLineOption o : huyaMultiLinesSnapshot()) {
+            if (o == null || o.lineIndex != uc || TextUtils.isEmpty(o.url)) continue;
+            if (failedHead.equals(normalizeUrlHead(o.url))) {
+                clearUserChosenLine(mHuyaRoomId);
+                LogBridge.w(TAG, "【虎牙】用户手选线路（源·" + (o.cdnType == null ? "?" : o.cdnType)
+                        + "）已失效，清除该房间线路偏好，重解析回落默认线路");
+                return;
+            }
+        }
+        // 【2026-10-10 新增】失败地址也可能来自**用户手选清晰度**对应的矩阵地址（带 ratio 的每档地址）。
+        // 命中时只清清晰度偏好、保留线路 —— 线路本身没坏，清掉线路会让用户白选一次。
+        int ur = getUserChosenResolution(mHuyaRoomId);
+        if (ur > 0) {
+            synchronized (variantListLock) {
+                for (Variant v : variantList) {
+                    if (v == null || TextUtils.isEmpty(v.url) || v.huyaLineIndex != uc) continue;
+                    if (v.huyaBitRate != ur) continue;
+                    if (failedHead.equals(normalizeUrlHead(v.url))) {
+                        clearUserChosenResolution(mHuyaRoomId);
+                        LogBridge.w(TAG, "【虎牙】用户手选清晰度（ratio=" + ur
+                                + "）已失效，清除该房间清晰度偏好，保留线路偏好");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 【2026-10-10 修复「换台回来没保存手选线路」】解析完成后取用户上次手动选择的线路**地址**。
+     *
+     * <p>为什么必须在这里落地地址：{@code applyHuyaMatrix} 只把用户线路恢复进矩阵
+     * （{@code effLine} / 勾选），真正起播用的仍是解析器探活采用的 {@code httpUrl} ——
+     * 于是「换走再换回」时画面回到默认线路，而 UI 打勾按 {@code currentUrl} 匹配
+     * （{@link #getCurrentHuyaMultiLineUiIndex()} ①）也跟着跑到默认线路，
+     * 用户感知就是「我选的源3/源2 没保存」。本方法让起播地址也回到用户线路。
+     *
+     * <p>口径与「频道线路选择」严格一致：
+     *   ① 优先子线路表（{@code mHuyaMultiLines}，即 UI 的「源N · CDN」）里 lineIndex 匹配项
+     *      —— 子线路是服务端拼好的成品地址，与手切时走的是同一份；
+     *   ② 否则回退总线路矩阵（{@code variantList}）里该线路码率最高的一档
+     *      （房间没有 multiLine、但用户选过总线路时的兜底）。
+     *
+     * <p>没有选过 / 本次该线路不可用 → 返回 {@code null}，调用方沿用解析器采用地址（不改变旧行为）。
+     */
+    private String huyaUserChosenPlayUrl(int roomId) {
+        int userLine = getUserChosenLine(roomId);
+        if (userLine < 0) return null;
+        // ⓪ 【2026-10-10 新增】用户**同时**选过清晰度 → 直接在矩阵里按 (线路, ratio) 精确取地址。
+        //    为什么必须优先于 ①：① 的子线路是服务端拼好的**成品地址**，其 ratio 是固定的，
+        //    承载不了用户选的档位；只有矩阵（addBuiltCandidates 里 hlsAc + "&ratio=" + bitRate）
+        //    才有"按 ratio 拼好的每档地址"。放在 ① 之前才能既恢复线路又恢复清晰度。
+        int userRes = getUserChosenResolution(roomId);
+        if (userRes > 0) {
+            synchronized (variantListLock) {
+                Variant match = null;
+                for (Variant v : variantList) {
+                    if (v == null || TextUtils.isEmpty(v.url) || v.huyaLineIndex != userLine) continue;
+                    if (v.huyaBitRate == userRes) {
+                        match = v;
+                        break;
+                    }
+                }
+                if (match != null) {
+                    mCurrentHuyaLineIndex = userLine;
+                    currentResolutionLabel = match.getDisplayLabel();
+                    LogBridge.i(TAG, "【虎牙】恢复用户上次选择的线路+清晰度：lineIndex=" + userLine
+                            + " " + currentResolutionLabel + "（ratio=" + userRes + "）");
+                    return match.url;
+                }
+            }
+            LogBridge.i(TAG, "【虎牙】用户清晰度 ratio=" + userRes + " 该线路本次不可用，回落子线路代表地址");
+        }
+        // ① 子线路表（与「源N · CDN」同源）
+        for (HuyaStreamPlayer.MultiLineOption o : huyaMultiLinesSnapshot()) {
+            if (o == null || o.lineIndex != userLine || TextUtils.isEmpty(o.url)) continue;
+            mCurrentHuyaLineIndex = o.lineIndex;
+            // 与手动切换口径一致：子线路是成品地址，切过去必须把清晰度轴对齐
+            syncResolutionLabelForDirectUrl(o.url, o);
+            LogBridge.i(TAG, "【虎牙】恢复用户上次选择的子线路：源·"
+                    + (o.cdnType == null ? "?" : o.cdnType) + "（lineIndex=" + o.lineIndex + "）");
+            return o.url;
+        }
+        // ② 总线路矩阵兜底（无 multiLine 时）
+        synchronized (variantListLock) {
+            Variant best = null;
+            for (Variant v : variantList) {
+                if (v == null || TextUtils.isEmpty(v.url) || v.huyaLineIndex != userLine) continue;
+                if (best == null || v.huyaBitRate > best.huyaBitRate) best = v;
+            }
+            if (best != null) {
+                mCurrentHuyaLineIndex = userLine;
+                currentResolutionLabel = best.getDisplayLabel();
+                LogBridge.i(TAG, "【虎牙】恢复用户上次选择的线路 lineIndex=" + userLine
+                        + "（无对应子线路，改用总线路矩阵地址）");
+                return best.url;
+            }
+        }
+        LogBridge.i(TAG, "【虎牙】用户上次选择的线路 lineIndex=" + userLine
+                + " 本次不可用（不在子线路/矩阵中），沿用解析采用地址");
+        return null;
     }
 
     /**
@@ -5413,6 +5611,13 @@ public class TVPlayerManager {
         }
 
         currentResolutionLabel = selected.getDisplayLabel();
+        // 【2026-10-10 新增】用户手选清晰度落盘（按房间），供换台回来恢复。
+        // 只有虎牙矩阵档（huyaBitRate > 0）才落盘；非虎牙/咪咕/畅享在上面已提前 return，行为不变。
+        if (mHuyaRoomId > 0 && selected.huyaBitRate > 0) {
+            setUserChosenResolution(mHuyaRoomId, selected.huyaBitRate);
+            LogBridge.i(TAG, "【虎牙】记录用户手选清晰度: " + currentResolutionLabel
+                    + "（ratio=" + selected.huyaBitRate + "）");
+        }
         dLog("切换清晰度到）" + selected.getDisplayLabel() + "，URL=" + (selected.url != null ? selected.url.substring(0, Math.min(60, selected.url.length())) : "(空)"));
         playUrlInternal(selected.url);
     }

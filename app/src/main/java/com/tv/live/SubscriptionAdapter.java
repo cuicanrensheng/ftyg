@@ -111,11 +111,13 @@ public class SubscriptionAdapter extends ArrayAdapter<SourceManager.SourceItem> 
             String u = item.url != null ? item.url : "";
             boolean nameHit =
                     SourceManager.BUILTIN_NAME_LIVE_1.equals(n)
+                 || SourceManager.BUILTIN_NAME_LIVE_1_LEGACY.equals(n)
                  || SourceManager.BUILTIN_NAME_LIVE_2.equals(n)
                  || SourceManager.BUILTIN_NAME_LIVE_3.equals(n)
-                 || SourceManager.BUILTIN_NAME_LIVE_3_LEGACY.equals(n)
+                 || SourceManager.isLive3LegacyName(n)
                  || SourceManager.BUILTIN_NAME_LIVE_4.equals(n)
                  || SourceManager.BUILTIN_NAME_LIVE_5.equals(n)
+                 || SourceManager.BUILTIN_NAME_LIVE_5_LEGACY.equals(n)
                  || SourceManager.BUILTIN_NAME_LIVE_6.equals(n)
                  || SourceManager.BUILTIN_NAME_EPG_1.equals(n)
                  || SourceManager.BUILTIN_NAME_EPG_2.equals(n);

@@ -13,13 +13,37 @@ public class SourceManager {
 
     private static final String SP_NAME = "app_settings";
 
-    public static final String BUILTIN_NAME_LIVE_1 = "内置源1 (GitHub)";
+    public static final String BUILTIN_NAME_LIVE_1 = "内置源1 (Gitee)";
     public static final String BUILTIN_NAME_LIVE_2 = "内置源2 (Gitee)";
-    public static final String BUILTIN_NAME_LIVE_3 = "内置源3";
-    /** 旧版本名称「内置源3 (畅享TV)」：仅用于识别并就地改名迁移，不再对外展示 */
-    public static final String BUILTIN_NAME_LIVE_3_LEGACY = "内置源3 (畅享TV)";
+    /** 源3 = 畅享TV 源（上游 nowtv-new.xiaoyouzb.cn）；对外标签用缩写 CXTV */
+    public static final String BUILTIN_NAME_LIVE_3 = "内置源3 (CXTV)";
+    /**
+     * 旧版本名称「内置源1 (GitHub)」：源1 的地址早在 2026-08-29 就换成了 Gitee
+     * （gitee.com/qf_1111/iptv/raw/master/dfdvfaf.m3u，185 频道），名称当时漏改，
+     * 一直误标成 GitHub。仅用于识别并就地改名迁移，不再对外展示。
+     */
+    public static final String BUILTIN_NAME_LIVE_1_LEGACY = "内置源1 (GitHub)";
+    /**
+     * 源3 的历史名称（该标签前前后后改过多次）：
+     *   「内置源3」          —— 曾一度去掉后缀
+     *   「内置源3 (畅享TV)」 —— 曾用来源全名，后按需求缩写为 CXTV
+     * 仅用于识别并就地改名迁移，不再对外展示。
+     */
+    private static final String[] LIVE_3_LEGACY_NAMES = { "内置源3", "内置源3 (畅享TV)" };
+
+    /** 是否命中源3 的历史名称：历史名一律仍按「内置源3」识别，避免被当成自定义源重复添加 */
+    public static boolean isLive3LegacyName(String n) {
+        if (n == null) return false;
+        for (String s : LIVE_3_LEGACY_NAMES) {
+            if (s.equals(n)) return true;
+        }
+        return false;
+    }
+
     public static final String BUILTIN_NAME_LIVE_4 = "内置源4 (影视)";
-    public static final String BUILTIN_NAME_LIVE_5 = "内置源5 (爱其意)";
+    public static final String BUILTIN_NAME_LIVE_5 = "内置源5 (aiqiyi)";
+    /** 旧版本名称「内置源5 (爱其意)」：仅用于识别并就地改名迁移，不再对外展示 */
+    public static final String BUILTIN_NAME_LIVE_5_LEGACY = "内置源5 (爱其意)";
     public static final String BUILTIN_NAME_LIVE_6 = "内置源6 (咪咕)";
     public static final String BUILTIN_NAME_EPG_1  = "内置节目单1 (Catvod)";
     public static final String BUILTIN_NAME_EPG_2  = "内置节目单2 (ERW)";
@@ -28,9 +52,11 @@ public class SourceManager {
         if (si == null) return false;
         String n = si.name == null ? "" : si.name;
         if ("live_history".equals(spKey)) {
-            if (BUILTIN_NAME_LIVE_1.equals(n) || BUILTIN_NAME_LIVE_2.equals(n) || BUILTIN_NAME_LIVE_3.equals(n)
-                    || BUILTIN_NAME_LIVE_3_LEGACY.equals(n) || BUILTIN_NAME_LIVE_4.equals(n)
-                    || BUILTIN_NAME_LIVE_5.equals(n) || BUILTIN_NAME_LIVE_6.equals(n)) return true;
+            if (BUILTIN_NAME_LIVE_1.equals(n) || BUILTIN_NAME_LIVE_1_LEGACY.equals(n)
+                    || BUILTIN_NAME_LIVE_2.equals(n) || BUILTIN_NAME_LIVE_3.equals(n)
+                    || isLive3LegacyName(n) || BUILTIN_NAME_LIVE_4.equals(n)
+                    || BUILTIN_NAME_LIVE_5.equals(n) || BUILTIN_NAME_LIVE_5_LEGACY.equals(n)
+                    || BUILTIN_NAME_LIVE_6.equals(n)) return true;
             if (si.url != null && (UrlConfig.LIVE_URL.equals(si.url) || UrlConfig.LIVE_URL_2.equals(si.url)
                     || UrlConfig.LIVE_URL_CHANXIANG.equals(si.url) || UrlConfig.LIVE_URL_4.equals(si.url)
                     || UrlConfig.LIVE_URL_5.equals(si.url) || UrlConfig.LIVE_URL_6.equals(si.url))) return true;
@@ -492,11 +518,18 @@ public class SourceManager {
         existing.removeIf(si -> "内置源3 (本地666)".equals(si.name)
                 || (si.url != null && si.url.startsWith("asset://live_source_3")));
 
-        // 「内置源3 (畅享TV)」已改名为「内置源3」：就地改名迁移，
+        // 内置源名称变更一律「就地改名迁移」，
         // 否则旧条目名称不再匹配 → 会被当成自定义源、同时又新增一条同名内置源（重复）。
+        //  「内置源1 (GitHub)」   →「内置源1 (Gitee)」（源1 地址早已是 Gitee，旧名是漏改的误标）
+        //  「内置源3」/「(畅享TV)」→「内置源3 (CXTV)」（标签统一为来源缩写）
+        //  「内置源5 (爱其意)」   →「内置源5 (aiqiyi)」
         for (SourceItem si : existing) {
-            if (BUILTIN_NAME_LIVE_3_LEGACY.equals(si.name)) {
+            if (BUILTIN_NAME_LIVE_1_LEGACY.equals(si.name)) {
+                si.name = BUILTIN_NAME_LIVE_1;
+            } else if (isLive3LegacyName(si.name)) {
                 si.name = BUILTIN_NAME_LIVE_3;
+            } else if (BUILTIN_NAME_LIVE_5_LEGACY.equals(si.name)) {
+                si.name = BUILTIN_NAME_LIVE_5;
             }
         }
 
@@ -582,12 +615,14 @@ public class SourceManager {
 
     private static boolean isBuiltinNameForSpec(String siName, BuiltinSpec spec) {
         if (siName == null) return false;
-        if (BUILTIN_NAME_LIVE_1.equals(spec.name)) return BUILTIN_NAME_LIVE_1.equals(siName);
+        if (BUILTIN_NAME_LIVE_1.equals(spec.name)) return BUILTIN_NAME_LIVE_1.equals(siName)
+                || BUILTIN_NAME_LIVE_1_LEGACY.equals(siName);
         if (BUILTIN_NAME_LIVE_2.equals(spec.name)) return BUILTIN_NAME_LIVE_2.equals(siName);
         if (BUILTIN_NAME_LIVE_3.equals(spec.name)) return BUILTIN_NAME_LIVE_3.equals(siName)
-                || BUILTIN_NAME_LIVE_3_LEGACY.equals(siName);
+                || isLive3LegacyName(siName);
         if (BUILTIN_NAME_LIVE_4.equals(spec.name)) return BUILTIN_NAME_LIVE_4.equals(siName);
-        if (BUILTIN_NAME_LIVE_5.equals(spec.name)) return BUILTIN_NAME_LIVE_5.equals(siName);
+        if (BUILTIN_NAME_LIVE_5.equals(spec.name)) return BUILTIN_NAME_LIVE_5.equals(siName)
+                || BUILTIN_NAME_LIVE_5_LEGACY.equals(siName);
         if (BUILTIN_NAME_LIVE_6.equals(spec.name)) return BUILTIN_NAME_LIVE_6.equals(siName);
         if (BUILTIN_NAME_EPG_1.equals(spec.name))  return BUILTIN_NAME_EPG_1.equals(siName);
         if (BUILTIN_NAME_EPG_2.equals(spec.name))  return BUILTIN_NAME_EPG_2.equals(siName);

@@ -977,8 +977,16 @@ public final class LogBridge {
                             android.app.AlarmManager am = (android.app.AlarmManager)
                                     context.getSystemService(Context.ALARM_SERVICE);
                             if (am != null) {
-                                am.setExact(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                                        android.os.SystemClock.elapsedRealtime() + 600, pi);
+                                long at = android.os.SystemClock.elapsedRealtime() + 600;
+                                // 【2026-10-10 Lint/ScheduleExactAlarm】Android 12+ 若未授予
+                                // SCHEDULE_EXACT_ALARM，setExact 会抛 SecurityException，导致
+                                // 「崩溃后自杀重启」失败。无权限时降级为非精确闹钟（误差数百毫秒可接受）。
+                                if (android.os.Build.VERSION.SDK_INT >= 31
+                                        && !am.canScheduleExactAlarms()) {
+                                    am.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
+                                } else {
+                                    am.setExact(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
+                                }
                             }
                         }
                     }

@@ -10,6 +10,8 @@ import android.security.keystore.KeyProperties;
 import android.text.TextUtils;
 import android.util.Base64;
 
+import androidx.annotation.RequiresApi;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -1051,6 +1053,14 @@ public class CacheManager {
     }
 
     private void initializeKey() throws Exception {
+        // 【2026-10-10 Lint/NewApi】Android Keystore 的 KeyGenParameterSpec 自 API 23 起才有，
+        // 而本工程 minSdk=21。旧实现无任何守卫，在 Android 5.0/5.1 上会抛 NoClassDefFoundError；
+        // 虽然外层 init() 的 catch 兜住了（表现为"安全数据存储初始化失败"），但属不确定行为。
+        // 现显式提前抛出，交由 init() 的 catch 统一降级为"加密存储不可用"，行为确定且可读。
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            throw new UnsupportedOperationException(
+                    "Android Keystore 需要 API 23+，当前 API " + Build.VERSION.SDK_INT + "，安全存储降级");
+        }
         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
         keyStore.load(null);
 
@@ -1066,6 +1076,7 @@ public class CacheManager {
         LogBridge.d(TAG, "加密密钥已就绪");
     }
 
+    @RequiresApi(Build.VERSION_CODES.M)
     private void generateKey() throws Exception {
         KeyGenerator keyGenerator = KeyGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
@@ -1313,6 +1324,7 @@ public class CacheManager {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.M)
     private void generateOrLoadKey() throws Exception {
         KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
         keyStore.load(null);

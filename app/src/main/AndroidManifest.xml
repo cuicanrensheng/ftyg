@@ -14,7 +14,11 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.BIND_TV_INPUT" />
+    <!-- 【2026-10-10 Lint】BIND_TV_INPUT 仅系统应用可授予。本项目作为 TV 直播应用需被预置为
+         系统应用 / 电视输入源；非系统应用安装时该权限静默不授予，不影响其余功能。
+         故此处属预期行为，忽略 Lint 的 ProtectedPermissions 告警。 -->
+    <uses-permission android:name="android.permission.BIND_TV_INPUT"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".MyApplication"

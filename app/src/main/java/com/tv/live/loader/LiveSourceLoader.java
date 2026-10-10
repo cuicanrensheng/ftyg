@@ -477,7 +477,11 @@ public class LiveSourceLoader {
                 if (f == null) break;
                 String content;
                 try {
-                    content = f.resultNow();
+                    // 【2026-10-10 Lint/NewApi】原用 Future#resultNow()（Java 19 / Android API 36 才有）。
+                    // minSdk=21 上该调用必抛 NoSuchMethodError，且被下方 catch(Throwable) 吞掉 →
+                    // 表现为「镜像竞速」在 Android 15 以下永远无法胜出，静默退化成等满超时。
+                    // ExecutorCompletionService#poll 返回的 Future 必定已完成，故 get() 不会阻塞。
+                    content = f.get();
                 } catch (Throwable t1) {
                     continue;
                 }

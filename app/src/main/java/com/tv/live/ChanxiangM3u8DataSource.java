@@ -3,7 +3,9 @@ package com.tv.live;
 import android.net.Uri;
 import android.util.Log;
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.media3.common.C;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.datasource.DataSource;
 import androidx.media3.datasource.DataSpec;
 import androidx.media3.datasource.TransferListener;
@@ -24,6 +26,10 @@ import java.util.regex.Pattern;
  * 这里在拉取到 m3u8 文本后把时长归一化为标准十进制（#EXTINF:3.0,）再交给解析器。
  * .ts 分片不受影响，直接透传。
  */
+// 【2026-10-10 Lint】本类刻意使用 media3 的 @UnstableApi 内部 API（自定义 DataSource）。
+// 用 androidx.annotation.OptIn 就地 opt-in，而不是给类打 @UnstableApi —— 后者会把
+// opt-in 要求传染给所有调用方，凭空制造新的 UnsafeOptInUsageError。
+@OptIn(markerClass = UnstableApi.class)
 public final class ChanxiangM3u8DataSource implements DataSource {
 
     private static final String TAG = "ChanxiangM3u8DS";

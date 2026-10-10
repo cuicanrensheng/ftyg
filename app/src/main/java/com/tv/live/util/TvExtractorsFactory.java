@@ -2,6 +2,8 @@ package com.tv.live.util;
 
 import android.net.Uri;
 
+import androidx.annotation.OptIn;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.extractor.Extractor;
 import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.extractor.amr.AmrExtractor;
@@ -35,6 +37,8 @@ import java.util.Map;
  * MpegAudioReader 等 32 类）无需在此手工注册：{@code new TsExtractor()} 的默认构造器自带
  * {@code DefaultTsPayloadReaderFactory}，R8 会沿着它对 reader 的引用自动保留。
  */
+// 【2026-10-10 Lint】本类刻意使用 media3 的 @UnstableApi 内部 API（自定义 ExtractorsFactory）。
+@OptIn(markerClass = UnstableApi.class)
 public final class TvExtractorsFactory implements ExtractorsFactory {
 
     private static final TvExtractorsFactory INSTANCE = new TvExtractorsFactory();

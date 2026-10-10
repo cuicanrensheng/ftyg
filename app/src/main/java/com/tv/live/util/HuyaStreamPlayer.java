@@ -9,7 +9,9 @@ import android.webkit.CookieManager;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import androidx.annotation.OptIn;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -73,6 +75,8 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+// 【2026-10-10 Lint】本类刻意使用 media3 的 @UnstableApi 内部 API（自研虎牙播放链）。
+@OptIn(markerClass = UnstableApi.class)
 public class HuyaStreamPlayer {
     private static final String TAG = "HuyaStreamPlayer";
 

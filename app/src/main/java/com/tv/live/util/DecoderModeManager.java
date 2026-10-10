@@ -15,6 +15,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.Toast;
 
+import androidx.annotation.OptIn;
 import androidx.core.content.ContextCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
@@ -25,6 +26,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -36,6 +38,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+// 【2026-10-10 Lint】本类刻意使用 media3 的 @UnstableApi 内部 API（解码器切换/降级）。
+@OptIn(markerClass = UnstableApi.class)
 public class DecoderModeManager {
     private static final String TAG = "DecoderModeManager";
 

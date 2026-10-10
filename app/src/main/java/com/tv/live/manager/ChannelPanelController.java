@@ -462,6 +462,15 @@ public class ChannelPanelController {
     private void refreshCurrentGroupChannelList() {
         if (currentGroupChannelList == null) return;
         currentGroupChannelList.clear();
+        // 【2026-10-10 修复「第2路点台后随机跳台」】第2路固定分组（虎牙电影等）的频道
+        // **不在 channelSourceList**（见 mergeHuyaChannelsIntoSource 的 isLine2FixedGroup 跳过），
+        // 用 channelSourceList 过滤会把 currentGroupChannelList 清空/换成错表 —— 而
+        // onChannelClicked 正是按 position 从这里取被点对象 → 点第 N 行却播到别的频道。
+        // 该分组有独立缓存时直接用缓存重建。
+        if (currentGroupName != null && fixedGroupCache.containsKey(currentGroupName)) {
+            currentGroupChannelList.addAll(fixedGroupCache.get(currentGroupName));
+            return;
+        }
         if (channelSourceList == null) return;
         if (currentGroupName == null || currentGroupName.isEmpty()
                 || GroupListManager.GROUP_ALL.equals(currentGroupName)) {
@@ -486,7 +495,15 @@ public class ChannelPanelController {
                 if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
                 if (channelListManager == null || channelListManagerEpg == null) return;
                 final long tUi = System.currentTimeMillis();
-                channelListManager.refreshChannelsNoRebuild(channelSourceList, currentPlayIndex, currentGroupName);
+                // 【2026-10-10 修复「第2路点台后随机跳台」】第2路固定分组的可见列表由分组独立缓存
+                // 驱动；用 channelSourceList + currentGroupName 过滤会把面板换成空表/错表（第2路频道
+                // 不在该列表），与 currentGroupChannelList 的取对象口径错位。该分组直接用缓存刷新。
+                if (currentGroupName != null && fixedGroupCache.containsKey(currentGroupName)) {
+                    channelListManager.setFilteredChannels(
+                            fixedGroupCache.get(currentGroupName), getPlayingChannelName());
+                } else {
+                    channelListManager.refreshChannelsNoRebuild(channelSourceList, currentPlayIndex, currentGroupName);
+                }
                 // 右侧 EPG 是全量合并视图，不能用 currentGroupName 过滤（否则会收窄成只有当前组）。
                 // 合并列表构建后按「正在播对象名」增量刷新（复用 setFilteredChannels 的名字高亮）。
                 syncEpgList();
@@ -869,39 +886,7 @@ public class ChannelPanelController {
     }
 
     public void playPrev() {
-        long now = System.currentTimeMillis();
-        if (now - lastChannelChangeTime < CHANNEL_COOLDOWN) {
-            return;
-        }
-        lastChannelChangeTime = now;
-        if (channelSourceList == null || channelSourceList.isEmpty()) {
-            return;
-        }
-
-        if (currentPlayIndex < 0 || currentPlayIndex >= channelSourceList.size()) {
-            currentPlayIndex = channelSourceList.size() - 1;
-            LogBridge.w("ChannelPanelController", "playPrev: currentPlayIndex 越界，已重置为最后一个有效索引 " + currentPlayIndex);
-        }
-
-        Channel currentChannel = channelSourceList.get(currentPlayIndex);
-        String currentGroup = GroupListManager.getNormalizedGroup(currentChannel);
-        List<Channel> groupChannels = new ArrayList<>();
-        for (Channel c : channelSourceList) {
-            if (currentGroup.equals(GroupListManager.getNormalizedGroup(c))) {
-                groupChannels.add(c);
-            }
-        }
-        if (groupChannels.size() <= 1) {
-            return;
-        }
-        int groupIndex = indexOfGroupChannel(groupChannels, currentChannel);
-        if (groupIndex == -1) return;
-        int prevGroupIndex = (groupIndex - 1 + groupChannels.size()) % groupChannels.size();
-        Channel prevChannel = groupChannels.get(prevGroupIndex);
-        int globalIndex = channelSourceList.indexOf(prevChannel);
-        if (globalIndex != -1) {
-            playChannel(globalIndex);
-        }
+        switchWithinCurrentPool(-1);
     }
 
     /**
@@ -935,39 +920,100 @@ public class ChannelPanelController {
     }
 
     public void playNext() {
+        switchWithinCurrentPool(+1);
+    }
+
+    /**
+     * 【2026-10-10 修复「虎牙第2路固定分组：点台后再切台会随机跳到别的频道」】
+     *
+     * <p>原实现只认 {@code channelSourceList} 的全局下标。第2路固定分组频道由
+     * {@link #playChannelByObject} 起播时会把 {@code currentPlayIndex} 置 <b>-1</b>
+     * （合法状态，含义是"不在全局列表"），而 playNext/playPrev 把 -1 当越界、
+     * 强行夹成 {@code channelSourceList.size()-1} → 「当前频道」变成**直播源列表的最后一条**，
+     * 再按它的归一化分组去算下一台 → 跳到与正在看的频道毫无关系的组（用户感知＝随机切台）。
+     *
+     * <p>新口径：
+     *   ① 当前频道：第1路下标有效 → {@code channelSourceList.get(currentPlayIndex)}；
+     *      否则取 {@code currentPlayingChannel}（第2路/外部频道对象）；
+     *      两者都没有才退回旧的"夹到最后一条"兜底；
+     *   ② 频道池：第1路维持原口径（channelSourceList 内同归一化分组）；
+     *      第2路改用面板**真实在显示**的那份列表（{@code fixedGroupCache} → {@code currentGroupChannelList}）；
+     *   ③ 目标频道若在第1路列表里 → {@code playChannel(globalIndex)}；
+     *      否则（第2路对象）→ {@code playChannelByObject(...)}，不做 roomId 反查（防命中同 roomId 的第1路频道）。
+     *
+     * @param dir +1 = 下一个，-1 = 上一个
+     */
+    private void switchWithinCurrentPool(int dir) {
         long now = System.currentTimeMillis();
         if (now - lastChannelChangeTime < CHANNEL_COOLDOWN) {
             return;
         }
         lastChannelChangeTime = now;
-        if (channelSourceList == null || channelSourceList.isEmpty()) {
+
+        final boolean hasLiveList = channelSourceList != null && !channelSourceList.isEmpty();
+        boolean route1Valid = hasLiveList
+                && currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size();
+
+        Channel cur;
+        if (route1Valid) {
+            cur = channelSourceList.get(currentPlayIndex);
+        } else if (currentPlayingChannel != null) {
+            cur = currentPlayingChannel;
+            // 当前频道其实就在第1路列表里（只是下标丢失）→ 回填下标，回归第1路口径
+            int gi = hasLiveList ? channelSourceList.indexOf(cur) : -1;
+            if (gi != -1) {
+                currentPlayIndex = gi;
+                route1Valid = true;
+            }
+        } else if (hasLiveList) {
+            // 兜底（保持旧行为）：既无有效下标、也无当前频道对象
+            currentPlayIndex = channelSourceList.size() - 1;
+            LogBridge.w("ChannelPanelController", "切台: 无有效当前频道，下标已重置为最后一个有效索引 " + currentPlayIndex);
+            cur = channelSourceList.get(currentPlayIndex);
+            route1Valid = true;
+        } else {
             return;
         }
+        if (cur == null) return;
 
-        if (currentPlayIndex < 0 || currentPlayIndex >= channelSourceList.size()) {
-            currentPlayIndex = channelSourceList.size() - 1;
-            LogBridge.w("ChannelPanelController", "playNext: currentPlayIndex 越界，已重置为最后一个有效索引 " + currentPlayIndex);
+        // ② 选频道池
+        List<Channel> pool = new ArrayList<>();
+        if (route1Valid) {
+            String g = GroupListManager.getNormalizedGroup(cur);
+            for (Channel c : channelSourceList) {
+                if (g.equals(GroupListManager.getNormalizedGroup(c))) pool.add(c);
+            }
+        } else if (currentGroupName != null && fixedGroupCache.containsKey(currentGroupName)) {
+            // 第2路固定分组：面板实际显示的就是它
+            pool.addAll(fixedGroupCache.get(currentGroupName));
+        } else if (!currentGroupChannelList.isEmpty()) {
+            pool.addAll(currentGroupChannelList);
         }
 
-        Channel currentChannel = channelSourceList.get(currentPlayIndex);
-        String currentGroup = GroupListManager.getNormalizedGroup(currentChannel);
-        List<Channel> groupChannels = new ArrayList<>();
-        for (Channel c : channelSourceList) {
-            if (currentGroup.equals(GroupListManager.getNormalizedGroup(c))) {
-                groupChannels.add(c);
+        int idx = indexOfGroupChannel(pool, cur);
+        if (idx == -1) {
+            // 当前频道不在所选池里（例如左侧分组被切到"全部"，人还停在第2路频道上）：
+            // 退回"当前频道自己所属的固定分组缓存"，避免跨组乱跳
+            String ownGroup = cur.getGroup();
+            if (ownGroup != null && fixedGroupCache.containsKey(ownGroup)) {
+                pool = new ArrayList<>(fixedGroupCache.get(ownGroup));
+                idx = indexOfGroupChannel(pool, cur);
             }
         }
-        if (groupChannels.size() <= 1) {
-            return;
-        }
-        int groupIndex = indexOfGroupChannel(groupChannels, currentChannel);
-        if (groupIndex == -1) return;
-        int nextGroupIndex = (groupIndex + 1) % groupChannels.size();
-        Channel nextChannel = groupChannels.get(nextGroupIndex);
-        int globalIndex = channelSourceList.indexOf(nextChannel);
+        if (idx == -1 || pool.size() <= 1) return;
+
+        Channel target = pool.get((idx + dir + pool.size()) % pool.size());
+        if (target == null) return;
+
+        int globalIndex = hasLiveList ? channelSourceList.indexOf(target) : -1;
         if (globalIndex != -1) {
             playChannel(globalIndex);
+        } else {
+            // 第2路固定分组对象：直接以被点对象起播，避免 roomId 反查命中同 roomId 的第1路频道
+            playChannelByObject(target, (idx + dir + pool.size()) % pool.size(), target.getGroup());
         }
+        LogBridge.i("ChannelPanelController", "切台 dir=" + dir + "：" + cur.getName() + " -> " + target.getName()
+                + "（池=" + pool.size() + "，下标=" + idx + "）");
     }
 
     public void switchUp() {

@@ -426,6 +426,13 @@ public class TVPlayerManager {
     private final Object variantListLock = new Object();
     private volatile List<Variant> variantList = new ArrayList<>();
     private volatile boolean isParsingMasterPlaylist = false;
+    /**
+     * 【2026-10-10】一次性抑制「普通源 master 重解析」：用户手选清晰度后重播该档地址时置位，
+     * 让 {@link #doPlayNormal} 跳过 {@code fetchAndParseMasterPlaylistNormal} —— 否则重播的
+     * 分片地址不是 master，解析不出 #EXT-X-STREAM-INF 会清空 {@link #variantList}，
+     * 导致设置里的「清晰度选择」变成空列表。
+     */
+    private volatile boolean mSuppressMasterParseOnce = false;
 
     private SharedPreferences sp;
     private String currentResolutionLabel = "自适应";
@@ -3949,7 +3956,16 @@ public class TVPlayerManager {
     private void doPlayNormal(String url, long initialSeekPosition) {
         LogBridge.d(TAG, "【普通源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
-        if (isHlsUrl(url)) {
+        // 【2026-10-10】畅享频道：仅当用户此前手选过线路/清晰度时，才异步构建轴并恢复
+        // （命中偏好且与起播地址不同则自动切回）。未定制过的频道行为完全不变，不产生多余请求。
+        if (isChanxiangHttpChannel(currentChannel) && hasChanxiangPreference(currentChannel)) {
+            ensureChanxiangAxisAsync(null);
+        }
+
+        if (mSuppressMasterParseOnce) {
+            // 用户手选清晰度导致的重播（分片地址）：不要重新解析 master，否则 variantList 被清空。
+            mSuppressMasterParseOnce = false;
+        } else if (isHlsUrl(url)) {
             fetchAndParseMasterPlaylistNormal(url);
         } else {
             synchronized (variantListLock) { variantList.clear(); }
@@ -4376,6 +4392,65 @@ public class TVPlayerManager {
         } else {
             LogBridge.w(TAG, "未解析到任何清晰度流，可能是直播源本身不支持多码率或网络被墙");
         }
+        // 【2026-10-10】普通源：若该频道有用户手选的清晰度偏好，起播时自动切到同档。
+        maybeRestoreChannelResolution(list);
+    }
+
+    /**
+     * 【2026-10-10 新增】普通源（内置源/自定义）起播恢复：用户此前为该频道手选过清晰度、
+     * 且本次解析出的档位里仍有同档时，自动切到该档（换台回来 / 重启后仍在用户选的档）。
+     * 无偏好则不动，保持原有「ExoPlayer 自适应」行为。
+     *
+     * <p>调用点在 {@link #parseMasterPlaylist} 的解析线程上，故切台动作 post 回主线程。
+     */
+    private void maybeRestoreChannelResolution(final List<Variant> list) {
+        final Channel ch = currentChannel;
+        if (ch == null || list == null || list.isEmpty()) return;
+        if (isScopedHuyaLines(ch) || isHuyaSource(ch.getMainPlayUrl())) return; // 虎牙走自己的轴
+        if (hasMiguAxis() || hasChanxiangAxis()) return;                       // 咪咕/畅享走各自轴
+        final String ck = channelKeyOf(ch);
+        if (TextUtils.isEmpty(ck)) return;
+        String pref = "";
+        try { pref = sp.getString("channel_resolution_" + ck, ""); } catch (Throwable ignored) {}
+        if (TextUtils.isEmpty(pref)) return;
+        final Variant pick = findVariantByLabel(list, pref);
+        if (pick == null) {
+            LogBridge.i(TAG, "【清晰度】普通源偏好档不在本次可用档内，保持默认: " + pref);
+            return;
+        }
+        final String prefLabel = pref;
+        if (mHandler != null) {
+            mHandler.post(() -> applyNormalResolutionRestore(pick, prefLabel, ck));
+        }
+    }
+
+    /** 主线程执行：确认仍在同一频道且当前不在该档 → 重播该档（抑制 master 重解析以保留档位表） */
+    private void applyNormalResolutionRestore(Variant pick, String prefLabel, String ck) {
+        if (pick == null || TextUtils.isEmpty(pick.url)) return;
+        if (currentChannel == null || !TextUtils.equals(channelKeyOf(currentChannel), ck)) return;
+        if (TextUtils.equals(currentUrl, pick.url)) return;
+        currentResolutionLabel = pick.getDisplayLabel();
+        LogBridge.i(TAG, "【清晰度】普通源恢复用户手选清晰度: " + currentResolutionLabel
+                + "（偏好=" + prefLabel + "，频道=" + ck + "）");
+        mSuppressMasterParseOnce = true;
+        playUrlInternal(pick.url);
+    }
+
+    /** 在 variant 列表里按展示名找档位；找不到返回 null */
+    private static Variant findVariantByLabel(List<Variant> list, String label) {
+        if (list == null || TextUtils.isEmpty(label)) return null;
+        for (Variant v : list) {
+            if (label.equals(v.getDisplayLabel()) || label.equals(v.resolutionLabel)) return v;
+        }
+        return null;
+    }
+
+    /** 频道偏好 key 口径（与 SettingsDialog 的 channel_line_index_<key> 完全一致） */
+    static String channelKeyOf(Channel ch) {
+        if (ch == null) return "";
+        String k = ch.getChannelId();
+        if (TextUtils.isEmpty(k)) k = ch.getName();
+        return k == null ? "" : k;
     }
 
     private String resolveUrl(String base, String relative) {
@@ -4884,6 +4959,8 @@ public class TVPlayerManager {
         if (cached != null && !cached.isEmpty()
                 && mChanxiangAxisTvId == tvId
                 && System.currentTimeMillis() - mChanxiangAxisAtMs < CHANXIANG_AXIS_TTL_MS) {
+            // 缓存命中：轴不重建，但仍须按偏好恢复一次（换台回来时最容易走这条分支）。
+            restoreChanxiangPreference(tvId, ch.getMainPlayUrl());
             if (onReady != null) onReady.run();
             return;
         }
@@ -4908,7 +4985,7 @@ public class TVPlayerManager {
                 mChanxiangAxis = axis;
                 mChanxiangAxisTvId = tvId;
                 mChanxiangAxisAtMs = System.currentTimeMillis();
-                initChanxiangCurFromUrl(curUrl);
+                restoreChanxiangPreference(tvId, curUrl);
                 LogBridge.i(TAG, "【畅享轴】tvId=" + tvId + " http源 " + axis.entries.size()
                         + " 条，线路=" + axis.lines + "，清晰度=" + axis.qualities);
                 if (onReady != null) onReady.run();
@@ -4925,6 +5002,44 @@ public class TVPlayerManager {
         if (e != null) {
             mChanxiangCurLine = e.lineName;
             mChanxiangCurQuality = e.qualityLabel;
+            // 【2026-10-10】同步档位标签，保证「清晰度选择」默认选中项与实际一致
+            currentResolutionLabel = e.qualityLabel;
+        }
+    }
+
+    /**
+     * 【2026-10-10 新增】轴就绪后恢复用户上次手选的 (线路, 清晰度)：
+     * 命中偏好 → 设为当前，且若与正在播地址不同则切回偏好源；未命中 → 按正在播地址反推。
+     *
+     * <p>与咪咕 {@code applyMiguSelection} 的「记忆 → 选源」闭环完全同构，只是畅享轴
+     * 惰性构建，恢复时机落在轴就绪这一刻（无论由起播还是打开设置面板触发）。
+     */
+    private void restoreChanxiangPreference(int tvId, String playingUrl) {
+        com.tv.live.chanxiang.ChanxiangStreamAxis axis = mChanxiangAxis;
+        if (axis == null || axis.isEmpty()) return;
+        String prefLine = chanxiangPrefGet(tvId, "line");
+        String prefQuality = chanxiangPrefGet(tvId, "quality");
+        com.tv.live.chanxiang.ChanxiangStreamAxis.Entry e = null;
+        if (!TextUtils.isEmpty(prefLine) || !TextUtils.isEmpty(prefQuality)) {
+            com.tv.live.chanxiang.ChanxiangStreamAxis.Entry cand = axis.find(prefLine, prefQuality);
+            // find() 最后会兜底返回首条，必须确认真的命中了偏好之一才算恢复
+            if (cand != null && (TextUtils.equals(cand.lineName, prefLine)
+                    || TextUtils.equals(cand.qualityLabel, prefQuality))) {
+                e = cand;
+            }
+        }
+        if (e == null) {
+            initChanxiangCurFromUrl(playingUrl);
+            return;
+        }
+        mChanxiangCurLine = e.lineName;
+        mChanxiangCurQuality = e.qualityLabel;
+        currentResolutionLabel = e.qualityLabel;
+        LogBridge.i(TAG, "【畅享】恢复用户上次选择的线路/清晰度 → "
+                + e.lineName + " / " + e.qualityLabel);
+        if (!TextUtils.equals(e.source, playingUrl) && !TextUtils.equals(e.source, currentUrl)) {
+            LogBridge.i(TAG, "【畅享】按偏好切回源 → " + e.source);
+            playUrlInternal(e.source);
         }
     }
 
@@ -4978,8 +5093,55 @@ public class TVPlayerManager {
         mChanxiangCurLine = line;
         mChanxiangCurQuality = quality;
         currentResolutionLabel = quality;
+        // 【2026-10-10】用户手选线路/清晰度落盘（按 tvId），供换台回来恢复 —— 与咪咕完全同构。
+        int tvId = chanxiangTvIdOf(currentChannel);
+        if (tvId > 0) {
+            chanxiangPrefPut(tvId, "line", line);
+            chanxiangPrefPut(tvId, "quality", quality);
+            LogBridge.i(TAG, "【畅享】记录用户手选(线路,清晰度) tvId=" + tvId
+                    + " → " + line + " / " + quality);
+        }
         LogBridge.i(TAG, "【畅享】" + what + " → " + line + " / " + quality + "：" + url);
         playUrlInternal(url);
+    }
+
+    /** 判据同 {@link #isChanxiangHttpChannel}：纯数字 channelId 即服务端 tvId；否则 0 */
+    private static int chanxiangTvIdOf(Channel ch) {
+        if (ch == null) return 0;
+        String id = ch.getChannelId();
+        if (TextUtils.isEmpty(id) || !id.matches("\\d+")) return 0;
+        try {
+            return Integer.parseInt(id.trim());
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    /** 该频道是否存在已保存的畅享线路/清晰度偏好（决定起播时是否需构建轴恢复） */
+    private boolean hasChanxiangPreference(Channel ch) {
+        int tvId = chanxiangTvIdOf(ch);
+        if (tvId <= 0) return false;
+        return !TextUtils.isEmpty(chanxiangPrefGet(tvId, "line"))
+                || !TextUtils.isEmpty(chanxiangPrefGet(tvId, "quality"));
+    }
+
+    private String chanxiangPrefGet(int tvId, String what) {
+        try {
+            SharedPreferences p = sp;
+            return p == null ? "" : p.getString("chanxiang_" + what + "_" + tvId, "");
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    private void chanxiangPrefPut(int tvId, String what, String val) {
+        try {
+            SharedPreferences p = sp;
+            if (p != null) {
+                p.edit().putString("chanxiang_" + what + "_" + tvId, val == null ? "" : val).apply();
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     public List<String> getAvailableLines() {
@@ -5611,12 +5773,24 @@ public class TVPlayerManager {
         }
 
         currentResolutionLabel = selected.getDisplayLabel();
-        // 【2026-10-10 新增】用户手选清晰度落盘（按房间），供换台回来恢复。
-        // 只有虎牙矩阵档（huyaBitRate > 0）才落盘；非虎牙/咪咕/畅享在上面已提前 return，行为不变。
+        // 【2026-10-10 新增】用户手选清晰度落盘，供换台回来恢复。
+        // ① 虎牙矩阵档（huyaBitRate > 0）→ 按房间存码率 ratio；
+        // ② 其余（普通源）→ 按频道存展示名。咪咕/畅享在上面已提前 return，行为不变。
         if (mHuyaRoomId > 0 && selected.huyaBitRate > 0) {
             setUserChosenResolution(mHuyaRoomId, selected.huyaBitRate);
             LogBridge.i(TAG, "【虎牙】记录用户手选清晰度: " + currentResolutionLabel
                     + "（ratio=" + selected.huyaBitRate + "）");
+        } else {
+            String ck = channelKeyOf(getCurrentChannel());
+            if (!TextUtils.isEmpty(ck)) {
+                try {
+                    sp.edit().putString("channel_resolution_" + ck, selected.getDisplayLabel()).apply();
+                    LogBridge.i(TAG, "【清晰度】记录用户手选清晰度(普通源): "
+                            + selected.getDisplayLabel() + " 频道=" + ck);
+                } catch (Throwable ignored) {}
+            }
+            // 重播该档（分片地址）时抑制 master 重解析，保留「清晰度选择」列表
+            mSuppressMasterParseOnce = true;
         }
         dLog("切换清晰度到）" + selected.getDisplayLabel() + "，URL=" + (selected.url != null ? selected.url.substring(0, Math.min(60, selected.url.length())) : "(空)"));
         playUrlInternal(selected.url);
@@ -5659,6 +5833,12 @@ public class TVPlayerManager {
         // 【2026-10-07】咪咕频道：当前档位以咪咕轴为准（切档 / 解析选源都会更新它），
         // 避免与虎牙专用的 currentResolutionLabel 串味。
         if (hasMiguAxis()) return getCurrentMiguQualityLabel();
+        // 【2026-10-10】畅享频道：同理，档位以畅享轴为准（且轴必须属于当前 tvId，防串台）
+        Channel cx = getCurrentChannel();
+        if (hasChanxiangAxis() && isChanxiangHttpChannel(cx)
+                && mChanxiangAxisTvId == chanxiangTvIdOf(cx)) {
+            return getCurrentChanxiangQualityLabel();
+        }
         return currentResolutionLabel;
     }
 

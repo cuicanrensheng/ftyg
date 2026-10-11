@@ -1261,6 +1261,25 @@ public class MainActivity extends AppCompatActivity {
         channelPanelController.togglePanel();
     }
 
+    /**
+     * 【2026-10-10】单击（OK）动作分发：源7 进入回看模式（点集数）后，单击应唤起
+     * 频道/集数面板以便换集 —— 但 {@link #togglePanel()} 带回看守卫（回看模式返回），
+     * 故源7 单独绕开守卫直接开面板；其它源仍走带守卫的 {@link #togglePanel()}，
+     * 让源1 等的时移回看行为完全不变（只对源7 生效）。
+     */
+    public void handleSingleTap() {
+        boolean isSource7 = mPlayerManager != null
+                && com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(
+                        mPlayerManager.getCurrentChannel()) != null;
+        if (isSource7) {
+            if (channelPanelController != null) {
+                channelPanelController.togglePanel();
+            }
+            return;
+        }
+        togglePanel();
+    }
+
     public void playPrev() { channelPanelController.playPrev(); }
     public void playNext() { channelPanelController.playNext(); }
 

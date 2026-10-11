@@ -57,15 +57,37 @@ public class AppCoreManager {
     private Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private boolean isLoading = false;
 
-    // 【P0-C】直播源加载去重
-    // 冷启动期间 MainActivity、远程配置回调、推送回调会并发/连续触发 loadLiveAndEpg()，
-    // 实测同一份 m3u 在 +0.59s 与 +4.51s 各被完整下载一遍，多花约 1s 并抢占首帧带宽。
-    private final java.util.concurrent.atomic.AtomicBoolean liveSourceLoadInFlight =
+    // 【P0-C】直播源加载去重（全局）：MainActivity 与 OttHomeActivity 各自 new 了一个
+    // AppCoreManager，若去重字段是实例字段，则守卫变成「每实例一份」→ 一次切源并发跑 2~3 份
+    // 完全相同的加载（日志里就是 3 条 "LOAD: source count="）并重复请求第三方站点。
+    // 因此这两个字段必须 static，全局共用同一份闸门。
+    private static final java.util.concurrent.atomic.AtomicBoolean liveSourceLoadInFlight =
             new java.util.concurrent.atomic.AtomicBoolean(false);
-    private volatile long lastLiveSourceLoadAtMs = 0;
+    // 【2026-10-11 切源单飞】切源刷新与在飞加载必须互斥（绝不并发请求第三方），但切源又
+    // 不能被丢弃：若切源请求到达时已有加载在飞，只登记「待重载」标记，等本次加载结束后
+    // 串行接续执行。这样「切源一定生效」与「绝不并发」两个诉求同时满足。
+    private static final java.util.concurrent.atomic.AtomicBoolean liveSourceReloadPending =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static volatile long lastLiveSourceLoadAtMs = 0;
+    /** 最近一次「已发起」的直播源 URL：用于把多个接收器收到的同源重复切源广播折叠成一次 */
+    private static volatile String sLastLoadedSourceUrl = null;
+    /** 最近一次加载「结束」时刻（开机基准），用于同源折叠的时间窗判定 */
+    private static volatile long sLastLoadDoneAtMs = 0;
+    /**
+     * 加载代次号：每次真正发起加载时自增。回调与收口前先比对代次，<b>过期加载</b>
+     * （已被新的切源取代的那一次）其结果一律丢弃 —— 否则旧源的频道会被 mergeChannels
+     * 混进新源的频道列表（表现为「切到源7，分组/频道里混着别的源」）。
+     */
+    private static final java.util.concurrent.atomic.AtomicLong sLoadGeneration =
+            new java.util.concurrent.atomic.AtomicLong(0);
     private static final long LOAD_DEDUPE_WINDOW_MS = 6000;
     private static final long LOAD_DEDUPE_RELEASE_MS = 30000;
     private final Handler dedupeHandler = new Handler(Looper.getMainLooper());
+    /**
+     * 闸门兜底释放专用 handler（static）：闸门本身是 static 的（多实例共用），
+     * 释放任务也必须共用同一份，否则 A 实例的旧释放任务会在 B 实例的加载进行中提前清闸。
+     */
+    private static final Handler sReleaseHandler = new Handler(Looper.getMainLooper());
 
     private BroadcastReceiver toggleControllerReceiver;
     private BroadcastReceiver refreshReceiver;
@@ -114,36 +136,97 @@ public class AppCoreManager {
      * 真正的加载逻辑在 loadLiveAndEpgInternal()。
      */
     public void loadLiveAndEpg() {
+        requestLiveSourceLoad(false);
+    }
+
+    /**
+     * 【2026-10-11 切源单飞】用户显式切换直播源后调用（由 REFRESH_LIVE_AND_EPG 广播触发）。
+     *
+     * <p>与 {@link #loadLiveAndEpg()} 的区别：切源是用户显式意图，优先级最高，既不能被
+     * 「6s 去重窗口」挡掉，也不能被「另一个 AppCoreManager 实例正在飞的加载」挡掉
+     * （否则表现为「切了源界面没反应」）。但为了遵守「绝不对第三方并发/批量请求」，它
+     * <b>也不清闸硬闯</b>：若此刻已有加载在飞，只登记待重载标记，等本次加载结束后串行接续。
+     *
+     * <p>另外，切源广播会被 MainActivity 与 OttHomeActivity 各自的 AppCoreManager 各收一次，
+     * 同源的重复广播由 {@link #sLastLoadedSourceUrl} 折叠成一次，避免重复请求第三方。
+     */
+    public void forceReloadLiveSource() {
+        requestLiveSourceLoad(true);
+    }
+
+    private void requestLiveSourceLoad(boolean forced) {
         long now = android.os.SystemClock.elapsedRealtime();
+
+        // ① 已有加载在飞：不并发。显式切源登记「待重载」，等它结束后串行接续（保证切源不被丢弃）。
         if (liveSourceLoadInFlight.get()) {
-            log("【直播源】上一次加载仍在进行，跳过重复加载");
+            if (forced) {
+                liveSourceReloadPending.set(true);
+                log("【直播源】已有加载在飞，已登记切源重载（本次加载结束后串行接续，不并发）");
+            } else {
+                log("【直播源】上一次加载仍在进行，跳过重复加载");
+            }
             return;
         }
-        if (now - lastLiveSourceLoadAtMs < LOAD_DEDUPE_WINDOW_MS) {
+
+        // ② 源未变化的重复刷新折叠：切源广播会被多个 AppCoreManager 实例各收一次，
+        //    逐次都真发就会重复请求第三方；若刚发起/刚结束的加载就是同一个源，直接折叠。
+        String cur = UrlConfig.LIVE_URL;
+        if (forced) {
+            if (cur != null && cur.equals(sLastLoadedSourceUrl)
+                    && now - sLastLoadDoneAtMs < LOAD_DEDUPE_WINDOW_MS) {
+                log("【直播源】切源刷新与刚完成的加载同源，折叠为一次，跳过重复刷新");
+                return;
+            }
+        } else if (now - lastLiveSourceLoadAtMs < LOAD_DEDUPE_WINDOW_MS) {
             log("【直播源】距上次加载不足 " + (LOAD_DEDUPE_WINDOW_MS / 1000) + "s，跳过重复加载");
             return;
         }
+
         if (!liveSourceLoadInFlight.compareAndSet(false, true)) {
             log("【直播源】并发加载被去重拦截");
             return;
         }
+        final long gen = sLoadGeneration.incrementAndGet();
         lastLiveSourceLoadAtMs = now;
-        // 兜底释放：异常路径若没走到 onSuccess/onError，避免标志永久卡死
-        dedupeHandler.postDelayed(new Runnable() {
+        sLastLoadedSourceUrl = cur;
+        // 兜底释放：异常路径若没走到 onSuccess/onError，避免标志永久卡死。
+        // 先清掉上一轮未触发的释放任务，否则旧任务会在新加载进行中提前清闸。
+        sReleaseHandler.removeCallbacksAndMessages(null);
+        sReleaseHandler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                liveSourceLoadInFlight.set(false);
+                finishLiveSourceLoad(gen);
             }
         }, LOAD_DEDUPE_RELEASE_MS);
         try {
-            loadLiveAndEpgInternal();
+            loadLiveAndEpgInternal(gen);
         } catch (Throwable t) {
-            liveSourceLoadInFlight.set(false);
+            finishLiveSourceLoad(gen);
             log("【直播源】加载异常：" + t.getMessage());
         }
     }
 
-    private void loadLiveAndEpgInternal() {
+    /**
+     * 一次直播源加载结束（成功 / 失败 / 异常 / 兜底超时释放）统一收口：
+     * 记录结束时刻 → 释放闸门 → 若有登记过的「切源重载」则串行接续执行。
+     *
+     * <p>幂等：重复调用只会把闸门再置 false，无害。
+     */
+    private void finishLiveSourceLoad(long gen) {
+        if (gen != sLoadGeneration.get()) {
+            log("【直播源】忽略过期加载的收口（gen=" + gen + "，当前=" + sLoadGeneration.get()
+                    + "）：不改闸门、不触发重载");
+            return;
+        }
+        sLastLoadDoneAtMs = android.os.SystemClock.elapsedRealtime();
+        liveSourceLoadInFlight.set(false);
+        if (liveSourceReloadPending.compareAndSet(true, false)) {
+            log("【直播源】执行登记的切源重载（串行接续）");
+            AppExecutors.io(() -> requestLiveSourceLoad(true));
+        }
+    }
+
+    private void loadLiveAndEpgInternal(long gen) {
         log("【直播源】开始加载直播源...");
         isLoading = true;
 
@@ -199,6 +282,9 @@ public class AppCoreManager {
                 isLoading = false;
                 timeoutHandler.removeCallbacksAndMessages(null);
                 loadEpg();
+                // 【切源单飞】此路径不触发网络加载，必须立刻收口释放闸门，
+                // 否则闸门要等 30s 兜底释放，期间的切源操作会退化成「等 30s 才生效」。
+                finishLiveSourceLoad(gen);
                 return;
             }
             // 【2026-09-29 启动卡顿修复】缓存已起播 → 网络刷新延后 30s 错峰，让分片独享带宽
@@ -212,24 +298,31 @@ public class AppCoreManager {
                         return;
                     }
                     log("【网络】延后的直播源刷新开始（错峰）...");
-                    startNetworkLiveSourceLoad();
+                    startNetworkLiveSourceLoad(gen);
                 } catch (Throwable t) {
                     log("【网络】延后刷新异常：" + t.getMessage());
                 }
             }, NETWORK_REFRESH_DELAY_MS);
         } else {
-            startNetworkLiveSourceLoad();
+            startNetworkLiveSourceLoad(gen);
         }
     }
 
     /** 【2026-09-29 启动卡顿修复】从 loadLiveAndEpgInternal 抽出的后台网络加载（原逻辑不动）。 */
-    private void startNetworkLiveSourceLoad() {
+    private void startNetworkLiveSourceLoad(long gen) {
         lastNetworkLoadAtMs = android.os.SystemClock.elapsedRealtime();
         log("【网络】后台加载最新直播源...");
         LiveSourceLoader.getInstance(context).load(new LiveSourceLoader.LoadCallback() {
             @Override
             public void onSuccess(List<Channel> channels) {
-                liveSourceLoadInFlight.set(false);
+                // 【切源单飞】过期加载（已被新的切源取代）的结果一律丢弃，否则会把旧源的
+                // 频道 mergeChannels 混进新源列表（表现为「切到源7，频道里混着别的源」）。
+                if (gen != sLoadGeneration.get()) {
+                    log("【网络】忽略过期加载的成功结果（gen=" + gen + "，当前="
+                            + sLoadGeneration.get() + "），不合并进频道列表");
+                    return;
+                }
+                finishLiveSourceLoad(gen);
                 List<Channel> safeChannels = sanitizeChannels(channels);
                 log("【网络】直播源加载成功，频道总数：" + safeChannels.size());
                 synchronized (channelListLock) {
@@ -269,7 +362,12 @@ public class AppCoreManager {
 
             @Override
             public void onError(String errorMsg) {
-                liveSourceLoadInFlight.set(false);
+                if (gen != sLoadGeneration.get()) {
+                    log("【网络】忽略过期加载的失败结果（gen=" + gen + "，当前="
+                            + sLoadGeneration.get() + "）");
+                    return;
+                }
+                finishLiveSourceLoad(gen);
                 log("【网络】直播源加载失败：" + errorMsg);
                 isLoading = false;
                 timeoutHandler.removeCallbacksAndMessages(null);
@@ -410,6 +508,10 @@ public class AppCoreManager {
         if (TextUtils.isEmpty(content)) {
             return new ArrayList<>();
         }
+        // 【2026-10-11 海报镜像】缓存里的 M3U 可能残留不可达图床域名（如 img.picbf.com，
+        // 实测 TLS 被 RST），而本方法是「缓存快显路径」的解析入口，不经过 AfhgrjSourceLoader。
+        // 在入口统一做一次主机重写，保证旧缓存里的海报也能换到可达镜像。
+        content = com.tv.live.afhgrj.AfhgrjSourceLoader.rewritePosterHostsPublic(content);
         String[] lines = content.split("\n");
         String currentName = "";
         String currentGroup = "未分类";
@@ -510,7 +612,12 @@ public class AppCoreManager {
                 mergeChannelInto(channelMap, line, line, currentGroup, "", "");
             }
         }
-        return new ArrayList<>(channelMap.values());
+        // 【2026-10-12 屏蔽名单】本方法是「本地缓存快显」路径的解析出口
+        // （见 loadLiveAndEpgInternal 里 readLiveSourceCacheRaw → parseLiveSource → onLiveSourceLoaded(..., true)），
+        // 它<b>不经过</b> LiveSourceLoader.postSuccess，所以屏蔽必须在这里也过一遍，否则
+        // 7 天缓存有效期内冷启动会重新看到被屏蔽的频道。
+        // 注：网络路径已在 LiveSourceLoader.postSuccess 里过滤，此处重复过滤是幂等的。
+        return com.tv.live.util.ChannelBlocklist.filter(new ArrayList<>(channelMap.values()));
     }
 
     private static void mergeChannelInto(Map<String, Channel> channelMap,
@@ -628,9 +735,12 @@ public class AppCoreManager {
                         // 切换源后强制刷新直播源与 EPG。
                         // loadLiveAndEpg 有 6s 去重窗口 + in-flight 守卫，切换节目单时可能被跳过，
                         // 导致 EPG 缓存被 clearAll 清空但未重新下载、面板显示空。
-                        // 因此重置去重计时器，并额外直接调用 loadEpg() 确保节目单一定重载。
-                        lastLiveSourceLoadAtMs = 0;
-                        loadLiveAndEpg();
+                        // 因此改走「切源单飞」入口 forceReloadLiveSource()：它保证用户显式切源
+                        // 一定生效（不被去重窗口、也不被另一个 AppCoreManager 实例正在飞的加载
+                        // 挡掉），同时绝不与在飞加载并发，并把多个接收器收到的同源重复广播折叠成
+                        // 一次 —— 避免对第三方源站重复/并发请求。
+                        forceReloadLiveSource();
+                        // 额外直接调用 loadEpg() 确保节目单一定重载（EPG 走独立 serial 链路）。
                         loadEpg();
                     });
                 }
@@ -784,7 +894,11 @@ public class AppCoreManager {
             }
 
             hasPlayedWithCache = false;
-            loadLiveAndEpg();
+            // 【2026-10-11 切源单飞】与广播路径（refreshReceiver）对齐：此处刚 clearAll 掉
+            // live_source 缓存并清空了 channelSourceList，若用非 forced 的 loadLiveAndEpg()，
+            // 一旦此刻有别的加载在飞就会被直接跳过（不登记 pending）→ 远程配置下发的源被吞掉、
+            // 界面停在空列表。改用 forceReloadLiveSource()，保证「源变了就一定重载」。
+            forceReloadLiveSource();
         });
     }
 

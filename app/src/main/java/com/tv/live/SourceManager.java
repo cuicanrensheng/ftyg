@@ -45,6 +45,7 @@ public class SourceManager {
     /** 旧版本名称「内置源5 (爱其意)」：仅用于识别并就地改名迁移，不再对外展示 */
     public static final String BUILTIN_NAME_LIVE_5_LEGACY = "内置源5 (爱其意)";
     public static final String BUILTIN_NAME_LIVE_6 = "内置源6 (咪咕)";
+    public static final String BUILTIN_NAME_LIVE_7 = "内置源7 (影视)";
     public static final String BUILTIN_NAME_EPG_1  = "内置节目单1 (Catvod)";
     public static final String BUILTIN_NAME_EPG_2  = "内置节目单2 (ERW)";
 
@@ -56,10 +57,11 @@ public class SourceManager {
                     || BUILTIN_NAME_LIVE_2.equals(n) || BUILTIN_NAME_LIVE_3.equals(n)
                     || isLive3LegacyName(n) || BUILTIN_NAME_LIVE_4.equals(n)
                     || BUILTIN_NAME_LIVE_5.equals(n) || BUILTIN_NAME_LIVE_5_LEGACY.equals(n)
-                    || BUILTIN_NAME_LIVE_6.equals(n)) return true;
+                    || BUILTIN_NAME_LIVE_6.equals(n) || BUILTIN_NAME_LIVE_7.equals(n)) return true;
             if (si.url != null && (UrlConfig.LIVE_URL.equals(si.url) || UrlConfig.LIVE_URL_2.equals(si.url)
                     || UrlConfig.LIVE_URL_CHANXIANG.equals(si.url) || UrlConfig.LIVE_URL_4.equals(si.url)
-                    || UrlConfig.LIVE_URL_5.equals(si.url) || UrlConfig.LIVE_URL_6.equals(si.url))) return true;
+                    || UrlConfig.LIVE_URL_5.equals(si.url) || UrlConfig.LIVE_URL_6.equals(si.url)
+                    || UrlConfig.LIVE_URL_7.equals(si.url))) return true;
         } else if ("epg_history".equals(spKey)) {
             if (BUILTIN_NAME_EPG_1.equals(n) || BUILTIN_NAME_EPG_2.equals(n)) return true;
             if (si.url != null && (UrlConfig.EPG_URL.equals(si.url) || UrlConfig.EPG_URL_2.equals(si.url))) return true;
@@ -466,6 +468,11 @@ public class SourceManager {
             src6.isDefault = false;
             src6.autoUpdate = true;
             result.add(src6);
+
+            SourceItem src7 = new SourceItem(BUILTIN_NAME_LIVE_7, rawOrFallback(UrlConfig.LIVE_URL_7_RAW, UrlConfig.LIVE_URL_7));
+            src7.isDefault = false;
+            src7.autoUpdate = true;
+            result.add(src7);
         } else if ("epg_history".equals(spKey)) {
             SourceItem src1 = new SourceItem(BUILTIN_NAME_EPG_1, rawOrFallback(UrlConfig.EPG_URL_1_RAW, UrlConfig.EPG_URL));
             src1.isDefault = true;
@@ -501,6 +508,7 @@ public class SourceManager {
                     new BuiltinSpec(BUILTIN_NAME_LIVE_4, rawOrFallback(UrlConfig.LIVE_URL_4_RAW, UrlConfig.LIVE_URL_4), true),
                     new BuiltinSpec(BUILTIN_NAME_LIVE_5, rawOrFallback(UrlConfig.LIVE_URL_5_RAW, UrlConfig.LIVE_URL_5), true),
                     new BuiltinSpec(BUILTIN_NAME_LIVE_6, rawOrFallback(UrlConfig.LIVE_URL_6_RAW, UrlConfig.LIVE_URL_6), true),
+                    new BuiltinSpec(BUILTIN_NAME_LIVE_7, rawOrFallback(UrlConfig.LIVE_URL_7_RAW, UrlConfig.LIVE_URL_7), true),
             };
         } else if ("epg_history".equals(spKey)) {
             return new BuiltinSpec[]{
@@ -624,6 +632,7 @@ public class SourceManager {
         if (BUILTIN_NAME_LIVE_5.equals(spec.name)) return BUILTIN_NAME_LIVE_5.equals(siName)
                 || BUILTIN_NAME_LIVE_5_LEGACY.equals(siName);
         if (BUILTIN_NAME_LIVE_6.equals(spec.name)) return BUILTIN_NAME_LIVE_6.equals(siName);
+        if (BUILTIN_NAME_LIVE_7.equals(spec.name)) return BUILTIN_NAME_LIVE_7.equals(siName);
         if (BUILTIN_NAME_EPG_1.equals(spec.name))  return BUILTIN_NAME_EPG_1.equals(siName);
         if (BUILTIN_NAME_EPG_2.equals(spec.name))  return BUILTIN_NAME_EPG_2.equals(siName);
         return false;

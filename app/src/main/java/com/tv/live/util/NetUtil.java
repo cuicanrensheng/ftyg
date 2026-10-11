@@ -372,6 +372,42 @@ public class NetUtil {
         return okClient.newCall(request).execute();
     }
 
+    /**
+     * 【2026-10-11 源7降级加固】带自定义超时的 GET 重载。
+     *
+     * <p>仅用 {@code client()/secureClient()} 的 {@code newBuilder()} 派生一个<b>一次性</b>客户端，
+     * 覆盖本次请求的 connect/read 超时；<b>不修改全局 client 的超时、拦截器或任何既有行为</b>
+     * （{@code newBuilder()} 共享连接池/线程池/拦截器，只改变时间参数）。
+     *
+     * <p>headers 构造逻辑与 {@link #syncGetWithHeaders(String, Map)} 完全一致：
+     * 先铺 {@code createCommonHeaders(url)}，再用 {@code customHeaders} 逐项覆盖。
+     *
+     * @param connectMs 本次连接超时（毫秒）
+     * @param readMs    本次读取超时（毫秒）
+     */
+    public Response syncGetWithHeaders(String url, Map<String, String> customHeaders,
+                                       long connectMs, long readMs) throws IOException {
+        Headers headers = createCommonHeaders(url);
+        Request.Builder requestBuilder = new Request.Builder()
+                .url(url)
+                .headers(headers);
+
+        if (customHeaders != null) {
+            for (Map.Entry<String, String> entry : customHeaders.entrySet()) {
+                requestBuilder.header(entry.getKey(), entry.getValue());
+            }
+        }
+
+        Request request = requestBuilder.get().build();
+
+        OkHttpClient base = isSensitiveUrl(url) ? secureClient() : client();
+        OkHttpClient okClient = base.newBuilder()
+                .connectTimeout(connectMs, TimeUnit.MILLISECONDS)
+                .readTimeout(readMs, TimeUnit.MILLISECONDS)
+                .build();
+        return okClient.newCall(request).execute();
+    }
+
     public String syncGetText(String url) throws IOException {
         try (Response response = syncGet(url)) {
             int code = response.code();

@@ -127,4 +127,88 @@ public class AppConfig {
         }
         appSp.edit().putString(KEY_RECENT_CHANNELS, sb.toString()).apply();
     }
+
+    // ==================================================================
+    // 【2026-10-11 新增】OTT 播放历史（最多 10 条；每条带「看到第几集」）
+    //
+    // 一物两用：
+    //   ① OTT 小窗口下方的「历史记录」面板直接渲染这 10 条（最新在前）；
+    //   ② 源7 续播 —— 打开软件自动起播的频道若在历史里，按其记录集数续播那一集。
+    // 存储：{@code 频道名 \t vodId \t 集数}，每条一行；同名去重（就地更新到最新集数）。
+    // ==================================================================
+
+    private static final String KEY_OTT_HISTORY = "ott_history";
+    private static final int MAX_OTT_HISTORY = 10;
+    private static final String HISTORY_FIELD = "\t";
+    private static final String HISTORY_LINE = "\n";
+
+    /** 一条 OTT 播放历史：频道名 + （源7）影片 id / 看到的集数（1 基；0 = 无集数概念） */
+    public static class OttHistory {
+        public final String name;
+        public final String vodId;
+        public final int episodeOrdinal;
+
+        public OttHistory(String name, String vodId, int episodeOrdinal) {
+            this.name = name == null ? "" : name;
+            this.vodId = vodId == null ? "" : vodId;
+            this.episodeOrdinal = episodeOrdinal;
+        }
+
+        /** 展示文案：源7 显示「频道名 · 第N集」，其它源只显示频道名 */
+        public String displayText() {
+            return episodeOrdinal > 0 ? (name + " · 第" + episodeOrdinal + "集") : name;
+        }
+    }
+
+    public List<OttHistory> getOttHistory() {
+        List<OttHistory> out = new ArrayList<>();
+        String saved = appSp.getString(KEY_OTT_HISTORY, "");
+        if (saved == null || saved.isEmpty()) return out;
+        for (String line : saved.split(HISTORY_LINE)) {
+            if (line == null || line.isEmpty()) continue;
+            String[] f = line.split(HISTORY_FIELD, -1);
+            if (f.length < 3 || f[0].isEmpty()) continue;
+            // 【2026-10-11 成人屏蔽】播放历史是独立持久化清单，不经过 ChannelBlocklist.filter，
+            // 若不过滤，已被剔除的成人频道仍会留在历史里、且可点击回看。在读取出口统一拦截：
+            // 既不再显示，下一次 addOttHistory 写回时也会被永久清掉（自愈）。
+            if (com.tv.live.util.ChannelBlocklist.isBlocked(f[0])) continue;
+            int ord = 0;
+            try {
+                ord = Integer.parseInt(f[2].trim());
+            } catch (Exception ignored) {
+            }
+            out.add(new OttHistory(f[0], f[1], ord));
+        }
+        return out;
+    }
+
+    /** 记一条播放历史：同名去重（就地更新集数）→ 置顶 → 超过 10 条挤掉最旧 */
+    public void addOttHistory(String channelName, String vodId, int episodeOrdinal) {
+        if (channelName == null || channelName.isEmpty()) return;
+        List<OttHistory> list = getOttHistory();
+        for (int i = list.size() - 1; i >= 0; i--) {
+            if (channelName.equals(list.get(i).name)) list.remove(i);
+        }
+        list.add(0, new OttHistory(channelName, vodId, episodeOrdinal));
+        while (list.size() > MAX_OTT_HISTORY) {
+            list.remove(list.size() - 1);
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            OttHistory h = list.get(i);
+            if (i > 0) sb.append(HISTORY_LINE);
+            sb.append(h.name).append(HISTORY_FIELD).append(h.vodId)
+                    .append(HISTORY_FIELD).append(h.episodeOrdinal);
+        }
+        appSp.edit().putString(KEY_OTT_HISTORY, sb.toString()).apply();
+    }
+
+    /** 取某频道在历史里记录的集数（1 基）；无记录返回 0 */
+    public int getOttHistoryOrdinal(String channelName) {
+        if (channelName == null || channelName.isEmpty()) return 0;
+        for (OttHistory h : getOttHistory()) {
+            if (channelName.equals(h.name)) return h.episodeOrdinal;
+        }
+        return 0;
+    }
 }

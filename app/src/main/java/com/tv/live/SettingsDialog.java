@@ -960,6 +960,21 @@ public class SettingsDialog extends android.app.Dialog {
                 return;
             }
 
+            // 【2026-10-11】源7（afhgrj 影视点播）频道：线路 = 该片播放源 sid。
+            //   清晰度无枚举维度（落地流是单条 m3u8，多码率播放器自适应），恒显示「自适应」。
+            if (playerManager.isAfhgrjChannel()) {
+                List<String> afLines = playerManager.getAfhgrjLineNames();
+                if (afLines.isEmpty()) {
+                    tv_channel_line.setText("加载中…");
+                } else {
+                    int afi = playerManager.getCurrentAfhgrjLineUiIndex();
+                    tv_channel_line.setText((afi >= 0 && afi < afLines.size())
+                            ? afLines.get(afi) : "未识别");
+                }
+                tv_resolution_status.setText("自适应");
+                return;
+            }
+
             // 非虎牙频道（或无子线路）：沿用「主源 / 源N」+ 真实线路名
             int realLineUi = playerManager.getCurrentHuyaLineUiIndex();
             if (realLineUi >= 0) currentLineIndex = realLineUi;
@@ -980,6 +995,12 @@ public class SettingsDialog extends android.app.Dialog {
         Channel currentChannel = playerManager.getCurrentChannel();
         if (currentChannel == null) {
             Toast.makeText(getContext(), "请先播放一个频道，再切换线路", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 【2026-10-11】源7（afhgrj 影视）频道：线路 = 该片播放源 sid，切换走 switchAfhgrjLine
+        if (playerManager.isAfhgrjChannel()) {
+            showAfhgrjLineDialog(playerManager);
             return;
         }
 
@@ -1146,6 +1167,32 @@ public class SettingsDialog extends android.app.Dialog {
         });
     }
 
+    /**
+     * 【2026-10-11 新增】源7（afhgrj 影视）「频道线路选择」—— 参照 {@link #showMiguLineDialog}。
+     *
+     * <p>线路名来自该片的播放源 sid（形如「线路1」「线路2」，每部片 1~3 个，各走不同 CDN）。
+     * 打勾落在<b>最近生效/手选</b>的 sid 上；切换走 {@code switchAfhgrjLine}（保持当前集重播）。
+     */
+    private void showAfhgrjLineDialog(TVPlayerManager playerManager) {
+        List<String> afLines = playerManager.getAfhgrjLineNames();
+        if (afLines.isEmpty()) {
+            Toast.makeText(getContext(), "源7线路尚未就绪，请先播放再切换", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] lineArray = afLines.toArray(new String[0]);
+        int currentLineIndex = playerManager.getCurrentAfhgrjLineUiIndex();
+        int checkedItem = (currentLineIndex >= 0 && currentLineIndex < lineArray.length)
+                ? currentLineIndex : 0;
+
+        showCommonSelectionDialog("频道线路选择", lineArray, checkedItem, (which) -> {
+            tv_channel_line.setText(lineArray[which]);
+            playerManager.switchAfhgrjLine(which);
+            // 换线路后清晰度仍为自适应，两行一起刷即可
+            refreshStreamStatusRows();
+            Toast.makeText(getContext(), "已切换到：" + lineArray[which], Toast.LENGTH_SHORT).show();
+        });
+    }
+
     private void initRedirectDefaultConfig() {
         if (!sp.contains(KEY_REDIRECT_MAX_COUNT)) {
             SharedPreferences.Editor editor = sp.edit();
@@ -1195,6 +1242,16 @@ public class SettingsDialog extends android.app.Dialog {
                 && !playerManager.hasChanxiangAxis()) {
             Toast.makeText(getContext(), "清晰度加载中，请稍候再试", Toast.LENGTH_SHORT).show();
             playerManager.ensureChanxiangAxisAsync(this::refreshStreamStatusRows);
+            return;
+        }
+        // 【2026-10-11】源7（afhgrj 影视）频道：落地流是单条 m3u8，无枚举清晰度，
+        //   多码率由播放器自适应 —— 提供一个「自适应」档（不报「不支持切换」）。
+        if (playerManager.isAfhgrjChannel()) {
+            String[] a7Items = {"自适应"};
+            showCommonSelectionDialog("清晰度选择", a7Items, 0, (which) -> {
+                tv_resolution_status.setText(a7Items[which]);
+                Toast.makeText(getContext(), "已切换至: " + a7Items[which], Toast.LENGTH_SHORT).show();
+            });
             return;
         }
         List<String> resolutions = playerManager.getAvailableResolutions();

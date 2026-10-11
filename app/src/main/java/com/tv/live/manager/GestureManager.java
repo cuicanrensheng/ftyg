@@ -24,11 +24,14 @@ public class GestureManager {
         return new PlayerGestureHelper(activity, new PlayerGestureHelper.GestureCallback() {
             @Override
             public void onOk() {
-                activity.togglePanel();
+                // 单击：源7 回看模式唤起频道/集数面板（绕开回看守卫，见 MainActivity.handleSingleTap），
+                // 其它源维持原有 togglePanel 逻辑
+                activity.handleSingleTap();
             }
 
             @Override
             public void onLongOk() {
+                // 回看模式：长按不再唤起设置面板（源7 集数回看同样走此路径）
                 if (activity.isInCatchUpMode()) {
                     return;
                 }
@@ -41,6 +44,7 @@ public class GestureManager {
 
             @Override
             public void onMenu() {
+                // 回看模式：双击唤起播放器控制栏（进度条）
                 if (activity.isInCatchUpMode()) {
                     activity.showExoController();
                 }

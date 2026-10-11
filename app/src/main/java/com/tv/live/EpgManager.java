@@ -607,6 +607,29 @@ public class EpgManager {
             return new ArrayList<>();
         }
 
+        // 【2026-10-10】内置源7（afhgrj 影视）：频道即一部影片，EPG 面板改为「集数列表」，
+        //   点击某一集即播放该集。只依赖 channelId 前缀 afhgrj: 判定，源1~6 行为零变化。
+        //   只读内存缓存（不联网）；未命中则后台抓一次详情页，完成后通知面板重渲染。
+        String afhgrjVodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(channel);
+        if (!TextUtils.isEmpty(afhgrjVodId)) {
+            List<Channel.EpgItem> episodes =
+                    com.tv.live.afhgrj.AfhgrjUrlResolver.getEpisodes(afhgrjVodId);
+            if (episodes != null && !episodes.isEmpty()) {
+                return episodes;
+            }
+            final String vid = afhgrjVodId;
+            AppExecutors.io(() -> {
+                List<Channel.EpgItem> l =
+                        com.tv.live.afhgrj.AfhgrjUrlResolver.fetchEpisodes(vid);
+                if (l != null && !l.isEmpty()) {
+                    LogBridge.i("EpgManager", "【EPG·源7】集数列表就绪 vodId=" + vid
+                            + " 共 " + l.size() + " 集");
+                    notifyEpgDataReady();
+                }
+            });
+            return new ArrayList<>();
+        }
+
         // 【2026-10-08】咪咕轮播/剧场频道（channelId = nowtv:<tvId>）：优先用咪咕自带的
         //   轮播节目单（播放时顺带缓存，零额外请求）。这类频道在 XMLTV 广播节目单里
         //   通常匹配不到（频道名是「电影-科幻」这类聚合名），原先面板只能空白。
@@ -1384,6 +1407,12 @@ public class EpgManager {
                     String key = actionTag.key;
 
                     if (actionTag.isPast) {
+                        // ★【2026-10-10】内置源7（afhgrj 影视）：集数项携带 customPlayUrl，
+                        //   点击直接播放该集（起播时再由 AfhgrjUrlResolver 惰性解析真实 m3u8）。
+                        if (item != null && !TextUtils.isEmpty(item.customPlayUrl)) {
+                            playAfhgrjEpisode(item);
+                            return;
+                        }
                         // ★【2026-10-08】咪咕轮播节目：走后端回看接口
                         //   /p/get_carousel_video?pid=<节目id>（等价原版 lunbolbk://<pid>），
                         //   而非对直播地址拼 playseek（轮播源并非 IPTV PLTV 时移流）。
@@ -1516,6 +1545,32 @@ public class EpgManager {
                         Toast.makeText(c, "回看：" + item.title, Toast.LENGTH_SHORT).show();
                     });
                 });
+            }
+
+            /**
+             * 【2026-10-10】内置源7（afhgrj 影视）切集：集数项携带 {@code customPlayUrl}
+             * （{@code afhgrj://<vodId>-<sid>-<nid>}），直接交给播放器 —— 起播那一刻才由
+             * {@code TVPlayerManager} 抓播放页取真实 m3u8（惰性解析）。
+             *
+             * <p>【2026-10-10 回归修复】与源1 的「过去节目回看」一致，进入 {@code catchUpMode}
+             * （回看模式）：这样长按不再弹设置、双击唤起控制栏（见 GestureManager）对源7 同样生效，
+             * 且无需任何源7 专属特判即可隔离于其它源。
+             */
+            private void playAfhgrjEpisode(final Channel.EpgItem item) {
+                final Context c = ctx;
+                if (!(c instanceof MainActivity)) return;
+                MainActivity activity = (MainActivity) c;
+                ChannelPanelController controller = activity.getChannelPanelController();
+                if (controller != null && controller.isPanelOpen()) {
+                    controller.hidePanel();
+                }
+                activity.setCatchUpMode(true);
+                activity.showExoController();
+                activity.mPlayerManager.playUrl(item.customPlayUrl,
+                        currentChannel.getName(), currentChannel);
+                LogBridge.i("EpgManager", "【EPG·源7】切集播放：" + item.title
+                        + " → " + item.customPlayUrl);
+                Toast.makeText(c, "播放：" + item.title, Toast.LENGTH_SHORT).show();
             }
 
             public EpgAdapter(Context ctx, Channel currentChannel, List<Channel.EpgItem> list, int dayIndex) {

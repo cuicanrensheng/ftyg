@@ -104,6 +104,19 @@ public class TVPlayerManager {
     private static final long SOURCE_FAILED_COOLDOWN_MS = 30000;
     private static final long MIN_STALL_WARN_THRESHOLD = 2000;
 
+    // ------------------------------------------------------------------
+    // 【2026-10-12 卡顿自动换线】补上「源7 卡顿兜底」这一环。
+    //   背景（2026-10-10 实测）：源7 频道「天才，女友」卡顿时表现为「播 2 秒卡 8 秒」，
+    //   播放占空比仅 23%，根因是该线路 CDN 带宽只有 ~137 KB/s（同片另一条线路 ~315 KB/s）。
+    //   而 totalStallTime 一直在累加，却从未被任何决策使用 —— 于是在一条慢线上卡到底。
+    //   现在：当前频道累计严重卡顿超过阈值，就自动换到下一条 sid 重播。
+    // ------------------------------------------------------------------
+
+    /** 当前频道累计严重卡顿时长达到该值即触发自动换线（ms） */
+    private static final long STALL_SWITCH_TOTAL_MS = 15000L;
+    /** 同一频道最多自动换线次数，防止在两条都慢的线路之间来回横跳 */
+    private static final int MAX_AFHGRJ_AUTO_SWITCH = 2;
+
     private static final String KEY_REDIRECT_MAX_COUNT = "redirect_max_count";
     private static final String KEY_REDIRECT_CROSS_DOMAIN = "redirect_cross_domain";
     private static final String KEY_REDIRECT_CROSS_PROTOCOL = "redirect_cross_protocol";
@@ -165,6 +178,34 @@ public class TVPlayerManager {
     private long totalStallTime = 0;
     private boolean isStalled = false;
     private long lastStallStartTime = 0;
+    /** 【2026-10-12 卡顿自动换线】当前频道已自动换线次数（防横跳；换台时归零） */
+    private int afhgrjAutoSwitchLineCount = 0;
+
+    /**
+     * 【2026-10-11 源7 联播】「本片所有集数已播完」标记。
+     *
+     * <p>用于挡住「卡住检测」在末集播完（state=ENDED）时把本集重播回来。
+     * 每次 {@link #playUrlInternal} 主动起播都会清零。
+     */
+    private volatile boolean afhgrjPlaybackFinished = false;
+
+    /**
+     * 【2026-10-11 源7 联播】自动换集的「宽限期」截止时刻（elapsedRealtime）。
+     *
+     * <p>整集播完→自动播下一集时，新地址要走「详情页(已缓存)/播放页/探活」解析，约 2~4s。
+     * 这段空档里播放器状态仍是 ENDED，会被「卡住检测」看门狗判成卡死并 autoRetry，
+     * 引发连锁重试把联播打乱（实测）。换集时置一个短宽限期，期间看门狗不重试；
+     * 到期自动失效 —— 万一解析真失败了，看门狗还能兜底重试（不会一卡到底）。
+     */
+    private volatile long afhgrjSwitchingUntilMs = 0L;
+    /** 换集宽限期时长（实测解析 2~4s，留足余量） */
+    private static final long AFHGRJ_SWITCH_GRACE_MS = 20000L;
+    /**
+     * 【2026-10-12 卡顿自动换线】只累计「严重卡顿」（≥ {@link #MIN_STALL_WARN_THRESHOLD}）的时长。
+     * 不能直接用 {@link #totalStallTime} 判阈值——它把 <2s 的正常抖动也累加了，
+     * 健康线路看一部片零散缓冲也能凑到 15s，会把好线路误换掉。
+     */
+    private long severeStallTime = 0;
     private int retryCount = 0;
     private int chanxiangRefreshCount = 0;
     /** 源5(爱其意)直链重拉计数，每频道最多触发 {@link #MAX_RENYIBO_REFRESH} 次，防循环 */
@@ -502,6 +543,14 @@ public class TVPlayerManager {
                         if (isHuyaSigRetryJustFired()) {
                             // 【换台卡顿专项】403 已触发立即重解析，这里再排一次会让同一房间重解析两遍
                             LogBridge.d(TAG, "【重试去重】虎牙签名重试刚发起，跳过卡住检测的重复重试");
+                            mHandler.postDelayed(this, 2000);
+                            return;
+                        }
+                        if (afhgrjPlaybackFinished
+                                || android.os.SystemClock.elapsedRealtime() < afhgrjSwitchingUntilMs) {
+                            // 【2026-10-11 源7 联播】整片已播完 / 正在换集解析：不要按「卡住」重试，
+                            //   否则会重播末集或把联播打乱（用户实测「拖到底 → 重播」）。
+                            LogBridge.d(TAG, "【源7 联播】已全部播完或正在换集，跳过卡住检测的重试");
                             mHandler.postDelayed(this, 2000);
                             return;
                         }
@@ -998,7 +1047,11 @@ public class TVPlayerManager {
                 } else if (state == Player.STATE_ENDED) {
                     logPlayback("播放结束 (STATE_ENDED)");
                     if (listener != null) listener.onPlayEnd();
-                    autoRetry("播放结束");
+                    // 【2026-10-11 源7 自动联播】整集播完：有下一集 → 自动续播；末集 → 停播。
+                    //   必须在 autoRetry 之前接管，否则会被「播放结束自动重试」重播本集（用户实测）。
+                    if (!handleAfhgrjEpisodeEnded()) {
+                        autoRetry("播放结束");
+                    }
                 } else if (state == Player.STATE_IDLE) {
                     logPlayback("空闲状态 (STATE_IDLE)");
                     isSwitching = false;
@@ -1018,6 +1071,10 @@ public class TVPlayerManager {
                         totalStallTime += stallDuration;
                         if (stallDuration >= MIN_STALL_WARN_THRESHOLD) {
                             logWarn("严重卡顿结束，时长：" + stallDuration + "ms");
+                            // 【2026-10-12 卡顿自动换线】只累计「严重」卡顿的时长（不含 <2s 抖动），
+                            // 累计超阈值就换线。延后一会儿再执行：此刻正在回调里恢复播放，立刻重播会打架。
+                            severeStallTime += stallDuration;
+                            mHandler.postDelayed(() -> maybeAutoSwitchAfhgrjLine(), 800L);
                         } else {
                             logPlayback("短暂缓冲恢复，时长：" + stallDuration + "ms");
                         }
@@ -1159,6 +1216,141 @@ public class TVPlayerManager {
 
     /** 源5（爱其意）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
     private volatile String renyiboResolvingUrl = "";
+
+    /**
+     * 【2026-10-10 新增】源7（afhgrj 影视）待解析地址解析后起播 —— 参照源5 {@link #resolveRenyiboAndPlay} 模式。
+     *
+     * <p>M3U 里存的是 {@code afhgrj://<vodId>}（EPG 切集时为 {@code afhgrj://<vodId>-<sid>-<nid>}），
+     * 在起播这一刻才抓播放页 {@code /yplay/…} 取 {@code player_aaaa} 里的真实 m3u8，完成后回主线程播放。
+     */
+    private void resolveAfhgrjAndPlay(String rawUrl, long initialSeekPosition) {
+        synchronized (this) {
+            if (rawUrl.equals(afhgrjResolvingUrl)) {
+                LogBridge.d(TAG, "【影视源7】解析进行中，忽略重复请求");
+                return;
+            }
+            afhgrjResolvingUrl = rawUrl;
+        }
+        LogBridge.i(TAG, "【影视源7】起播解析待解析地址 → " + rawUrl);
+        // 记录当前影片 id / 集数 nid，供设置面板「切线路保持当前集」使用
+        if (com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(rawUrl)) {
+            String rest = rawUrl.substring(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME.length()).trim();
+            String[] parts = rest.split("-");
+            this.afhgrjCurVodId = (parts.length >= 1 && !parts[0].isEmpty()) ? parts[0] : null;
+            this.afhgrjCurNid = (parts.length >= 3) ? parseNidSafe(parts[2]) : 0;
+        }
+        new Thread(() -> {
+            String finalUrl = null;
+            try {
+                finalUrl = com.tv.live.afhgrj.AfhgrjUrlResolver.resolve(rawUrl);
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "【影视源7】解析异常: " + t.getMessage());
+            }
+            final String resolved = finalUrl;
+            mHandler.post(() -> {
+                afhgrjResolvingUrl = "";
+                // 频道已被切换（currentUrl 不再是这条待解析地址）→ 丢弃本次结果
+                if (!TextUtils.equals(currentUrl, rawUrl)) {
+                    LogBridge.d(TAG, "【影视源7】解析完成但已切换，丢弃");
+                    return;
+                }
+                if (TextUtils.isEmpty(resolved)) {
+                    LogBridge.w(TAG, "【影视源7】解析失败，转自动重试切台");
+                    autoRetry("源7解析失败");
+                    return;
+                }
+                LogBridge.i(TAG, "【影视源7】落地地址就绪 → " + resolved);
+                // 【方案2】起播前异步预热真实 m3u8 host（DNS+TCP+TLS 提前做掉、
+                // 连接回池），与播放链路 RedirectLoggingHttpDataSource 同一
+                // HttpURLConnection 栈，首段拉流可直接复用连接少一次首跳。
+                try {
+                    com.tv.live.MyApplication.prewarmStreamAsync(resolved);
+                } catch (Throwable ignored) {
+                }
+                doPlay(resolved, initialSeekPosition);
+            });
+        }, "Afhgrj-Resolve").start();
+    }
+
+    /** 源7（afhgrj 影视）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
+    private volatile String afhgrjResolvingUrl = "";
+
+    /** 源7（afhgrj）当前播放影片 id（从待解析地址解析出；空 = 非源7 或尚未解析） */
+    private volatile String afhgrjCurVodId = null;
+    /** 源7（afhgrj）当前播放集数 nid（0 = 频道默认首集，未显式携带） */
+    private volatile int afhgrjCurNid = 0;
+
+    // ==================================================================
+    // 【2026-10-11 新增】源7（afhgrj 影视）「频道线路选择」—— 供设置面板两个弹窗使用
+    //
+    // 源7 的「线路」= 该片的播放源 sid（每部片 1~3 个，各走不同 CDN）。清晰度无枚举维度
+    // （player_aaaa 的 url 是单条 m3u8，多码率由播放器自适应），故只有「自适应」一档。
+    // 切线路 = 保持当前集重播到所选 sid（写入 sWorkingSid，同片后续集数保持一致）。
+    // ==================================================================
+
+    /** 当前频道是否为源7（afhgrj 影视点播） */
+    public boolean isAfhgrjChannel() {
+        Channel ch = getCurrentChannel();
+        return ch != null && com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null;
+    }
+
+    /** 源7 当前影片 id：优先用本次播放待解析地址里带的，否则从频道 id 取 */
+    private String currentAfhgrjVodId() {
+        if (!TextUtils.isEmpty(afhgrjCurVodId)) return afhgrjCurVodId;
+        Channel ch = getCurrentChannel();
+        return com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
+    }
+
+    /** 源7 线路名列表（当前影片的播放源 sid，形如「线路1」「线路2」）；未起播该片返回空 */
+    public List<String> getAfhgrjLineNames() {
+        String vodId = currentAfhgrjVodId();
+        if (TextUtils.isEmpty(vodId)) return new ArrayList<>();
+        return com.tv.live.afhgrj.AfhgrjUrlResolver.lineNamesOf(vodId);
+    }
+
+    /** 源7「频道线路选择」当前线路打勾下标（0 基）；基于最近生效/手选 sid，找不到返回 0 */
+    public int getCurrentAfhgrjLineUiIndex() {
+        String vodId = currentAfhgrjVodId();
+        if (TextUtils.isEmpty(vodId)) return 0;
+        int[] sids = com.tv.live.afhgrj.AfhgrjUrlResolver.sidsOf(vodId);
+        int cur = com.tv.live.afhgrj.AfhgrjUrlResolver.workingSidOf(vodId);
+        for (int i = 0; i < sids.length; i++) {
+            if (sids[i] == cur) return i;
+        }
+        return 0;
+    }
+
+    /**
+     * 切换源7 线路（下标口径 = {@link #getAfhgrjLineNames()}）。
+     *
+     * <p>保持当前集：记入手选 sid → 以 {@code afhgrj://<vodId>-<newSid>-<nid>} 重播
+     * （频道默认首集 nid 未携带时为 {@code afhgrj://<vodId>-<newSid>}，等价该线首集）。
+     */
+    public void switchAfhgrjLine(int index) {
+        String vodId = currentAfhgrjVodId();
+        if (TextUtils.isEmpty(vodId)) return;
+        int[] sids = com.tv.live.afhgrj.AfhgrjUrlResolver.sidsOf(vodId);
+        if (index < 0 || index >= sids.length) {
+            LogBridge.w(TAG, "【影视源7】线路表为空或下标越界，无法切换：" + index);
+            return;
+        }
+        int targetSid = sids[index];
+        com.tv.live.afhgrj.AfhgrjUrlResolver.rememberSid(vodId, targetSid);
+        String newRaw = com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME + vodId
+                + (afhgrjCurNid > 0 ? ("-" + targetSid + "-" + afhgrjCurNid) : ("-" + targetSid));
+        LogBridge.i(TAG, "【影视源7】切换线路 → 线路" + targetSid + "：" + newRaw);
+        playUrlInternal(newRaw);
+    }
+
+    /** 源7 集数 nid 安全解析：非数字返回 0（0 = 频道默认首集） */
+    private static int parseNidSafe(String s) {
+        if (s == null) return 0;
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
 
     /**
      * 源5(爱其意)失效兜底：直链由 live.php 实时下发、带短时签名，缓存久了会失效。
@@ -2209,10 +2401,26 @@ public class TVPlayerManager {
         autoRetry(reason, null);
     }
 
+    /**
+     * 【方案1b】当前频道是源7（afhgrj）时，失效其落地 m3u8 缓存，
+     * 避免重试回放同一条死链（后台解析链会走完整换线重新解析）。
+     */
+    private void invalidateAfhgrjResolvedCache() {
+        Channel ch = currentChannel;
+        if (ch == null) return;
+        String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
+        if (!TextUtils.isEmpty(vodId)) {
+            com.tv.live.afhgrj.AfhgrjUrlResolver.invalidate(vodId);
+        }
+    }
+
     private void autoRetry(String reason, Throwable cause) {
         // ★【2026-10-08】缓存回放直链一旦触发重试 → 立即作废该缓存，
         //   避免重试再次回放同一条死链（后台解析链结果会无缝接管）
         invalidateMiguCacheIfReplayFailed();
+        // ★【方案1b】源7落地缓存亦同理：播放失败说明缓存 m3u8 已不可达，
+        //   立即失效，让后台解析链重新走完整换线（探活避开死 sid）。
+        invalidateAfhgrjResolvedCache();
         if (cause != null) {
             Throwable t = cause;
             int depth = 0;
@@ -3535,6 +3743,53 @@ public class TVPlayerManager {
         totalStallTime = 0;
         isStalled = false;
         lastStallStartTime = 0;
+        afhgrjAutoSwitchLineCount = 0;
+        severeStallTime = 0;
+    }
+
+    /**
+     * 【2026-10-12 卡顿自动换线】当前频道累计严重卡顿超过 {@link #STALL_SWITCH_TOTAL_MS} 时，
+     * 自动切到该片的下一条 sid（线路）重播。
+     *
+     * <p>只对源7（afhgrj）生效——只有它有「同片多线路」这个维度。其它源的换线
+     * （虎牙/咪咕/畅享）各自已有独立机制，不在此处介入。
+     *
+     * <p>三重刹车：①当前片至少 2 条线路；②同一频道最多换 {@link #MAX_AFHGRJ_AUTO_SWITCH} 次；
+     * ③每次换完把 {@link #totalStallTime} 清零，避免刚换完又立刻二次触发。
+     * 手动选线路走 {@link #switchAfhgrjLine(int)}，与本方法互不冲突（都写 sWorkingSid）。
+     */
+    private void maybeAutoSwitchAfhgrjLine() {
+        Channel ch = currentChannel;
+        if (ch == null) return;
+        String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
+        if (TextUtils.isEmpty(vodId)) return;                       // 只处理源7
+        int[] sids = com.tv.live.afhgrj.AfhgrjUrlResolver.sidsOf(vodId);
+        if (sids.length <= 1) return;                               // 没有可换的线路
+        if (afhgrjAutoSwitchLineCount >= MAX_AFHGRJ_AUTO_SWITCH) return;
+        if (severeStallTime < STALL_SWITCH_TOTAL_MS) return;
+
+        int cur = com.tv.live.afhgrj.AfhgrjUrlResolver.workingSidOf(vodId);
+        int next = -1;
+        for (int i = 0; i < sids.length; i++) {
+            if (sids[i] == cur) {
+                next = sids[(i + 1) % sids.length];
+                break;
+            }
+        }
+        if (next <= 0) next = sids[0];
+        if (next == cur) return;
+
+        afhgrjAutoSwitchLineCount++;
+        severeStallTime = 0;
+        LogBridge.w(TAG, "【影视源7】累计严重卡顿 " + STALL_SWITCH_TOTAL_MS + "ms 以上，自动换线 sid "
+                + cur + " → " + next + "（第 " + afhgrjAutoSwitchLineCount
+                + "/" + MAX_AFHGRJ_AUTO_SWITCH + " 次）vodId=" + vodId);
+        com.tv.live.afhgrj.AfhgrjUrlResolver.rememberSid(vodId, next);
+        // 作废落地缓存与测速缓存：换线后必须重新解析并重新取样，否则会复用慢线的旧结果
+        com.tv.live.afhgrj.AfhgrjUrlResolver.invalidate(vodId);
+        String newRaw = com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME + vodId
+                + (afhgrjCurNid > 0 ? ("-" + next + "-" + afhgrjCurNid) : ("-" + next));
+        playUrlInternal(newRaw);
     }
 
     private boolean isHuyaRoomUrl(String url) {
@@ -3568,6 +3823,10 @@ public class TVPlayerManager {
     }
 
     private void playUrlInternal(String url, long initialSeekPosition) {
+
+        // 【2026-10-11 源7 联播】任何一次主动起播都解除「已全部播完」标记，
+        //   让卡住检测的重试恢复正常（否则重播下一集后看门狗会被挡住）。
+        afhgrjPlaybackFinished = false;
 
         try { AppCacheInspector.onBeforePlayback(context); } catch (Throwable ignored) {}
 
@@ -3802,13 +4061,16 @@ public class TVPlayerManager {
                     com.tv.live.renyibo.RenYiBoSourceLoader.isRenyiboSchemeUrl(playUrl);
             boolean isRenyiboPending = isRenyiboScheme
                     || com.tv.live.renyibo.RenYiBoSourceLoader.isPendingResolveUrl(playUrl);
+            // 【2026-10-10】内置源7（afhgrj 影视）：afhgrj://<vodId> 或 afhgrj://<vodId>-<sid>-<nid>
+            //   是待解析地址，不能被「频道线路表」覆盖（EPG 切集时传的是具体某一集）。
+            boolean isAfhgrjPending = com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(playUrl);
             LogBridge.d(TAG, "doPlay: url=" + playUrl.substring(0, Math.min(100, playUrl.length())) + " isHls=" + isHlsUrl(playUrl) + " isRealStream=" + isRealStream);
 
             String finalUrl;
             // 【2026-10-07】mMiguDirectPlay：咪咕切线路/切清晰度时置位 —— 本次起播必须
             // 直接采用传入的源串，不能被「频道线路表」覆盖（咪咕频道 backupUrls 不含这些源）。
             if (currentChannel != null && !isRealStream && !isZgyjVod && !isYunTuLb
-                    && !isRenyiboPending && !mHuyaDirectPlay && !mMiguDirectPlay) {
+                    && !isRenyiboPending && !isAfhgrjPending && !mHuyaDirectPlay && !mMiguDirectPlay) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                 String channelKey = currentChannel.getChannelId();
                 if (TextUtils.isEmpty(channelKey)) {
@@ -3882,6 +4144,13 @@ public class TVPlayerManager {
             //   列表生成期零 CDN 请求。
             if (isRenyiboPending) {
                 resolveRenyiboAndPlay(finalUrl, initialSeekPosition);
+                return;
+            }
+
+            // ★内置源7（afhgrj 影视）：M3U 里存的是 afhgrj://<vodId>（EPG 切集时带 sid/nid），
+            //   起播这一刻才抓播放页 player_aaaa 取真实 m3u8（惰性解析，参照源5/源6 模式）。
+            if (isAfhgrjPending) {
+                resolveAfhgrjAndPlay(finalUrl, initialSeekPosition);
                 return;
             }
 
@@ -3973,6 +4242,9 @@ public class TVPlayerManager {
 
         final String channelName = currentChannelName;
         final long __tPrep = System.currentTimeMillis();
+        // 【2026-10-10】仅内置源7（afhgrj 影视）起播时剥离中插广告分片（/adjump/），其它源不生效
+        final boolean isAfhgrjPlayback =
+                com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(currentChannel) != null;
         new Thread(() -> {
             try {
                 LogBridge.i(TAG, "⏱️[起播准备] +" + (System.currentTimeMillis() - __tPrep) + "ms 线程体开始");
@@ -4012,7 +4284,7 @@ public class TVPlayerManager {
                     // 链路：畅享EXTINF归一化 → HTTP
                     // （2026-09-15 去掉并行预取，切台后直接单连接播放）
                     HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(
-                            new ChanxiangM3u8DataSource.Factory(httpFactory))
+                            new ChanxiangM3u8DataSource.Factory(httpFactory, isAfhgrjPlayback))
                             .setAllowChunklessPreparation(true);
                     mediaSource = hlsFactory.createMediaSource(mediaItem);
                 } else {
@@ -5933,6 +6205,116 @@ public class TVPlayerManager {
 
     public void setOnPlayStateListener(OnPlayStateListener l) {
         listener = l;
+    }
+
+    /** 【2026-10-11】读取当前播放状态监听器（供 Activity 卸载时做「只清自己的」身份校验，
+     *  避免单例播放器上后创建的 Activity 被先销毁的 Activity 清空监听器）。 */
+    public OnPlayStateListener getOnPlayStateListener() {
+        return listener;
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-11 源7 自动联播】专用回调
+    //
+    // 为什么不复用 OnPlayStateListener：它是单例播放器上的「唯一槽位」，MainActivity 与
+    // OttHomeActivity 共享同一个 TVPlayerManager，MainActivity.onDestroy 会把它清成 null
+    // ——而「切 OTT」时旧 Activity 的 onDestroy 恰好发生在新 Activity.onCreate 之后，
+    // 于是 OTT 刚注册的监听器被清掉（实测联播逻辑一次都没进）。这里用独立槽位，互不干扰。
+    // ------------------------------------------------------------------
+
+    public interface OnAfhgrjEpisodeListener {
+        /** 自动联播已切到第 {@code ordinal} 集（1 基） */
+        void onAfhgrjEpisodeChanged(int ordinal);
+
+        /** 全部集数已播完（末集结束）——界面负责退出全屏等收尾 */
+        void onAfhgrjAllEpisodesEnded();
+    }
+
+    private volatile OnAfhgrjEpisodeListener afhgrjEpisodeListener;
+
+    public void setOnAfhgrjEpisodeListener(OnAfhgrjEpisodeListener l) {
+        this.afhgrjEpisodeListener = l;
+    }
+
+    public OnAfhgrjEpisodeListener getOnAfhgrjEpisodeListener() {
+        return afhgrjEpisodeListener;
+    }
+
+    private void notifyAfhgrjEpisodeChanged(final int ordinal) {
+        final OnAfhgrjEpisodeListener l = afhgrjEpisodeListener;
+        if (l == null) return;
+        mHandler.post(() -> {
+            try {
+                l.onAfhgrjEpisodeChanged(ordinal);
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    private void notifyAfhgrjAllEpisodesEnded() {
+        final OnAfhgrjEpisodeListener l = afhgrjEpisodeListener;
+        if (l == null) return;
+        mHandler.post(() -> {
+            try {
+                l.onAfhgrjAllEpisodesEnded();
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    /**
+     * 【2026-10-11 源7 自动联播】整集播完时的处理。
+     *
+     * <p>背景：STATE_ENDED 原本无条件走 {@code autoRetry("播放结束")} → 3s 后重播同一条地址。
+     * 直播源这么处理没问题（无限流断线重连），但源7 是点播，整集播完会被"重播本集"
+     * （用户实测：拖到底后重播而非播下一集）。故这里在 autoRetry 之前接管。
+     *
+     * @return {@code true} = 已接管（调用方不要再 autoRetry 重播本集）；
+     *         {@code false} = 非源7，走原有重连逻辑
+     */
+    private boolean handleAfhgrjEpisodeEnded() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
+        if (TextUtils.isEmpty(vodId)) return false;   // 非源7：不接管
+
+        final List<Channel.EpgItem> eps = com.tv.live.afhgrj.AfhgrjUrlResolver.getEpisodes(vodId);
+        if (eps == null || eps.isEmpty()) {
+            LogBridge.w(TAG, "【源7 联播】集数列表为空 → 停止播放（不重播）vodId=" + vodId);
+            afhgrjPlaybackFinished = true;
+            notifyAfhgrjAllEpisodesEnded();
+            return true;
+        }
+        // 用「当前播放的 nid」在列表里定位（nid<=0 = 默认首集）；找不到就当第 1 集
+        int idx = indexOfAfhgrjEpisodeByNid(eps, afhgrjCurNid);
+        int next = idx + 1;
+        if (idx >= 0 && next < eps.size()) {
+            Channel.EpgItem it = eps.get(next);
+            if (it != null && !TextUtils.isEmpty(it.customPlayUrl)) {
+                LogBridge.i(TAG, "【源7 联播】第" + (idx + 1) + "集播完 → 自动播放第" + (next + 1) + "集："
+                        + it.customPlayUrl);
+                afhgrjAutoSwitchLineCount = 0;
+                // 换集解析期间抑制「卡住检测」重试，避免把联播打乱
+                afhgrjSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + AFHGRJ_SWITCH_GRACE_MS;
+                playUrlInternal(it.customPlayUrl);
+                notifyAfhgrjEpisodeChanged(next + 1);
+                return true;
+            }
+        }
+        LogBridge.i(TAG, "【源7 联播】已是最后一集（共 " + eps.size() + " 集）→ 停止播放，不再重播");
+        afhgrjPlaybackFinished = true;
+        notifyAfhgrjAllEpisodesEnded();
+        return true;
+    }
+
+    /** 按 nid 在集数列表里定位下标（nid<=0 视作第 1 集）；找不到返回 -1 */
+    private static int indexOfAfhgrjEpisodeByNid(List<Channel.EpgItem> eps, int nid) {
+        if (eps == null || eps.isEmpty()) return -1;
+        if (nid <= 0) return 0;
+        for (int i = 0; i < eps.size(); i++) {
+            if (com.tv.live.afhgrj.AfhgrjUrlResolver.nidOfEpisodeItem(eps.get(i)) == nid) return i;
+        }
+        return -1;
     }
 
     public interface OnLiveInfoUpdateListener {

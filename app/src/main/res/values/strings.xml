@@ -105,4 +105,7 @@
     <string name="ott_huya_loading">虎牙频道加载中…</string>
     <string name="ott_huya_unavailable">虎牙频道暂不可用</string>
     <string name="ott_huya_group_count">%1$d 个频道</string>
+    <!-- 【2026-10-11】OTT 小窗口下方的播放历史（最多 10 条，最新在前；点击续播） -->
+    <string name="ott_history_title">历史记录</string>
+    <string name="ott_history_empty">暂无记录</string>
 </resources>

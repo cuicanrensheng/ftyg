@@ -202,12 +202,62 @@
                     android:layout_marginTop="10dp"
                     android:orientation="vertical">
 
-                    <!-- 节目单 3 行（动态填充：tv_ott_epg_panel_row 模板 × 3）-->
+                    <!-- 集数/节目单（左） + 历史记录（右）两列并排。
+                         注意：android:maxHeight 对 ScrollView 不生效，两列限高都由
+                         OttHomeActivity.capEpgListHeight() 在填充后程序化设置（两列同高）。 -->
                     <LinearLayout
-                        android:id="@+id/ll_ott_epg_list"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical" />
+                        android:orientation="horizontal">
+
+                        <ScrollView
+                            android:id="@+id/sv_ott_epg_list"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:focusable="false"
+                            android:scrollbars="none">
+
+                            <LinearLayout
+                                android:id="@+id/ll_ott_epg_list"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical" />
+                        </ScrollView>
+
+                        <!-- 【2026-10-11】播放历史：最多 10 条（新的覆盖旧的），点击续播 -->
+                        <LinearLayout
+                            android:id="@+id/ll_ott_history"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tv_ott_history_title"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:paddingBottom="4dp"
+                                android:text="@string/ott_history_title"
+                                android:textColor="#993AA0FF"
+                                android:textSize="12sp" />
+
+                            <ScrollView
+                                android:id="@+id/sv_ott_history"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:focusable="false"
+                                android:scrollbars="none">
+
+                                <LinearLayout
+                                    android:id="@+id/ll_ott_history_rows"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:orientation="vertical" />
+                            </ScrollView>
+                        </LinearLayout>
+                    </LinearLayout>
 
                     <!-- 元数据小字：分辨率 · 码率 · 视频编码 · 音频 -->
                     <TextView

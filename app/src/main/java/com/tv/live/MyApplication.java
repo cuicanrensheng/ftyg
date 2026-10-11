@@ -151,6 +151,15 @@ public class MyApplication extends Application {
         } catch (Throwable ignored) {
         }
 
+        // 【方案1】源7（afhgrj 影视）落地 m3u8 缓存初始化：注入 application context
+        //   并加载上次会话的落地缓存。源7 为惰性解析，冷启动时播放器要串行联网（详情页+
+        //   播放页+探活）才拿到真实 m3u8；缓存命中则起播 0 次网络，配合下方「方案2」预热
+        //   真实 m3u8 host，显著压低源7 冷启动首帧延迟。全程兜异常，失败不影响主流程。
+        try {
+            com.tv.live.afhgrj.AfhgrjUrlResolver.init(this);
+        } catch (Throwable ignored) {
+        }
+
         // 方案 H（2026-09-11）：预热阶段预解析「上次播放流地址」主机 DNS，与初始化并行，
         // 省掉 ExoPlayer 首次建连的 DNS 往返。纯后台、全兜异常，失败不影响主流程。
         // 【2026-09-14 冷启动优化】在 DNS 之上追加「TCP + TLS 预连接」：

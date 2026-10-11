@@ -11,6 +11,7 @@ import com.tv.live.PlaylistParser;
 import com.tv.live.UrlConfig;
 import com.tv.live.util.AppExecutors;
 import com.tv.live.util.CacheManager;
+import com.tv.live.util.ChannelBlocklist;
 import com.tv.live.util.NetUtil;
 
 import java.io.BufferedReader;
@@ -107,7 +108,19 @@ public class LiveSourceLoader {
             String lastErrorMsg = null;
             List<String> sources = Arrays.asList(
                     UrlConfig.LIVE_URL, UrlConfig.LIVE_URL_2, UrlConfig.LIVE_URL_CHANXIANG,
-                    UrlConfig.LIVE_URL_4, UrlConfig.LIVE_URL_5, UrlConfig.LIVE_URL_6);
+                    UrlConfig.LIVE_URL_4, UrlConfig.LIVE_URL_5, UrlConfig.LIVE_URL_6,
+                    UrlConfig.LIVE_URL_7);
+            // 【2026-10-11 切源修复】用户显式选择的源不得被静默替换成另一个源。
+            // 仅当生效源是「内置源1」（默认源，地址多变才需要镜像/多源兜底）时才启用依次兜底链；
+            // 用户显式选择了源2~源7 或自定义源时只加载该源，失败即走本地永久兜底/报错。
+            // 背景：源7(afhgrj) 站点故障返回 520 时，旧逻辑继续尝试 LIVE_URL_2（内置源2）并成功，
+            //       表现为「切到源7 结果自动变成内置源2」，且会把源2 内容写进 live_source 缓存。
+            String effectiveUrl = UrlConfig.LIVE_URL;
+            boolean isDefaultSource1 = effectiveUrl != null && effectiveUrl.equals(UrlConfig.getLiveUrl());
+            if (!isDefaultSource1) {
+                sources = java.util.Collections.singletonList(effectiveUrl == null ? "" : effectiveUrl);
+                LogBridge.i(TAG, "【切源】用户已显式选择源：" + effectiveUrl + "，仅加载该源（不做跨源兜底）");
+            }
             LogBridge.i(TAG, "LOAD: source count=" + sources.size() + " LIVE_URL='" + UrlConfig.LIVE_URL + "' LIVE_URL_2='" + UrlConfig.LIVE_URL_2 + "'");
             for (int i = 0; i < sources.size(); i++) {
                 String url = sources.get(i);
@@ -126,9 +139,8 @@ public class LiveSourceLoader {
                                 if (channels.size() >= MIN_CHANNELS_FOR_FALLBACK) {
                                     saveFallback(racedContent);
                                 }
-                                final List<Channel> racedChannels = channels;
-                                LogBridge.d(TAG, "【镜像竞速】源1 加载成功，共 " + racedChannels.size() + " 个频道");
-                                mainHandler.post(() -> callback.onSuccess(racedChannels));
+                                LogBridge.d(TAG, "【镜像竞速】源1 加载成功，共 " + channels.size() + " 个频道");
+                                postSuccess(callback, "【镜像竞速】源1 加载成功", channels);
                                 return;
                             }
                         } catch (Exception pe) {
@@ -143,7 +155,8 @@ public class LiveSourceLoader {
                 final boolean isAsset = url.startsWith("asset://");
                 final boolean isRenyibo = url.startsWith("renyibo://");
                 final boolean isMigu = url.startsWith("migu://");
-                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu) ? url : getAcceleratedUrl(url);
+                final boolean isAfhgrj = url.startsWith("afhgrj://");
+                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj) ? url : getAcceleratedUrl(url);
                 LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 开始加载：" + acceleratedUrl);
                 LogBridge.d(TAG, "LOAD: source #" + (i+1) + " downloading: " + acceleratedUrl);
                 try {
@@ -161,6 +174,9 @@ public class LiveSourceLoader {
                     } else if (isMigu) {
                         LogBridge.i(TAG, "【咪咕】走内置源6分支，取官方频道目录生成 M3U（地址为 miguhd:// 惰性解析）");
                         rawContent = com.tv.live.migu.MiguSourceLoader.loadAllLiveAsM3u(context);
+                    } else if (isAfhgrj) {
+                        LogBridge.i(TAG, "【影视源7】走内置源7分支，抓 5 个分组生成 M3U（地址为 afhgrj:// 惰性解析）");
+                        rawContent = com.tv.live.afhgrj.AfhgrjSourceLoader.loadAllLiveAsM3u(context);
                     } else {
                         rawContent = downloadRawContent(acceleratedUrl);
                     }
@@ -175,6 +191,10 @@ public class LiveSourceLoader {
                         LogBridge.e(TAG, "LOAD: source #" + (i+1) + " parsed 0 channels");
                         throw new IOException("解析后频道数=0");
                     }
+                    // 【2026-10-11 海报】源7：Channel 直接绑定海报，Channel 直达 OTT，不依赖 M3U tvg-logo
+                    if (isAfhgrj) {
+                        applyAfhgrjPosters(channels);
+                    }
 
                     cacheManager.saveFileCache("live_source", rawContent);
                     if (channels.size() >= MIN_CHANNELS_FOR_FALLBACK) {
@@ -183,13 +203,11 @@ public class LiveSourceLoader {
                     } else {
                         LogBridge.w(TAG, "【网络】返回频道数过少（" + channels.size() + " < " + MIN_CHANNELS_FOR_FALLBACK + "），不覆盖永久兜底");
                     }
-                    final List<Channel> finalChannels = channels;
                     LogBridge.i(TAG, "⏱️【链路-主源】源#" + (i + 1) + " HTTP下载 " + dlMs
                             + "ms + 解析 " + (System.currentTimeMillis() - tParseStart)
-                            + "ms，频道=" + finalChannels.size());
-                    LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 加载成功，共 " + finalChannels.size() + " 个频道");
-                    LogBridge.i(TAG, "LOAD: source #" + (i+1) + " SUCCESS, channels=" + finalChannels.size());
-                    mainHandler.post(() -> callback.onSuccess(finalChannels));
+                            + "ms，频道=" + channels.size());
+                    LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 加载成功，共 " + channels.size() + " 个频道");
+                    postSuccess(callback, "LOAD: source #" + (i + 1) + " SUCCESS", channels);
                     return;
                 } catch (Exception e) {
                     lastErrorMsg = "源#" + (i + 1) + "(" + url + "): " + e.getMessage();
@@ -197,34 +215,84 @@ public class LiveSourceLoader {
                 }
             }
 
-            LogBridge.w(TAG, "【兜底】网络全部失败，尝试读取本地永久兜底 " + FALLBACK_FILE);
-            String fallback = readFallback();
-            if (fallback != null && !fallback.isEmpty()) {
-                try {
-                    List<Channel> fallbackChannels = PlaylistParser.parseContent(fallback);
-                    if (fallbackChannels != null && !fallbackChannels.isEmpty()) {
-                        LogBridge.i(TAG, "【兜底】启用本地永久兜底，共 " + fallbackChannels.size() + " 个频道，继续可看电视");
-                        final List<Channel> finalFb = fallbackChannels;
-                        mainHandler.post(() -> callback.onSuccess(finalFb));
-                        return;
+            // 【2026-10-11 切源修复】只有「内置源1（默认源）」才允许落到本地永久兜底。
+            // 用户显式选择的源失败时若回退到 readFallback()，读的是 live_source_fallback.m3u
+            // ——那是「上一次抓取成功的某个源」的内容，等于又一次跨源替换（就是本 bug 的根因）。
+            if (isDefaultSource1) {
+                LogBridge.w(TAG, "【兜底】网络全部失败，尝试读取本地永久兜底 " + FALLBACK_FILE);
+                String fallback = readFallback();
+                if (fallback != null && !fallback.isEmpty()) {
+                    try {
+                        List<Channel> fallbackChannels = PlaylistParser.parseContent(fallback);
+                        if (fallbackChannels != null && !fallbackChannels.isEmpty()) {
+                            postSuccess(callback, "【兜底】启用本地永久兜底，继续可看电视", fallbackChannels);
+                            return;
+                        }
+                    } catch (Exception ex) {
+                        LogBridge.e(TAG, "【兜底】解析失败：" + ex.getMessage());
                     }
-                } catch (Exception ex) {
-                    LogBridge.e(TAG, "【兜底】解析失败：" + ex.getMessage());
                 }
-            }
 
-            final String err = (lastErrorMsg != null ? lastErrorMsg : "未知错误") + "（且无本地兜底数据）";
-            mainHandler.post(() -> callback.onError(err));
+                final String err = (lastErrorMsg != null ? lastErrorMsg : "未知错误") + "（且无本地兜底数据）";
+                mainHandler.post(() -> callback.onError(err));
+            } else {
+                // 显式选源失败：不得跨源替换（不读本地永久兜底），直接上报错误。
+                // lastErrorMsg 已带出错源地址与原因，例如 "源#1(afhgrj://all): 下载为空"。
+                final String err = lastErrorMsg != null
+                        ? lastErrorMsg
+                        : ("源[" + (effectiveUrl == null ? "未知源" : effectiveUrl) + "] 加载失败：未知错误");
+                LogBridge.e(TAG, "【切源】显式选源加载失败，已阻止跨源/本地兜底替换：" + err);
+                mainHandler.post(() -> callback.onError(err));
+            }
         });
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-12 屏蔽名单】频道表统一出口
+    // ------------------------------------------------------------------
+
+    /**
+     * 频道表统一出口：先过 {@link ChannelBlocklist} 屏蔽名单，再回调。
+     *
+     * <p>所有成功路径（镜像竞速 / 常规下载 / 本地永久兜底）都必须走这里。屏蔽放在
+     * 「解析结果出口」而不是各来源的生成端，是为了让<b>已有缓存</b>（live_source 缓存、
+     * live_source_fallback.m3u）里的屏蔽项也一并失效，不必等缓存过期或手动清数据。
+     *
+     * @param label 日志前缀，形如 {@code LOAD: source #1 SUCCESS}
+     */
+    private void postSuccess(LoadCallback callback, String label, List<Channel> channels) {
+        final List<Channel> filtered = ChannelBlocklist.filter(channels);
+        final int n = filtered == null ? 0 : filtered.size();
+        LogBridge.i(TAG, label + "，频道=" + n);
+        mainHandler.post(() -> callback.onSuccess(filtered));
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-11 海报】源7：为 afhgrj:// 频道直接绑定海报 URL（Channel 直达 OTT）
+    // ------------------------------------------------------------------
+    private static void applyAfhgrjPosters(List<Channel> channels) {
+        int bound = 0, noPoster = 0;
+        for (Channel c : channels) {
+            // 仅处理源7 协议串频道（M3U 行地址为 afhgrj://<vodId>）
+            String url = c.getMainPlayUrl();
+            if (url == null || !url.startsWith("afhgrj://")) continue;
+            // 用 Channel 版本提 vodId（从 channelId "afhgrj:<vodId>" 提取）
+            String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(c);
+            String poster = com.tv.live.afhgrj.AfhgrjSourceLoader.posterOf(vodId);
+            if (poster == null || poster.isEmpty()) {
+                noPoster++;
+                continue;
+            }
+            c.setLogoUrl(poster);
+            bound++;
+        }
+        LogBridge.i(TAG, "【影视源7】海报绑定完成：共 " + bound + " 部绑定成功"
+                + (noPoster > 0 ? "，" + noPoster + " 部无海报数据" : ""));
     }
 
     public String getAcceleratedUrl(String originalUrl) {
 
         if (!accelerateEnabled) {
-            return originalUrl;
-        }
-
-        if (originalUrl == null || originalUrl.trim().isEmpty()) {
             return originalUrl;
         }
 

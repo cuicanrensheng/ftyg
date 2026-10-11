@@ -1,30 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- OTT 首页：频道网格卡片。焦点框由 GridView 的 listSelector(ott_channel_focus) 叠加绘制 -->
+<!-- OTT 首页：频道网格卡片。焦点框由 GridView 的 listSelector(ott_channel_focus) 叠加绘制。
+
+     【2026-10-11 版式改】原「图片 32dp + 剧名压在卡片内」导致图片太矮。现改为：
+       ┌──────────────┐
+       │              │  ← 图片区：铺满整张卡片（match_parent/0dp + weight）
+       │   poster     │
+       │              │
+       └──────────────┘
+           剧名          ← 文字移出卡片，在卡片下方独立一行
+
+     根布局高度 = 图片卡(weight=1) + 剧名(wrap)，GridView 的 row 高度由本 item 撑开。
+     clipChildren=false 让影像可溢出行框边界而不被裁切。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="68dp"
-    android:background="@drawable/ott_channel_item_bg"
-    android:clickable="true"
-    android:focusable="false"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
 
-    <!-- 【2026-09-29 频道台标】频道台标图片；占位图在代码中按加载状态设置 -->
-    <ImageView
-        android:id="@+id/iv_ott_item_logo"
+    <!-- 图片卡片：铺满，承载卡片背景 + 焦点高亮。
+         【2026-10-11 二次调版】118dp → 88dp（4 列网格下图片偏大，等比缩小约 25%）。 -->
+    <FrameLayout
+        android:id="@+id/fl_ott_item_poster"
         android:layout_width="match_parent"
-        android:layout_height="32dp"
-        android:contentDescription="@null"
-        android:scaleType="fitCenter" />
+        android:layout_height="88dp"
+        android:background="@drawable/ott_channel_item_bg"
+        android:clickable="true"
+        android:focusable="false">
 
-    <!-- 【2026-09-29 频道台标】字号 16sp → 13sp、加 marginTop，为台标让出空间（卡片总高保持 68dp） -->
+        <ImageView
+            android:id="@+id/iv_ott_item_logo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+    </FrameLayout>
+
+    <!-- 剧名：移出卡片，位于卡片下方 -->
     <TextView
         android:id="@+id/tv_ott_item_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:ellipsize="marquee"
         android:gravity="center"
         android:singleLine="true"

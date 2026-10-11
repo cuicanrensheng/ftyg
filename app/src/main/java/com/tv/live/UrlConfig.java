@@ -28,6 +28,7 @@ public final class UrlConfig {
     public static volatile String LIVE_URL_4_RAW = "";
     public static volatile String LIVE_URL_5_RAW = "";
     public static volatile String LIVE_URL_6_RAW = "";
+    public static volatile String LIVE_URL_7_RAW = "";
     public static volatile String EPG_URL_1_RAW  = "";
     public static volatile String EPG_URL_2_RAW  = "";
 
@@ -67,6 +68,12 @@ public final class UrlConfig {
      * 起播那一刻才用 MiguUrlResolver 实时解析成带签名的 m3u8（直链短时有效，不可预解析）。
      */
     public static String LIVE_URL_6 = "migu://all";
+    /**
+     * 内置源7：afhgrj 影视点播（首页/电影/电视剧/综艺/动漫 5 分组）。
+     * 频道表来自站点分类页（www.afhgrj.com），地址写成 afhgrj://&lt;vodId&gt;，
+     * 起播那一刻才用 AfhgrjUrlResolver 解析播放页 player_aaaa 取真实 m3u8。
+     */
+    public static String LIVE_URL_7 = "afhgrj://all";
     public static String EPG_URL    = "";
     public static String EPG_URL_2  = "";
 
@@ -94,6 +101,9 @@ public final class UrlConfig {
 
         if (TextUtils.isEmpty(LIVE_URL_6_RAW)) LIVE_URL_6_RAW = LIVE_URL_6;
         LogBridge.i(TAG, "LIVE_URL_6(源6): " + LIVE_URL_6);
+
+        if (TextUtils.isEmpty(LIVE_URL_7_RAW)) LIVE_URL_7_RAW = LIVE_URL_7;
+        LogBridge.i(TAG, "LIVE_URL_7(源7): " + LIVE_URL_7);
 
         String e1 = getEpgUrl();   if (e1 != null) { if (TextUtils.isEmpty(EPG_URL)) EPG_URL = e1; if (TextUtils.isEmpty(EPG_URL_1_RAW)) EPG_URL_1_RAW = e1; }
         String e2 = getEpgUrl2();  if (e2 != null) { if (TextUtils.isEmpty(EPG_URL_2)) EPG_URL_2 = e2; if (TextUtils.isEmpty(EPG_URL_2_RAW)) EPG_URL_2_RAW = e2; }

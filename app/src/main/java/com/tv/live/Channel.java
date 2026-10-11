@@ -236,6 +236,14 @@ public class Channel implements Parcelable {
         /** 【2026-10-08】节目时段终点（Unix 秒）；0=未知 */
         public long endTs;
 
+        /**
+         * 【2026-10-10】内置源7（afhgrj 影视点播）用：该「集」对应的可直接播放的
+         * 待解析地址（{@code afhgrj://<vodId>-<sid>-<nid>}）。非空时，EPG 面板点击该项
+         * 直接播放此地址（起播时再由 AfhgrjUrlResolver 惰性换成真实 m3u8）。
+         * 其它内置源为 {@code null}，行为完全不受影响。
+         */
+        public String customPlayUrl;
+
         public EpgItem(String dayName, String time, String title, boolean isPlaying) {
             this.dayName = dayName;
             this.time = time;

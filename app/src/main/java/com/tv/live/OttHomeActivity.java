@@ -20,6 +20,7 @@ import android.widget.GridView;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -96,6 +97,32 @@ public class OttHomeActivity extends AppCompatActivity {
     /** 【2026-09-29 方案 A 电信 IPTV 风格】左面板「节目单 + 元数据」 */
     private LinearLayout llEpgPanel;
     private LinearLayout llEpgList;
+    /** 【2026-10-11 源7】EPG 列表外层滚动容器（源7 集数多时按上限限高、可上下滚动） */
+    private ScrollView svEpgList;
+    /** 【2026-10-11 源7】EPG 列表最大高度（dp）：约 6 行，超出则滚动 */
+    private static final int EPG_LIST_MAX_HEIGHT_DP = 190;
+    /** 【2026-10-11 源7】当前播放的集数下标（-1=未知/非源7），用于 EPG 面板高亮 */
+    private int mCurrentAfhgrjEpisodeIdx = -1;
+    private EpgManager.OnEpgDataReadyListener epgDataReadyListener;
+
+    // ==================== 【2026-10-11】OTT 播放历史 + 源7 联播/续播 ====================
+
+    /** 历史记录列（与集数列表并排，最多 10 条） */
+    private LinearLayout llOttHistory;
+    private LinearLayout llOttHistoryRows;
+    private ScrollView svOttHistory;
+    /** 历史记录条数上限（口径与 AppConfig.MAX_OTT_HISTORY 一致） */
+    private static final int OTT_HISTORY_MAX = 10;
+    /** 待续播的集数下标（-1 = 无）：起播时集数列表尚未就绪则记在这里，列表就绪后切过去 */
+    private int pendingResumeEpisodeIdx = -1;
+    /**
+     * 【2026-10-11】播放状态监听器存字段：单例播放器上 MainActivity 与 OTT 共用同一个槽位，
+     * 旧 Activity 的 onDestroy 会把新 Activity 刚注册的监听器清成 null（实测 net effect：
+     * OTT 的 onPlayEnd 一次都没触发）。存字段后 onDestroy 只清「自己的那个」。
+     */
+    private TVPlayerManager.OnPlayStateListener ottPlayStateListener;
+    /** 【2026-10-11 源7 联播】专用回调（独立槽位，MainActivity 不会清它） */
+    private TVPlayerManager.OnAfhgrjEpisodeListener afhgrjEpisodeListener;
     private TextView tvMetadata;
     private TextView tvPreviewTip;
     private TextView tvBreadcrumb;
@@ -207,6 +234,16 @@ public class OttHomeActivity extends AppCompatActivity {
 
         ensureHuyaLoaded();
 
+        // 【2026-10-11 源7】注册 EPG 数据就绪监听：异步抓取集数完成后自动刷新面板
+        epgDataReadyListener = () -> mainHandler.post(() -> {
+            if (playingChannel != null) refreshEpgPanel(playingChannel);
+        });
+        EpgManager.getInstance(getApplicationContext())
+                .registerEpgDataReadyListener(epgDataReadyListener);
+
+        // 【2026-10-11】先渲染一次历史记录（此时还没起播，展示上次留下的 10 条）
+        renderHistoryPanel();
+
         LogBridge.i(TAG, "OTT 首页已启动");
     }
 
@@ -227,6 +264,11 @@ public class OttHomeActivity extends AppCompatActivity {
         tvNowProgram = findViewById(R.id.tv_ott_now_program);
         llEpgPanel = findViewById(R.id.ll_ott_epg_panel);
         llEpgList = findViewById(R.id.ll_ott_epg_list);
+        svEpgList = findViewById(R.id.sv_ott_epg_list);
+        // 【2026-10-11】播放历史（与集数列表并排）
+        llOttHistory = findViewById(R.id.ll_ott_history);
+        llOttHistoryRows = findViewById(R.id.ll_ott_history_rows);
+        svOttHistory = findViewById(R.id.sv_ott_history);
         tvMetadata = findViewById(R.id.tv_ott_metadata);
         tvPreviewTip = findViewById(R.id.tv_ott_preview_tip);
         tvBreadcrumb = findViewById(R.id.tv_ott_breadcrumb);
@@ -250,6 +292,13 @@ public class OttHomeActivity extends AppCompatActivity {
         flPreview.setFocusable(true);
         flPreview.setFocusableInTouchMode(false);
         flPreview.setOnClickListener(v -> {
+            if (fullscreen) {
+                // 【2026-10-11 源7 专属】全屏下「单击触摸」→ 唤起播放器控制栏。
+                //   非源7 时 showSource7Controller() 内部直接 return → 什么都不做，
+                //   源1~源6 全屏行为与改前完全一致。
+                showSource7Controller();
+                return;
+            }
             LogBridge.i(TAG, "播放器获焦后按确认键 → 进入全屏");
             setFullscreen(true);
         });
@@ -394,13 +443,42 @@ public class OttHomeActivity extends AppCompatActivity {
             LogBridge.d(TAG, "PlayerView 重建完成");
         });
         mPlayerManager.attachPlayerView(playerView);
-        mPlayerManager.setOnPlayStateListener(new TVPlayerManager.OnPlayStateListener() {
+        ottPlayStateListener = new TVPlayerManager.OnPlayStateListener() {
             @Override public void onIdle() { setPreviewLoading(false); }
             @Override public void onBuffering() { setPreviewLoading(true); }
             @Override public void onPlayReady() { setPreviewLoading(false); }
             @Override public void onPlayEnd() { setPreviewLoading(false); }
             @Override public void onPlayError(String msg) { setPreviewLoading(false); }
-        });
+        };
+        mPlayerManager.setOnPlayStateListener(ottPlayStateListener);
+
+        // 【2026-10-11 源7 联播】专用回调（独立槽位，MainActivity 不会清它）：
+        //   自动联播换集 → 同步 EPG 高亮 + 播放历史；全部播完 → 退出全屏并收起控制栏。
+        //   联播「播下一集 / 末集停播」的判定在 TVPlayerManager（STATE_ENDED 处），
+        //   这里只做界面同步，避免依赖会被清空的共享监听器槽位。
+        afhgrjEpisodeListener = new TVPlayerManager.OnAfhgrjEpisodeListener() {
+            @Override
+            public void onAfhgrjEpisodeChanged(int ordinal) {
+                mCurrentAfhgrjEpisodeIdx = Math.max(0, ordinal - 1);
+                Channel ch = playingChannel;
+                if (ch == null) return;
+                appConfig.addOttHistory(ch.getName(),
+                        com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch), ordinal);
+                renderHistoryPanel();
+                refreshEpgPanel(ch);
+                // 频道名下的「正在播放 · 第N集」也要跟着联播更新（否则一直停在起播那一集）
+                refreshNowPlayingProgram();
+            }
+
+            @Override
+            public void onAfhgrjAllEpisodesEnded() {
+                LogBridge.i(TAG, "【OTT·源7】全部集数播完 → 退出全屏并停止");
+                if (fullscreen) setFullscreen(false);
+                hideSource7Controller();
+            }
+        };
+        mPlayerManager.setOnAfhgrjEpisodeListener(afhgrjEpisodeListener);
+
         // 【2026-09-29 方案 A 电信 IPTV 风格】LiveInfo（分辨率/码率/格式/音频）回调刷元数据小字
         mPlayerManager.setOnLiveInfoUpdateListener(info -> mainHandler.post(() -> refreshMetadata()));
     }
@@ -438,9 +516,18 @@ public class OttHomeActivity extends AppCompatActivity {
 
             @Override
             public void onLoadTimeout(boolean hasData) {
-                if (!hasData) {
-                    mainHandler.post(() -> showEmpty(getString(R.string.ott_channel_empty)));
-                }
+                // 【2026-10-11 源7】「加载超时」不等于「频道列表为空」。
+                // 切源后 AppCoreManager 会先清空 channelSourceList（故 hasData=false），但界面上仍是
+                // 上一个源的频道 —— applyChannels() 对空列表的策略就是「保留当前分组与频道不动」。
+                // 此处若见到 hasData=false 就直接 showEmpty，会让一次**正常的慢加载**（源7 首次抓取
+                // 为首页 1 页 + 4 个分类各 2 页 = 共 9 页、实测约 19s > LOAD_TIMEOUT 15s；
+                // 【2026-10-10】一度收敛为每分类 1 页共 5 页、约 11s，【2026-10-11】按需求恢复为
+                // 每分类 2 页（9 页）；站点降级时仍可能超过 15s）在 15s 时闪出「频道列表为空」的
+                // 假失败，随后数据到达又恢复 —— 正是用户报的「加载分组和频道失败，几分钟后才成功」。
+                // 修正：只有界面**真的一个频道都没有**时才提示空列表。
+                mainHandler.post(() -> {
+                    if (allChannels.isEmpty()) showEmpty(getString(R.string.ott_channel_empty));
+                });
             }
         });
     }
@@ -909,6 +996,30 @@ public class OttHomeActivity extends AppCompatActivity {
         mainHandler.removeCallbacks(numberInputConfirmRunnable);
 
         playingChannel = channel;
+
+        // 【2026-10-11 源7 续播】起播前先查「历史里记的集数」：
+        //   ① 集数列表已缓存 → 直接用那一集的地址起播（不先播第 1 集再跳，省一次解析）；
+        //   ② 列表未就绪 → 先按频道默认地址起播，列表就绪后由 refreshAfhgrjEpgPanel 切过去。
+        //   非源7 频道 resumeIdx 恒为 -1，逻辑完全不参与。
+        String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(channel);
+        int resumeOrdinal = (vodId != null) ? appConfig.getOttHistoryOrdinal(channel.getName()) : 0;
+        int resumeIdx = (resumeOrdinal > 0) ? (resumeOrdinal - 1) : -1;
+        mCurrentAfhgrjEpisodeIdx = (vodId != null) ? Math.max(0, resumeIdx) : -1;
+        pendingResumeEpisodeIdx = -1;
+        String playUrl = channel.getPlayUrl();
+        if (vodId != null && resumeIdx > 0) {
+            Channel.EpgItem cachedEp = cachedAfhgrjEpisode(channel, resumeIdx);
+            if (cachedEp != null && !TextUtils.isEmpty(cachedEp.customPlayUrl)) {
+                playUrl = cachedEp.customPlayUrl;
+                LogBridge.i(TAG, "【OTT·源7】续播上次集数（缓存直起）第" + (resumeIdx + 1) + "集");
+            } else {
+                pendingResumeEpisodeIdx = resumeIdx;
+                LogBridge.i(TAG, "【OTT·源7】续播上次集数（待列表就绪再切）第" + (resumeIdx + 1) + "集");
+            }
+        }
+        // 【2026-10-11 播放历史】记一条（源7 带集数；直播源集数记 0）：同名去重置顶、最多 10 条
+        appConfig.addOttHistory(channel.getName(), vodId, (vodId != null) ? Math.max(1, resumeOrdinal) : 0);
+
         int liveIndex = indexOfEquivalent(allChannels, channel);
         if (liveIndex >= 0) {
             appConfig.setLastPlayIndex(liveIndex);
@@ -922,7 +1033,8 @@ public class OttHomeActivity extends AppCompatActivity {
 
         setPreviewLoading(true);
         tvPreviewTip.setVisibility(View.GONE);
-        mPlayerManager.playUrl(channel.getPlayUrl(), channel.getName(), channel);
+        mPlayerManager.playUrl(playUrl, channel.getName(), channel);
+        renderHistoryPanel();
 
         tvNowChannel.setText(channel.getName());
         refreshNowPlayingProgram();
@@ -992,10 +1104,20 @@ public class OttHomeActivity extends AppCompatActivity {
             EpgManager epg = EpgManager.getInstance(getApplicationContext());
             List<Channel.EpgItem> items = epg.getEpg(ch);
             if (items != null) {
-                for (Channel.EpgItem it : items) {
-                    if (it != null && it.isPlaying) {
-                        program = it.title;
-                        break;
+                // 【2026-10-11 源7】内置源7（afhgrj 影视）：EPG 项即「集数」，均无 isPlaying 标记，
+                //   用当前集下标 mCurrentAfhgrjEpisodeIdx 取标题作为「正在播放」。
+                if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null) {
+                    int idx = mCurrentAfhgrjEpisodeIdx;
+                    if (idx < 0) idx = 0;
+                    if (idx < items.size() && items.get(idx) != null) {
+                        program = items.get(idx).title;
+                    }
+                } else {
+                    for (Channel.EpgItem it : items) {
+                        if (it != null && it.isPlaying) {
+                            program = it.title;
+                            break;
+                        }
                     }
                 }
             }
@@ -1021,8 +1143,71 @@ public class OttHomeActivity extends AppCompatActivity {
     private void refreshEpgPanel(Channel ch) {
         if (llEpgList == null) return;
         llEpgList.removeAllViews();
+        fillEpgPanel(ch);
+        // 【2026-10-11】面板重建后统一重连焦点（集数列表 + 历史记录 + 网格 + 预览卡）
+        rewireOttFocus();
+        capEpgListHeight();
+    }
+
+    /**
+     * 【2026-10-11 源7】给 EPG 列表加「最大高度 + 可滚动」。
+     *
+     * <p>{@code android:maxHeight} 在 {@code ScrollView} 上<b>不生效</b>（该属性仅 ImageView
+     * 等读取，ViewGroup 不读），故在填充完成后按「内容高度 vs 上限」取小值，回设 ScrollView
+     * 的 layout_height。直播源仅 3 行 < 上限 → 高度 = 内容高度，行为与改前完全一致；
+     * 源7 集数多（如 28 集）→ 限高后可上下滚动。
+     */
+    private void capEpgListHeight() {
+        if (svEpgList == null || llEpgList == null) return;
+        svEpgList.post(() -> {
+            int width = svEpgList.getWidth();
+            if (width <= 0) return;
+            int target = measureCappedHeight(llEpgList, width);
+            applyHeight(svEpgList, target);
+            // 【2026-10-11 历史列】与集数列表「同高」：直播源只有 3 行时，
+            //   历史列不会比它更高，从而不会把左面板顶高、不改变直播源原有版式。
+            if (svOttHistory != null && llOttHistoryRows != null
+                    && llOttHistoryRows.getChildCount() > 0) {
+                int histW = svOttHistory.getWidth();
+                int histTarget = (histW > 0) ? measureCappedHeight(llOttHistoryRows, histW) : target;
+                applyHeight(svOttHistory, Math.min(histTarget, target));
+            }
+        });
+    }
+
+    /** 量出内容高度，并按 {@link #EPG_LIST_MAX_HEIGHT_DP} 上限裁剪 */
+    private int measureCappedHeight(View content, int width) {
+        content.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return Math.max(0, Math.min(content.getMeasuredHeight(), dp(EPG_LIST_MAX_HEIGHT_DP)));
+    }
+
+    private static void applyHeight(View v, int h) {
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp.height != h) {
+            lp.height = h;
+            v.setLayoutParams(lp);
+        }
+    }
+
+    /**
+     * EPG 面板实际填充逻辑（调用方 {@link #refreshEpgPanel} 负责清空与限高）。
+     */
+    private void fillEpgPanel(Channel ch) {
+        if (llEpgList == null) return;
+        // 【2026-10-11 源7 遥控焦点】先复位为布局默认，避免源7 集数的焦点链接残留在
+        //   非源7 频道上（源7 分支内部会按需重新接线）。
+        if (flPreview != null) flPreview.setNextFocusDownId(R.id.gv_ott_channel);
+        if (gvChannel != null) gvChannel.setNextFocusLeftId(R.id.fl_ott_preview);
         if (ch == null) {
             addEpgRow("暂无节目信息", "", false);
+            return;
+        }
+        // 【2026-10-11 源7】内置源7（afhgrj 影视点播）：EPG 面板改为「集数列表」，
+        //   每行一集、可点击切换（数据源与直播模式 EpgManager.EpgAdapter 一致）。
+        //   只依赖 channelId 前缀 afhgrj: 判定，源1~源6 行为零变化。
+        if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null) {
+            refreshAfhgrjEpgPanel(ch);
             return;
         }
         List<Channel.EpgItem> items = null;
@@ -1073,6 +1258,384 @@ public class OttHomeActivity extends AppCompatActivity {
             String displayTitle = isPlaying ? (title.isEmpty() ? "直播中" : title + "  ▸ 播放中") : title;
             addEpgRow(displayTitle, range, isPlaying);
         }
+    }
+
+    // ==================== 【2026-10-11 源7】OTT EPG 面板 · 集数列表 ====================
+
+    /**
+     * 内置源7（afhgrj 影视点播）在 OTT 左面板 EPG 区展示「集数列表」。
+     *
+     * <p>数据源与直播模式完全一致：{@link EpgManager#getEpg(Channel)} 对 {@code afhgrj:} 前缀
+     * 频道返回 {@link com.tv.live.afhgrj.AfhgrjUrlResolver} 的集数项（{@code title=第N集}、
+     * {@code customPlayUrl=afhgrj://vodId-sid-nid}）。只读内存缓存；未命中时 EpgManager 会
+     * 后台抓一次详情页，完成后 {@code notifyEpgDataReady()} → 本页已注册监听 → 自动重刷。
+     *
+     * <p>每行整行可点击（触摸）/ 可获焦（遥控），点击即切到该集播放；当前集蓝色加粗。
+     */
+    private void refreshAfhgrjEpgPanel(Channel ch) {
+        List<Channel.EpgItem> items = null;
+        try {
+            EpgManager epg = EpgManager.getInstance(getApplicationContext());
+            items = epg.getEpg(ch);
+        } catch (Exception ignored) {}
+        if (items == null || items.isEmpty()) {
+            // 集数尚未就绪（首次进入后台抓详情页中）；就绪后由 EPG 监听器自动重刷
+            addEpgRow("集数加载中…", "", false);
+            return;
+        }
+        // 【2026-10-11 源7 续播】列表就绪：若起播时因列表未就绪而挂了「待续播集数」，现在切过去。
+        //   只用一次（pending 用完即清）；非源7 / 无续播时恒为 -1，不参与。
+        if (pendingResumeEpisodeIdx > 0) {
+            int target = pendingResumeEpisodeIdx;
+            pendingResumeEpisodeIdx = -1;
+            if (target < items.size()) {
+                Channel.EpgItem t = items.get(target);
+                if (t != null && !TextUtils.isEmpty(t.customPlayUrl)) {
+                    LogBridge.i(TAG, "【OTT·源7】列表就绪 → 切到上次集数 第" + (target + 1) + "集");
+                    playAfhgrjEpisodeOtt(t);
+                    return;   // playAfhgrjEpisodeOtt 内部会重建面板
+                }
+            }
+        }
+        for (int i = 0; i < items.size(); i++) {
+            Channel.EpgItem it = items.get(i);
+            if (it == null) continue;
+            String title = TextUtils.isEmpty(it.title) ? ("第" + (i + 1) + "集") : it.title;
+            addAfhgrjEpgRow(title, it, i == mCurrentAfhgrjEpisodeIdx);
+        }
+        // 焦点接线由 refreshEpgPanel 统一做（rewireOttFocus），此处不再单独接线
+    }
+
+    /**
+     * 【2026-10-11】统一重连 OTT 左面板（预览卡 / 集数列表 / 历史记录 / 频道网格）的遥控焦点。
+     *
+     * <p>原布局 {@code 预览卡↓=网格}、{@code 网格←=预览卡} 是<b>闭环</b>，集数行/历史行
+     * 靠几何搜索够不着（用户实测「焦点移不到 EPG」）。这里按当前真实存在的子视图重连，
+     * <b>幂等</b>，可随面板反复重建而反复调用：
+     * <ul>
+     *   <li>预览卡「下」→ 集数首行（无集数行 → 网格）</li>
+     *   <li>网格「左」→ 集数首行（无 → 预览卡）</li>
+     *   <li>集数首行「上」→ 预览卡；集数末行「下」→ 网格；集数行「右」→ 历史首行（无历史 → 网格）</li>
+     *   <li>历史行「左」→ 集数首行（无 → 预览卡）、「右」→ 网格；历史首行「上」→ 预览卡、末行「下」→ 网格</li>
+     * </ul>
+     * 行与行之间的上下交给几何搜索（ScrollView 会自动滚动到获焦行）。
+     */
+    private void rewireOttFocus() {
+        List<View> epgRows = focusableChildren(llEpgList);
+        List<View> histRows = focusableChildren(llOttHistoryRows);
+        View epgFirst = epgRows.isEmpty() ? null : epgRows.get(0);
+        View epgLast = epgRows.isEmpty() ? null : epgRows.get(epgRows.size() - 1);
+        View histFirst = histRows.isEmpty() ? null : histRows.get(0);
+        View histLast = histRows.isEmpty() ? null : histRows.get(histRows.size() - 1);
+
+        if (flPreview != null) {
+            flPreview.setNextFocusDownId(epgFirst != null ? epgFirst.getId() : R.id.gv_ott_channel);
+        }
+        if (gvChannel != null) {
+            gvChannel.setNextFocusLeftId(epgFirst != null ? epgFirst.getId() : R.id.fl_ott_preview);
+        }
+        if (epgFirst != null) {
+            epgFirst.setNextFocusUpId(R.id.fl_ott_preview);
+        }
+        if (epgLast != null && epgLast != epgFirst) {
+            epgLast.setNextFocusDownId(R.id.gv_ott_channel);
+        }
+        int epgRightId = (histFirst != null) ? histFirst.getId() : R.id.gv_ott_channel;
+        for (View r : epgRows) {
+            r.setNextFocusRightId(epgRightId);
+        }
+        for (View r : histRows) {
+            r.setNextFocusLeftId(epgFirst != null ? epgFirst.getId() : R.id.fl_ott_preview);
+            r.setNextFocusRightId(R.id.gv_ott_channel);
+        }
+        if (histFirst != null) {
+            histFirst.setNextFocusUpId(R.id.fl_ott_preview);
+        }
+        if (histLast != null && histLast != histFirst) {
+            histLast.setNextFocusDownId(R.id.gv_ott_channel);
+        }
+    }
+
+    /** 取容器内「可获焦」的子视图（空列表 = 没有可聚焦项，如直播源的只读节目单） */
+    private static List<View> focusableChildren(ViewGroup parent) {
+        List<View> out = new ArrayList<>();
+        if (parent == null) return out;
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View v = parent.getChildAt(i);
+            if (v != null && v.isFocusable()) out.add(v);
+        }
+        return out;
+    }
+
+    // ==================== 【2026-10-11】源7 自动联播 / 续播辅助 ====================
+
+    // ------------------------------------------------------------------
+    // 【2026-10-11 新增】源7 专属「全屏播放器控制栏」
+    //
+    // 需求：OTT 播放器全屏时，内置源7 按确认键 / 单击触摸要能唤起播放器控制栏（可拖动进度、
+    //       继续/暂停），且<b>只对源7 生效</b>——源1~源6（含虎牙）保持 useController=false，
+    //       行为完全不变（它们没有"整片集数"概念，控制栏会带来误操作）。
+    // 实现：初始一律 setUseController(false)；仅当「全屏 + 当前频道是源7」时临时打开并 show，
+    //       5s 后（或退出全屏/切台/退后台时）收起并复位为 false。
+    // ------------------------------------------------------------------
+
+    /** 控制栏自动隐藏延时（与直播模式 PlayerControlManager 同口径 5s） */
+    private static final long CONTROLLER_HIDE_MS = 5000L;
+    /** 控制栏是否展示中（仅源7 全屏） */
+    private boolean ottControllerShowing = false;
+    private final Runnable hideOttControllerRunnable = () -> {
+        if (ottControllerShowing) hideSource7Controller();
+    };
+
+    /** 当前频道是否为内置源7（afhgrj 影视点播） */
+    private boolean isSource7Playing() {
+        Channel ch = playingChannel;
+        return ch != null && com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null;
+    }
+
+    /**
+     * 【源7 专属】全屏下唤起播放器控制栏。
+     * 非全屏 / 非源7 / 播放器未就绪时直接返回，不做任何事（源1~源6 因此完全不受影响）。
+     */
+    private void showSource7Controller() {
+        if (!fullscreen || playerView == null) return;
+        if (!isSource7Playing()) return;
+        if (playerView.getPlayer() == null) return;
+        mainHandler.removeCallbacks(hideOttControllerRunnable);
+        playerView.setUseController(true);
+        playerView.showController();
+        ottControllerShowing = true;
+        mainHandler.postDelayed(hideOttControllerRunnable, CONTROLLER_HIDE_MS);
+        LogBridge.i(TAG, "【OTT·源7】唤起播放器控制栏（5s 后自动收起）");
+        // 遥控用：把焦点落到控制栏上（触摸用不需要焦点，拿不到就跳过）
+        playerView.postDelayed(() -> {
+            if (!ottControllerShowing || playerView == null) return;
+            try {
+                int id = getResources().getIdentifier("exo_controller", "id", getPackageName());
+                View c = (id != 0) ? playerView.findViewById(id) : null;
+                if (c != null) {
+                    c.setFocusable(true);
+                    c.requestFocus();
+                }
+            } catch (Throwable ignored) {
+            }
+        }, 120);
+    }
+
+    /** 收起控制栏并复位 useController=false（源7 以外始终为 false） */
+    private void hideSource7Controller() {
+        if (playerView == null) return;
+        mainHandler.removeCallbacks(hideOttControllerRunnable);
+        playerView.hideController();
+        playerView.setUseController(false);
+        ottControllerShowing = false;
+    }
+
+    /**
+     * 【2026-10-11 源7 自动联播】判定已下沉到 {@code TVPlayerManager#handleAfhgrjEpisodeEnded()}
+     * （STATE_ENDED 发生在播放器内部，且原本会走 autoRetry 重播本集）。
+     *
+     * <p>这里只保留界面同步，通过专用的 {@link TVPlayerManager.OnAfhgrjEpisodeListener} 实现：
+     * 换集 → 刷 EPG 高亮 + 播放历史；全部播完 → 退出全屏并收起控制栏（见 initPlayer）。
+     * 之所以不再用 OnPlayStateListener 的 onPlayEnd：单例播放器上该槽位会被
+     * MainActivity.onDestroy 清空（实测 OTT 侧 onPlayEnd 一次都没触发）。
+     */
+
+    /** 【2026-10-11 源7】只读缓存取某一集（不联网）；未缓存 / 越界返回 null */
+    private Channel.EpgItem cachedAfhgrjEpisode(Channel ch, int idx) {
+        if (ch == null || idx < 0) return null;
+        try {
+            List<Channel.EpgItem> items =
+                    EpgManager.getInstance(getApplicationContext()).getEpg(ch);
+            if (items != null && idx < items.size()) return items.get(idx);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    // ==================== 【2026-10-11】OTT 播放历史列 ====================
+
+    /**
+     * 渲染「历史记录」列（与集数列表并排）：最多 10 条，最新在前。
+     * 条目文案 {@code 频道名 · 第N集}（源7）/ {@code 频道名}（其它源）；点击 → 续播该频道该集。
+     */
+    private void renderHistoryPanel() {
+        if (llOttHistoryRows == null) return;
+        llOttHistoryRows.removeAllViews();
+        List<AppConfig.OttHistory> list = appConfig.getOttHistory();
+        if (list.isEmpty()) {
+            TextView tv = new TextView(this);
+            tv.setText(R.string.ott_history_empty);
+            tv.setTextSize(12);
+            tv.setTextColor(0x66FFFFFF);
+            tv.setPadding(dp(8), dp(6), dp(8), dp(6));
+            llOttHistoryRows.addView(tv);
+            rewireOttFocus();
+            capEpgListHeight();
+            return;
+        }
+        int showN = Math.min(list.size(), OTT_HISTORY_MAX);
+        for (int i = 0; i < showN; i++) {
+            AppConfig.OttHistory h = list.get(i);
+            if (h != null) llOttHistoryRows.addView(buildHistoryRow(h));
+        }
+        rewireOttFocus();
+        capEpgListHeight();
+    }
+
+    /** 单条历史：整行可点击 / 可获焦；焦点态用程序化 StateListDrawable，不新增资源 */
+    private View buildHistoryRow(AppConfig.OttHistory h) {
+        TextView row = new TextView(this);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.setPadding(dp(8), dp(5), dp(8), dp(5));
+        row.setText(h.displayText());
+        row.setTextSize(12);
+        row.setSingleLine(true);
+        row.setEllipsize(TextUtils.TruncateAt.END);
+        row.setTextColor(0xCCFFFFFF);
+        row.setFocusable(true);
+        row.setFocusableInTouchMode(false);
+        row.setClickable(true);
+        row.setId(View.generateViewId());
+        row.setBackground(focusHighlightBg());
+        row.setOnClickListener(v -> playHistoryEntry(h));
+        return row;
+    }
+
+    /** 历史条目点击：切到该频道，并按记录集数续播（源7）；当前源里找不到该频道则提示后忽略 */
+    private void playHistoryEntry(AppConfig.OttHistory h) {
+        if (h == null) return;
+        Channel target = null;
+        for (Channel c : allChannels) {
+            if (c != null && h.name.equals(c.getName())) {
+                target = c;
+                break;
+            }
+        }
+        if (target == null) {
+            Toast.makeText(this, "当前源里没有「" + h.name + "」", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 先把「要续播的集数」写回历史，playChannel 会据此直接起播那一集
+        String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(target);
+        if (vodId != null && h.episodeOrdinal > 0) {
+            appConfig.addOttHistory(h.name, vodId, h.episodeOrdinal);
+        }
+        LogBridge.i(TAG, "【OTT·历史】点击历史 → " + h.name
+                + (h.episodeOrdinal > 0 ? " 第" + h.episodeOrdinal + "集" : ""));
+        playChannel(target);
+    }
+
+    /** 行焦点高亮背景（程序化，不新增 drawable 资源） */
+    private android.graphics.drawable.Drawable focusHighlightBg() {
+        android.graphics.drawable.StateListDrawable bg =
+                new android.graphics.drawable.StateListDrawable();
+        bg.addState(new int[]{android.R.attr.state_focused},
+                new android.graphics.drawable.ColorDrawable(0x3340A9FF));
+        bg.addState(new int[]{android.R.attr.state_pressed},
+                new android.graphics.drawable.ColorDrawable(0x3340A9FF));
+        bg.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        return bg;
+    }
+
+    /** 【2026-10-11 源7】把遥控焦点落到指定集数行（切集后保持焦点停在列表内） */
+    private void focusAfhgrjEpgRow(int idx) {
+        if (llEpgList == null || idx < 0 || idx >= llEpgList.getChildCount()) return;
+        final View row = llEpgList.getChildAt(idx);
+        if (row != null) row.post(row::requestFocus);
+    }
+
+    /**
+     * 集数行：整行可点击 / 可获焦（遥控）；当前集蓝色加粗 + 「▸ 播放中」。
+     *
+     * <p>【焦点态】用程序化 {@link android.graphics.drawable.StateListDrawable} 提供焦点高亮，
+     * 不新增资源文件，也不改动其它面板（仅源7 集数行走此路径）。
+     */
+    private View addAfhgrjEpgRow(String title, Channel.EpgItem item, boolean isCurrent) {
+        if (llEpgList == null) return null;
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.setPadding(dp(8), dp(6), dp(8), dp(6));
+        row.setFocusable(true);
+        row.setFocusableInTouchMode(false);
+        row.setClickable(true);
+        // 【2026-10-11 源7 遥控焦点】分配稳定 id 并挂上左右方向键链接；
+        // 上边界（首行→预览）、下边界（末行→网格）由 refreshAfhgrjEpgPanel 统一接线。
+        row.setId(View.generateViewId());
+        row.setNextFocusLeftId(R.id.fl_ott_preview);
+        row.setNextFocusRightId(R.id.gv_ott_channel);
+
+        row.setBackground(focusHighlightBg());
+
+        TextView tvTitle = new TextView(this);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tvTitle.setLayoutParams(titleLp);
+        tvTitle.setText(isCurrent ? (title + "  ▸ 播放中") : title);
+        tvTitle.setTextSize(13);
+        tvTitle.setSingleLine(true);
+        tvTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        if (isCurrent) {
+            tvTitle.setTextColor(0xFF40A9FF);
+            tvTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        } else {
+            tvTitle.setTextColor(0xFFFFFFFF);
+        }
+        row.addView(tvTitle);
+
+        row.setOnClickListener(v -> playAfhgrjEpisodeOtt(item));
+        llEpgList.addView(row);
+        return row;
+    }
+
+    /**
+     * 【2026-10-11 源7】OTT 模式切集：与直播模式 {@code EpgManager.playAfhgrjEpisode}
+     * 同口径 —— 直接把集数项携带的 {@code afhgrj://<vodId>-<sid>-<nid>} 交给播放器，
+     * 起播那一刻再由 {@link TVPlayerManager} 抓播放页取真实 m3u8（惰性解析）。
+     */
+    private void playAfhgrjEpisodeOtt(Channel.EpgItem item) {
+        Channel ch = playingChannel;
+        if (item == null || TextUtils.isEmpty(item.customPlayUrl) || ch == null) return;
+        mCurrentAfhgrjEpisodeIdx = indexOfAfhgrjEpisode(item);
+        // 【2026-10-11 播放历史 / 续播】把「看到第几集」记进历史：手动切集、自动联播、
+        //   以及历史点播都汇到这一处，重启后即可据此续播。
+        String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
+        if (vodId != null && mCurrentAfhgrjEpisodeIdx >= 0) {
+            appConfig.addOttHistory(ch.getName(), vodId, mCurrentAfhgrjEpisodeIdx + 1);
+            renderHistoryPanel();
+        }
+        LogBridge.i(TAG, "【OTT·EPG·源7】切集播放：" + item.title + " → " + item.customPlayUrl);
+        mPlayerManager.playUrl(item.customPlayUrl, ch.getName(), ch);
+        refreshEpgPanel(ch);
+        refreshNowPlayingProgram();
+        // 【2026-10-11 源7 遥控焦点】列表整表重建后，把焦点落回当前集所在行，
+        //   避免遥控确认一次就被弹回频道网格。
+        focusAfhgrjEpgRow(mCurrentAfhgrjEpisodeIdx);
+        Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
+                Toast.LENGTH_SHORT).show();
+    }
+
+    /** 在当前集数列表中定位某集下标（按 customPlayUrl 全等匹配）；找不到返回 -1 */
+    private int indexOfAfhgrjEpisode(Channel.EpgItem target) {
+        if (target == null || playingChannel == null) return -1;
+        try {
+            EpgManager epg = EpgManager.getInstance(getApplicationContext());
+            List<Channel.EpgItem> items = epg.getEpg(playingChannel);
+            if (items != null) {
+                for (int i = 0; i < items.size(); i++) {
+                    Channel.EpgItem it = items.get(i);
+                    if (it != null && TextUtils.equals(it.customPlayUrl, target.customPlayUrl)) {
+                        return i;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return -1;
     }
 
     /** 取 EPG 项的开始时间（"00:00 - 00:05" → "00:00"；"00:00 - 直播中" → "00:00"） */
@@ -1359,6 +1922,9 @@ public class OttHomeActivity extends AppCompatActivity {
 
     private void setFullscreen(boolean on) {
         fullscreen = on;
+        // 【2026-10-11 源7】全屏状态一变化就收起控制栏并复位 useController=false，
+        //   避免控制栏残留在小窗口预览上（源1~源6 始终没有控制栏）。
+        hideSource7Controller();
         // 【2026-09-29 退全屏焦点空窗】整段过渡期间屏蔽 Tab 的「焦点即切换」，
         // 直到下方延迟一帧恢复焦点、清掉标志为止（见 if (!on) 分支）
         suppressTabFocusSwitch = true;
@@ -1629,6 +2195,8 @@ public class OttHomeActivity extends AppCompatActivity {
         super.onPause();
         // 【2026-09-29 自动全屏】退后台时取消计时，避免后台到期、回前台被直接弹进全屏
         cancelAutoFullscreen();
+        // 【2026-10-11 源7】退后台收起控制栏，回来时保持干净画面
+        hideSource7Controller();
         if (mPlayerManager != null) {
             mPlayerManager.onBackground();
         }
@@ -1679,7 +2247,20 @@ public class OttHomeActivity extends AppCompatActivity {
                     return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
                 case KeyEvent.KEYCODE_ENTER:
+                    // 【2026-10-11 源7 专属】源7 全屏按确认 → 唤起播放器控制栏（不退出全屏）；
+                    //   源1~源6 维持原行为：确认键退出全屏。
+                    if (isSource7Playing()) {
+                        showSource7Controller();
+                        return true;
+                    }
+                    setFullscreen(false);
+                    return true;
                 case KeyEvent.KEYCODE_BACK:
+                    // 【2026-10-11 源7】控制栏展示中 → 先收起控制栏；否则退出全屏
+                    if (ottControllerShowing) {
+                        hideSource7Controller();
+                        return true;
+                    }
                     setFullscreen(false);
                     return true;
                 default:
@@ -1692,6 +2273,11 @@ public class OttHomeActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         if (fullscreen) {
+            // 【2026-10-11 源7】控制栏展示中：第一次返回先收起控制栏，再按一次才退出全屏
+            if (ottControllerShowing) {
+                hideSource7Controller();
+                return;
+            }
             setFullscreen(false);
             return;
         }
@@ -1720,12 +2306,25 @@ public class OttHomeActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        // 【2026-10-11 源7】注销 EPG 数据就绪监听，避免 Activity 泄漏
+        try {
+            EpgManager.getInstance(getApplicationContext())
+                    .unregisterEpgDataReadyListener(epgDataReadyListener);
+        } catch (Exception ignored) {
+        }
         if (appCoreManager != null) {
             appCoreManager.release();
             appCoreManager = null;
         }
         if (mPlayerManager != null) {
-            mPlayerManager.setOnPlayStateListener(null);
+            // 【2026-10-11】只清「自己的」监听器：单例播放器上可能已有后创建 Activity 注册的
+            //   新监听器，无脑置 null 会把它的回调一起清掉（本 Activity 才是被销毁的那个）。
+            if (mPlayerManager.getOnPlayStateListener() == ottPlayStateListener) {
+                mPlayerManager.setOnPlayStateListener(null);
+            }
+            if (mPlayerManager.getOnAfhgrjEpisodeListener() == afhgrjEpisodeListener) {
+                mPlayerManager.setOnAfhgrjEpisodeListener(null);
+            }
             mPlayerManager.setOnPlayerViewRecreatedListener(null);
             if (isFinishing() && !switchingToLive) {
                 mPlayerManager.release();
@@ -1780,13 +2379,15 @@ public class OttHomeActivity extends AppCompatActivity {
 
             Channel channel = shownChannels.get(position);
             holder.name.setText(channel.getName());
-            // 【2026-09-29 频道台标】按内容形态选择缩放方式（卡片台标位是 127dp×32dp 的宽横条）：
-            //   · 虎牙同看频道：台标来自直播封面，是 16:9 实拍截图 → centerCrop 满铺，
-            //     否则 fitCenter 会把 16:9 缩到 32dp 高、两侧各留一半空白，观感极小；
+            // 【2026-09-29 频道台标】【2026-10-11 改版式】按内容形态选择缩放方式（图片区已改为铺满卡片）：
+            //   · 虎牙同看频道：台标来自直播封面，是 16:9 实拍截图 → centerCrop 满铺；
+            //   · 源7(afhgrj) 影视：绑定的是影视海报图（多为 2:3 竖版）→ centerCrop 满铺，
+            //     否则 fitCenter 会把竖版海报缩成中间一个小方块（即「图片太小」）；
             //   · M3U / 畅享频道：台标是透明底 logo 图（方形 210×210、长条 640×320 等都有）
             //     → 必须 fitCenter，用 centerCrop 会把 logo 上下裁掉只剩中间一条。
             holder.logo.setScaleType(
-                    (channel.isTogetherWatch() || channel.isHuyaSdkTogetherWatch())
+                    (channel.isTogetherWatch() || channel.isHuyaSdkTogetherWatch()
+                            || isAfhgrjChannel(channel))
                             ? ImageView.ScaleType.CENTER_CROP
                             : ImageView.ScaleType.FIT_CENTER);
             // 加载频道台标（空/失败回退占位图，内部已做复用防错位）
@@ -1803,6 +2404,13 @@ public class OttHomeActivity extends AppCompatActivity {
 
             return convertView;
         }
+    }
+
+    /** 源7(afhgrj) 频道判定：其主播放地址为自定义协议 {@code afhgrj://<vodId>} */
+    private static boolean isAfhgrjChannel(Channel channel) {
+        if (channel == null) return false;
+        String url = channel.getMainPlayUrl();
+        return url != null && url.startsWith("afhgrj://");
     }
 
     private static class ViewHolder {

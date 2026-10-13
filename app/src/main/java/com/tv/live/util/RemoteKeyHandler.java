@@ -225,7 +225,8 @@ public class RemoteKeyHandler {
                 return true;
             }
         } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            if (isInCatchUpMode) {
+            // 【2026-10-12 修复】回看模式+面板打开时禁用进度条快退，左右键归还面板（同 MainActivity 口径）。
+            if (isInCatchUpMode && !panelOpen) {
                 keyAction.onSeekBackward();
                 longPressKeyCode = keyCode;
                 mainHandler.removeCallbacks(longPressSeekRunnable);
@@ -237,7 +238,8 @@ public class RemoteKeyHandler {
                 return true;
             }
         } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            if (isInCatchUpMode) {
+            // 【2026-10-12 修复】同上：面板打开期间禁用进度条快进。
+            if (isInCatchUpMode && !panelOpen) {
                 keyAction.onSeekForward();
                 longPressKeyCode = keyCode;
                 mainHandler.removeCallbacks(longPressSeekRunnable);

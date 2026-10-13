@@ -16,8 +16,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -29,10 +29,20 @@ import java.util.regex.Pattern;
  * 这里在拉取到 m3u8 文本后把时长归一化为标准十进制（#EXTINF:3.0,）再交给解析器。
  * .ts 分片不受影响，直接透传。
  *
- * <p>【2026-10-10 新增】内置源7（afhgrj 影视）中插广告剥离：源7 的 CDN 会在正片中间
- * 用两个 {@code #EXT-X-DISCONTINUITY} 夹入一段（约 26s）博彩广告，其分片路径形如
- * {@code /video/adjump/time/<id>.ts}。当 {@code stripAds=true}（仅源7 起播时置位）时，
- * 这里把广告块整体删掉再交给解析器；其它内置源 {@code stripAds=false}，行为完全不变。
+ * <p>【2026-10-13 重写·广告剥离】参照「哦了电视」的 m3u8 广告过滤机制（DISCONTINUITY
+ * 切块 + 夹层长度/同目录/编辑距离同源判定 + 多数决反转 + 熔断），对所有内置源统一启用
+ * （{@code stripAds=true}）。
+ *
+ * <p>【2026-10-13 直播硬跳过·三层防护】直播源绝不参与剥离，三层任一层命中即原样放行：
+ * <ol>
+ *   <li><b>URL 特征层</b>：m3u8 地址含 {@code /live/}、{@code live.php}、{@code /lives/}、
+ *       {@code /video-hls/}、{@code liveshow} 等直播特征串 → 直接跳过（{@link #isLikelyLiveUrl}）；</li>
+ *   <li><b>频道类型层</b>：源5 直播频道（channelId 前缀 {@code renyibo:}，非 {@code renyibo-vod:}）
+ *       在起播处即把 {@code stripAds=false} 传入（见 TVPlayerManager#doPlayNormal）；</li>
+ *   <li><b>内容门控层</b>：剥离器内部仅处理含 {@code #EXT-X-ENDLIST} 的<b>点播全集</b>，
+ *       直播/事件型（{@code #EXT-X-PLAYLIST-TYPE:EVENT}）与 master 主清单原样放行。</li>
+ * </ol>
+ * 三层均为「保守放行」方向——误判只会少剥一次广告，绝不损伤直播播放。
  */
 // 【2026-10-10 Lint】本类刻意使用 media3 的 @UnstableApi 内部 API（自定义 DataSource）。
 // 用 androidx.annotation.OptIn 就地 opt-in，而不是给类打 @UnstableApi —— 后者会把
@@ -43,13 +53,26 @@ public final class ChanxiangM3u8DataSource implements DataSource {
     private static final String TAG = "ChanxiangM3u8DS";
     private static final Pattern EXTINF = Pattern.compile("#EXTINF:([^,\r\n]+),");
 
-    /** HLS 断点标记：源7 的广告块正是被两个该标记夹住 */
+    /** HLS 断点标记：广告块被两个该标记夹住 */
     private static final String DISCONTINUITY = "#EXT-X-DISCONTINUITY";
-    /** 源7 广告分片的路径特征（/video/adjump/time/xxx.ts） */
+    /** 源7 广告分片的路径特征（/video/adjump/time/xxx.ts），高置信硬规则 */
     private static final String AD_PATH_MARK = "/adjump/";
 
+    /**
+     * 【2026-10-13 直播硬跳过】m3u8 地址中的直播特征标记（小写比对）。
+     * 命中任一即视为直播源，广告剥离整体跳过。方向「保守放行」：
+     * 误命中只会少剥一次广告，绝不损伤直播播放。
+     *
+     * <p>覆盖各内置源直播形态：源4/源6 的 {@code /live/}、{@code /longvideo/transcode/video/live/}；
+     * 源5 直播 {@code live.php}；移动系 {@code /bs3/video-hls/}；百度系 {@code liveshow} 等。
+     */
+    private static final String[] LIVE_URL_MARKERS = {
+            "/live/", "/lives/", "/live.", "live.php", "/hls/live",
+            "liveshow", "/video-hls/", "type=live", "liveplay", "livestream",
+    };
+
     private final DataSource upstream;
-    /** 【2026-10-10】是否剥离源7 中插广告分片（仅内置源7 起播时为 true，其它源恒为 false） */
+    /** 【2026-10-13】是否启用中插广告剥离（点播源 true；直播源由 URL 特征/频道类型/ENDLIST 三层硬跳过） */
     private final boolean stripAds;
     @Nullable private ByteArrayInputStream rewritten;
     @Nullable private DataSpec dataSpec;
@@ -91,12 +114,15 @@ public final class ChanxiangM3u8DataSource implements DataSource {
             }
             String text = new String(bos.toByteArray(), StandardCharsets.UTF_8);
             String normalized = normalize(text);
-            if (stripAds) {
+            // 【2026-10-13 直播硬跳过】URL 带直播特征 → 只做 EXTINF 归一化，不做广告剥离
+            if (stripAds && !isLikelyLiveUrl(uri)) {
                 String stripped = stripAdSegments(normalized);
                 if (!stripped.equals(normalized)) {
-                    LogBridge.i(TAG, "源7 中插广告已剥离: " + uri);
+                    LogBridge.i(TAG, "内置源中插广告已剥离: " + uri);
                 }
                 normalized = stripped;
+            } else if (stripAds) {
+                LogBridge.i(TAG, "直播源跳过广告剥离: " + uri);
             }
             byte[] out = normalized.getBytes(StandardCharsets.UTF_8);
             rewritten = new ByteArrayInputStream(out);
@@ -162,109 +188,276 @@ public final class ChanxiangM3u8DataSource implements DataSource {
     }
 
     /**
-     * 【2026-10-10】剥离源7（afhgrj 影视）的中插广告分片。
+     * 【2026-10-13 重写】广告剥离引擎：参照「哦了电视」的通用 m3u8 广告过滤机制
+     * （DISCONTINUITY 切块判定 + 多数决反转 + 熔断），对所有内置源统一启用。
      *
-     * <p>源7 的各 CDN 用两套广告特征：
-     * <ol>
-     *   <li><b>明码</b>：分片路径形如 {@code /video/adjump/time/*.ts}（未混淆，直接按
-     *       {@code /adjump/} 命中剔除）；</li>
-     *   <li><b>混淆</b>：EFV 类转码系统开启「混淆插播」后，动态改写 m3u8，使广告分片与正片
-     *       特征<b>完全一致</b>（全部伪装成 {@code index<16位随机>.jpeg}、同名同长目录、时长
-     *       与正片相同），此时 {@code /adjump/} 已失效。但广告段会<b>更换内容目录</b>并从独立
-     *       目录/CDN 读取，且通常被 {@code #EXT-X-DISCONTINUITY} 两处夹住。实测《交锋》正片
-     *       全在 {@code /videos/.../7cc884/}（约600段），广告夹在 {@code /stream/.../02955c/}
-     *       （仅5段）。</li>
-     * </ol>
+     * <p>门控：仅处理含 {@code #EXT-X-ENDLIST} 的<b>点播全集</b>媒体播放列表；直播 m3u8
+     * 与 master 主清单原样放行（同哦了电视入口行为，直播不干预避免误伤）。
      *
-     * <p>处理策略（仅作用于含 {@code #EXTINF} 的<b>媒体播放列表</b>，master 主清单直接放行）：
+     * <p>算法：
      * <ol>
-     *   <li>统计每个「内容目录」的分片数量，出现最多的目录视为正片；</li>
-     *   <li>命中 {@code /adjump/} 的、或<b>非正片目录</b>且正片目录分片数 ≥ 其 2 倍的独立小目录
-     *       段，判为广告并连同其 {@code #EXTINF} 一起剔除；</li>
-     *   <li>清理被整体抽空后残留的孤立 {@code #EXT-X-DISCONTINUITY}。</li>
+     *   <li><b>adjump 硬规则</b>：{@code /adjump/} 路径分片连 {@code #EXTINF} 直接剔除
+     *       （源7 明码广告，零误伤）；</li>
+     *   <li><b>切块同源判定</b>：按 {@code #EXT-X-DISCONTINUITY} 切块，首块恒为正片。
+     *       后续块三维判定——夹层长度（本块首分片与前块、后块首分片长度呈夹层即判广告）、
+     *       同目录（目录前缀一致视为同源）、编辑距离（跨块首分片 Levenshtein 距离不得超
+     *       正片相邻分片最大漂移值，同目录 +1 容忍）；</li>
+     *   <li><b>夹层兜底</b>：通用规则零命中时，2~15 分片的中间块（两端均有断点）判广告
+     *       （实测 play.ly166.com：广告 5 分片与正片同为随机命名，仅夹层可辨）；</li>
+     *   <li><b>多数决反转</b>：广告分片数反超正片且广告分片不全相同 → 判定识别反了，取反
+     *       输出被剔块，并把原正片块首部的头部标签（{@code #EXT-X-KEY}/{@code #EXT-X-MAP}
+     *       等，按缺失回补）搬给输出首块；</li>
+     *   <li><b>熔断</b>：拟剔除分片 &gt; 100 视为误判，放弃剥离原样返回。</li>
      * </ol>
-     * 无任何广告特征时原样返回，毫发无损；仅内置源7（{@code stripAds=true}）启用。
+     * 输出末块缺失 {@code #EXT-X-ENDLIST} 时自动补齐。
      */
     private static String stripAdSegments(String text) {
-        if (text == null || text.indexOf("#EXTINF") < 0) return text;
-        String[] lines = text.split("\n", -1);
-        int n = lines.length;
+        if (text == null || text.indexOf("#EXTINF") < 0 || text.indexOf("#EXT-X-ENDLIST") < 0) return text;
+        // 【2026-10-13 直播硬跳过·内容层】事件型播放列表（直播回放/伪直播）不做剥离
+        if (text.contains("#EXT-X-PLAYLIST-TYPE:EVENT")) return text;
 
-        // ---- 第1步：统计内容目录的分片数，找出占比占优的正片目录 ----
-        Map<String, Integer> dirCount = new HashMap<>();
-        for (String ln : lines) {
-            String dir = contentDir(segmentUri(ln));
-            if (dir != null) dirCount.put(dir, dirCount.getOrDefault(dir, 0) + 1);
-        }
-        if (dirCount.isEmpty()) return text;
-
-        String mainDir = null;
-        int mainCount = 0;
-        for (Map.Entry<String, Integer> e : dirCount.entrySet()) {
-            if (e.getValue() > mainCount) { mainCount = e.getValue(); mainDir = e.getKey(); }
-        }
-        boolean haveAdPath = text.indexOf(AD_PATH_MARK) >= 0;
-        boolean multipleDirs = dirCount.size() > 1;
-
-        // ---- 第2步：判定并标记删除行 ----
-        boolean[] keep = new boolean[n];
-        java.util.Arrays.fill(keep, true);
-        int removed = 0;
-        for (int i = 0; i < n; i++) {
-            String seg = segmentUri(lines[i].trim());
-            if (seg == null) continue;
-            boolean ad = false;
-            if (haveAdPath && seg.contains(AD_PATH_MARK)) ad = true;
-            if (!ad && multipleDirs) {
-                String dir = contentDir(seg);
-                if (dir != null && !dir.equals(mainDir) && mainCount >= 2 * dirCount.getOrDefault(dir, 0)) {
-                    ad = true;
+        // ---- 第1步：/adjump/ 硬规则（源7 明码广告，零误伤）----
+        if (text.contains(AD_PATH_MARK)) {
+            String[] alines = text.split("\n", -1);
+            boolean[] akeep = new boolean[alines.length];
+            java.util.Arrays.fill(akeep, true);
+            int arm = 0;
+            for (int i = 0; i < alines.length; i++) {
+                String seg = segmentUri(alines[i]);
+                if (seg != null && seg.contains(AD_PATH_MARK)) {
+                    akeep[i] = false;
+                    int p = i - 1;
+                    while (p >= 0 && alines[p].trim().isEmpty()) p--;
+                    if (p >= 0 && alines[p].trim().startsWith("#EXTINF")) akeep[p] = false;
+                    arm++;
                 }
             }
-            if (ad) {
-                keep[i] = false;
-                int p = i - 1;
-                while (p >= 0 && lines[p].trim().isEmpty()) p--;
-                if (p >= 0 && lines[p].trim().startsWith("#EXTINF")) keep[p] = false;
-                removed++;
+            if (arm > 0) {
+                StringBuilder nb = new StringBuilder(text.length());
+                for (int i = 0; i < alines.length; i++) {
+                    if (akeep[i]) nb.append(alines[i]).append('\n');
+                }
+                text = nb.toString();
+                LogBridge.i(TAG, "内置源：/adjump/ 广告分片剔除 " + arm + " 条");
             }
         }
-        if (removed == 0) return text;
 
-        // ---- 第3步：清理标记「正片↔广告」边界的 DISCONTINUITY（其一侧已落删除区） ----
-        // 广告在正片中间被两个 DISCONTINUITY 夹住，删掉广告分片后该断点已无意义，一并移除，
-        // 使正片前后无缝衔接，避免相邻断点引发的空区间/时间轴跳变。
-        for (int i = 0; i < n; i++) {
-            if (!DISCONTINUITY.equals(lines[i].trim())) continue;
-            int before = i - 1;
-            while (before >= 0 && lines[before].trim().isEmpty()) before--;
-            int after = i + 1;
-            while (after < n && lines[after].trim().isEmpty()) after++;
-            boolean bDel = before >= 0 && !keep[before];
-            boolean aDel = after < n && !keep[after];
-            if (bDel || aDel) keep[i] = false;
+        // ---- 第2步：按 #EXT-X-DISCONTINUITY 切块 ----
+        String[] blocks = text.split(Pattern.quote(DISCONTINUITY));
+        int bn = blocks.length;
+        List<List<String>> segLists = new ArrayList<>(bn);
+        int totalSegs = 0;
+        for (String b : blocks) {
+            List<String> segs = new ArrayList<>();
+            for (String line : b.split("\n")) {
+                String t = line.trim();
+                if (!t.isEmpty() && !t.startsWith("#")) segs.add(t);
+            }
+            segLists.add(segs);
+            totalSegs += segs.size();
+        }
+        if (totalSegs == 0) return text;
+
+        // ---- 第3步：逐块同源判定（哦了电视机制）----
+        boolean[] isAd = new boolean[bn];
+        String prevFirst = "";
+        String firstEver = "";
+        int maxDrift = 0;
+        for (int bi = 0; bi < bn; bi++) {
+            List<String> segs = segLists.get(bi);
+            if (segs.isEmpty()) continue;                 // 无分片的标签块恒保留
+            if (firstEver.isEmpty()) firstEver = segs.get(0);
+            String curFirst = segs.get(0);
+            String nextFirst = null;
+            for (int nb = bi + 1; nb < bn; nb++) {
+                if (!segLists.get(nb).isEmpty()) {
+                    nextFirst = segLists.get(nb).get(0);
+                    break;
+                }
+            }
+            int lenPrev = prevFirst.length();
+            int lenCur = curFirst.length();
+            int lenNext = nextFirst != null ? nextFirst.length() : firstEver.length();
+            boolean sameDir = sameDir(curFirst, prevFirst);
+            int d = editDistance(curFirst, prevFirst);
+            boolean keepOk = maxDrift == 0
+                    || ((lenPrev != lenNext || lenPrev == lenCur || lenNext <= 0)
+                        && (sameDir || d <= maxDrift)
+                        && (d <= maxDrift + 1 || !sameDir));
+            if (keepOk) {
+                prevFirst = curFirst;
+                String prevSeg = curFirst;
+                for (String sg : segs) {
+                    int dd = editDistance(sg, prevSeg);
+                    if (dd > maxDrift) maxDrift = dd;
+                    prevSeg = sg;
+                }
+            } else {
+                isAd[bi] = true;
+                LogBridge.i(TAG, "内置源：块 " + bi + " 判广告（" + segs.size() + " 分片，首片 "
+                        + truncate(curFirst) + "）");
+            }
         }
 
-        // ---- 输出保留行 ----
-        StringBuilder sb = new StringBuilder(text.length());
-        for (int i = 0; i < n; i++) {
-            if (keep[i]) sb.append(lines[i]).append('\n');
+        // ---- 第3.5步：夹层兜底（通用规则零命中时，2~15 分片的中间块判广告）----
+        boolean anyAd = false;
+        for (boolean b : isAd) {
+            if (b) {
+                anyAd = true;
+                break;
+            }
         }
-        LogBridge.i(TAG, "源7：剥离中插广告分片 " + removed + " 条");
+        boolean fallback = false;
+        if (!anyAd && bn >= 3) {
+            for (int bi = 1; bi < bn - 1; bi++) {
+                List<String> segs = segLists.get(bi);
+                if (segs.size() >= 2 && segs.size() <= 15) {
+                    isAd[bi] = true;
+                    fallback = true;
+                    LogBridge.i(TAG, "内置源：夹层兜底判广告（第 " + bi + " 块 " + segs.size() + " 分片）");
+                }
+            }
+        }
+
+        long adCount = 0;
+        for (int bi = 0; bi < bn; bi++) {
+            if (isAd[bi]) adCount += segLists.get(bi).size();
+        }
+        if (adCount == 0) return text;
+        long keptCount = totalSegs - adCount;
+
+        // ---- 第4步：多数决反转（广告分片反而占多数且不全相同 → 判定识别反了，取反输出）----
+        boolean inverted = adCount > keptCount;
+        if (inverted) {
+            String firstAd = null;
+            int same = 0;
+            for (int bi = 0; bi < bn; bi++) {
+                if (!isAd[bi]) continue;
+                for (String s : segLists.get(bi)) {
+                    if (firstAd == null) firstAd = s;
+                    if (s.equals(firstAd)) same++;
+                }
+            }
+            if (same > 1) inverted = false;   // 剔除分片全部相同（如整段重复）时不可信，不取反
+        }
+
+        List<String> outBlocks = new ArrayList<>();
+        for (int bi = 0; bi < bn; bi++) {
+            if (isAd[bi] == inverted) outBlocks.add(blocks[bi]);
+        }
+        if (outBlocks.isEmpty()) return text;
+        long filtered = inverted ? keptCount : adCount;
+
+        // 反转时把原「正片块」首部的头部标签回补给输出首块（哦了电视同款：KEY/MAP 按缺失补）
+        if (inverted) {
+            String firstOut = outBlocks.get(0);
+            boolean outHasKey = firstOut.contains("#EXT-X-KEY");
+            boolean outHasMap = firstOut.contains("#EXT-X-MAP");
+            int headSrc = -1;
+            for (int bi = 0; bi < bn; bi++) {
+                if (!isAd[bi] && !segLists.get(bi).isEmpty()) {
+                    headSrc = bi;
+                    break;
+                }
+            }
+            if (headSrc >= 0) {
+                List<String> heads = new ArrayList<>();
+                for (String line : blocks[headSrc].split("\n")) {
+                    String t = line.trim();
+                    if (!t.startsWith("#") || t.startsWith("#EXTINF")) continue;
+                    if (t.startsWith("#EXT-X-KEY") && outHasKey) continue;
+                    if (t.startsWith("#EXT-X-MAP") && outHasMap) continue;
+                    heads.add(t);
+                }
+                if (!heads.isEmpty()) {
+                    outBlocks.add(0, joinLines(heads) + "\n");
+                }
+            }
+        }
+
+        // ---- 第5步：熔断（拟剔除 >100 分片必是误判，放弃剥离）----
+        if (filtered > 100) {
+            LogBridge.w(TAG, "内置源：疑似误判（拟剔 " + filtered + " 分片 >100），放弃剥离");
+            return text;
+        }
+
+        String joined = joinWithSeparator(outBlocks);
+        if (!outBlocks.get(outBlocks.size() - 1).contains("#EXT-X-ENDLIST")) {
+            joined = joined + "#EXT-X-ENDLIST\n";
+        }
+        LogBridge.i(TAG, "内置源：剥离中插广告分片 " + filtered + " 条"
+                + (inverted ? "（多数决反转）" : "") + (fallback ? "（夹层兜底）" : ""));
+        return joined;
+    }
+
+    /**
+     * 【2026-10-13 直播硬跳过】判断 m3u8 地址是否为直播源（含直播特征标记）。
+     * 命中即跳过广告剥离。大小写不敏感，方向保守（宁可少剥，不误伤直播）。
+     */
+    private static boolean isLikelyLiveUrl(@Nullable String uri) {
+        if (uri == null) return false;
+        String u = uri.toLowerCase(java.util.Locale.ROOT);
+        for (String m : LIVE_URL_MARKERS) {
+            if (u.contains(m)) return true;
+        }
+        return false;
+    }
+
+    /** 行若是分片 URI（非空、不以 # 开头）则返回（已 trim）；否则返回 {@code null} */
+    private static String segmentUri(String t) {
+        if (t == null || t.isEmpty() || t.startsWith("#")) return null;
+        return t.trim();
+    }
+
+    /** 两条分片 URI 是否同目录（文件名之外的路径前缀一致） */
+    private static boolean sameDir(String a, String b) {
+        int ia = a.lastIndexOf('/');
+        int ib = b.lastIndexOf('/');
+        if (ia != -1 && ib != -1) return a.substring(0, ia).equals(b.substring(0, ib));
+        return a.equals(b);
+    }
+
+    /** Levenshtein 编辑距离（哦了电视同源判定的距离函数） */
+    private static int editDistance(String a, String b) {
+        if (a.isEmpty()) return b.length();
+        if (b.isEmpty()) return a.length();
+        int la = a.length();
+        int lb = b.length();
+        int[][] dp = new int[lb + 1][la + 1];
+        for (int i = 0; i <= la; i++) dp[0][i] = i;
+        for (int j = 0; j <= lb; j++) dp[j][0] = j;
+        for (int j = 1; j <= lb; j++) {
+            for (int i = 1; i <= la; i++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                dp[j][i] = Math.min(Math.min(dp[j][i - 1] + 1, dp[j - 1][i] + 1), dp[j - 1][i - 1] + cost);
+            }
+        }
+        return dp[lb][la];
+    }
+
+    /** 日志用截断（最多 60 字符） */
+    private static String truncate(String s) {
+        return s == null ? "" : (s.length() <= 60 ? s : s.substring(0, 60));
+    }
+
+    /** 多行拼接（\n 分隔） */
+    private static String joinLines(List<String> lines) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) sb.append('\n');
+            sb.append(lines.get(i));
+        }
         return sb.toString();
     }
 
-    /** 若行是分片 URI（非空、不以 # 开头）则返回它；否则返回 {@code null} */
-    private static String segmentUri(String t) {
-        if (t == null || t.isEmpty() || t.startsWith("#")) return null;
-        return t;
-    }
-
-    /** 从分片 URI 取「内容目录」：去掉分片文件名后的路径部分（相对/绝对均可） */
-    private static String contentDir(String seg) {
-        if (seg == null) return null;
-        int slash = seg.lastIndexOf('/');
-        return slash < 0 ? null : seg.substring(0, slash);
+    /** 块拼接（#EXT-X-DISCONTINUITY 分隔） */
+    private static String joinWithSeparator(List<String> blocks) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < blocks.size(); i++) {
+            if (i > 0) sb.append(DISCONTINUITY);
+            sb.append(blocks.get(i));
+        }
+        return sb.toString();
     }
 
     /** 工厂：包装任意上游 DataSource.Factory，仅对 m3u8 做归一化。 */
@@ -276,7 +469,7 @@ public final class ChanxiangM3u8DataSource implements DataSource {
             this(upstreamFactory, false);
         }
 
-        /** 【2026-10-10】stripAds=true 时额外剥离源7 中插广告（仅内置源7 起播传入） */
+        /** 【2026-10-13】stripAds=true 时启用中插广告剥离（所有内置源统一传入 true） */
         public Factory(DataSource.Factory upstreamFactory, boolean stripAds) {
             this.upstreamFactory = upstreamFactory;
             this.stripAds = stripAds;

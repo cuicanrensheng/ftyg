@@ -19,13 +19,16 @@
     android:orientation="vertical">
 
     <!-- 图片卡片：铺满，承载卡片背景 + 焦点高亮。
-         【2026-10-11 二次调版】118dp → 88dp（4 列网格下图片偏大，等比缩小约 25%）。 -->
+         【2026-10-11 二次调版】118dp → 88dp（4 列网格下图片偏大，等比缩小约 25%）。
+         【2026-10-13 触摸修复】clickable 由 true 改为 false：海报 FrameLayout 若 clickable=true 会
+         消费触摸且无 OnClickListener，导致触摸点海报区时卡片根 LinearLayout（挂 OnClickListener）收不到
+         click → 点频道卡片无反应。改为 false 让触摸冒泡到根布局的 OnClickListener。 -->
     <FrameLayout
         android:id="@+id/fl_ott_item_poster"
         android:layout_width="match_parent"
         android:layout_height="88dp"
         android:background="@drawable/ott_channel_item_bg"
-        android:clickable="true"
+        android:clickable="false"
         android:focusable="false">
 
         <ImageView

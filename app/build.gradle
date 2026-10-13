@@ -149,6 +149,8 @@ dependencies {
     //   minSdk=21 的设备运行到相关代码路径时 NoSuchMethodError → 破坏旧系统兼容性.
     //   代价: 多出 j$ 回填类 (classes2.dex, 约 178KB 压缩) 属于必要成本.
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    // 【2026-10-12】VOD 加密移植：纯离线单测（VodCryptoTest），不进 APK
+    testImplementation 'junit:junit:4.13.2'
 }
 
 androidComponents {

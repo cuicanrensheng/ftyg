@@ -37,6 +37,12 @@ import java.util.concurrent.Future;
  * 在装有爱其意的设备（雷电模拟器）上对 host {@code 110.42.52.180} 抓包
  * （设备自带 tcpdump，{@code tcpdump -i any -s0 -w /data/local/tmp/cap.pcap}），
  * 过滤 {@code GET /live/live.php?token=xxx} 取出新 token 替换下面常量即可。
+ *
+ * <p><b>【2026-10-12 影视点播移植】</b>本类只负责直播部分（5 组）。
+ * 影视点播（电影/电视剧/综艺/动漫/纪录/少儿 6 分类 + 首页推荐）由
+ * {@link RenYiBoVodSourceLoader} 提供，并在 {@link #loadAllLiveAsM3u} 末尾
+ * <b>追加</b>到同一份 M3U —— 源5 由此组织为「直播 5 组 + 点播 7 组」两大类。
+ * 点播部分当前为「明文+骨架落地」，不发起任何 VOD 网络请求。
  */
 public final class RenYiBoSourceLoader {
 
@@ -78,10 +84,8 @@ public final class RenYiBoSourceLoader {
             "zb-ynws", "zb-hebws", "zb-jxws", "zb-ahws",
             // ── 教育 (3) ──
             "zb-cetv1", "zb-cetv2", "zb-cetv4",
-            // ── 地方 (22) ──
-            "zb-fz1", "zb-ly1", "zb-xm1", "zb-qz1", "zb-zz1", "zb-xm2", "zb-xm3", "zb-xm4",
-            "zb-xm5", "zb-xm6", "zb-xm7", "zb-xm8", "zb-xm9", "zb-xm10", "zb-pt1", "zb-sm1",
-            "zb-nd1", "zb-np1", "zb-klg", "zb-klcd", "zb-csxw", "zb-ydds",
+            // ★【2026-10-13 分组合并】「地方」分组已整体删除（22 个频道随分组移除），
+            // 卫视/教育/特色 频道并入央视（见 groupOf）。
             // ── 特色 (27) ──
             "zb-cgtn", "zb-jykt", "zb-hnly", "zb-hnds", "zb-hndy",
             "zb-zjxw", "zb-zjse", "zb-jsxw", "zb-zjgj", "zb-jsgj",
@@ -136,6 +140,8 @@ public final class RenYiBoSourceLoader {
         HashSet<String> seen = new HashSet<>();
         int written = 0, dup = 0;
         for (String[] it : items) {
+            // 【2026-10-13 分组合并】groupOf 返回 null = 已删除分组（地方），防御性跳过
+            if (it[2] == null) continue;
             // ★【同名同流去重】接口对 zb-cctv5+ 会返回与 zb-cctv5 完全相同的 name+url
             //   （该 ID 在服务端无数据，带 "+" 被当空格→回退到 zb-cctv5）。
             //   若不去重，列表里会出现两条「CCTV5体育」且地址相同：切台序号错位、观感重复。
@@ -147,7 +153,10 @@ public final class RenYiBoSourceLoader {
             }
             sb.append("#EXTINF:-1 tvg-id=\"").append(TVG_PREFIX).append(esc(it[0]))
               .append("\" tvg-name=\"").append(esc(it[1]))
-              .append("\" group-title=\"").append(esc(it[2]))
+              // 【2026-10-13 台标】给源5 直播频道补 tvg-logo（对齐内置源1 的 logo.catvod.com 图床）。
+              // live.php 域名本身不下发 logo 字段，故按频道名推导 logo.catvod.com 的台标文件名。
+              .append("\" tvg-logo=\"").append(esc(logoTvgUrl(it[1]))).append("\"")
+              .append(" group-title=\"").append(esc(it[2]))
               .append("\",").append(esc(it[1])).append("\n");
             // ★【2026-10-07 惰性解析·协议串】行地址 = renyibo://<apiId>（参照咪咕 nowtv://<tvId>）。
             //   live.php 下发的 php 跳转地址里 ZY- token 存活期极短（实测 2 分钟即失效），
@@ -158,6 +167,33 @@ public final class RenYiBoSourceLoader {
         }
         LogBridge.i(TAG, "任意播(爱其意)源5：取回 " + written + " / " + IDS.length + " 个频道"
                 + (dup > 0 ? "（同名同流去重 " + dup + " 条）" : ""));
+
+        // 【2026-10-13 分组合并】卫视/教育/特色 已并入央视；「地方」分组及频道已删除（groupOf 返回 null 的防御性兜底）
+        int mergedCctv = 0;
+        for (String[] it : items) {
+            if ("央视".equals(it[2])) mergedCctv++;
+        }
+        LogBridge.i(TAG, "源5：卫视/教育/特色 已合并入央视分组，共 " + mergedCctv
+                + " 个频道（地方分组已删除）");
+
+        // ── 【2026-10-12 VOD 移植】直播之后追加影视点播分组 ──
+        //   源5 组织为「两大类」：直播 1 组（央视，原央视/卫视/教育/特色合并）+
+        //   点播 8 组（首页推荐 + 电影/电视剧/综艺/动漫/纪录/少儿/短剧）。
+        //   点播部分见 RenYiBoVodSourceLoader：本期为「明文+骨架落地」，
+        //   不发任何网络请求，条目来自抓包明文；加密调用留桩待补齐。
+        //   ⚠️ 直播部分逻辑保持完全不变（12 线程并发仅用于既有 live.php 取链，
+        //   不新增任何对 naiqiyi.php 的请求）。
+        try {
+            String vod = RenYiBoVodSourceLoader.buildVodM3uFragment();
+            if (vod != null && !vod.isEmpty()) {
+                sb.append(vod);
+                LogBridge.i(TAG, "任意播(爱其意)源5：已追加影视点播分组（"
+                        + RenYiBoVodSourceLoader.categorySummary().size() + " 个分类 + 首页推荐）");
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "源5点播分组生成失败（不影响直播）：" + t.getMessage());
+        }
+
         if (written > 0) {
             sCachedM3u = sb.toString();
             sCachedM3uAtMs = System.currentTimeMillis();
@@ -326,21 +362,47 @@ public final class RenYiBoSourceLoader {
         return url;
     }
 
-    /** 由频道 ID 推导分组（与爱其意端一致） */
+    /** 由频道 ID 推导分组（返回 null 表示该频道已被移除，不进入列表）。 */
     private static String groupOf(String id) {
-        if (id.startsWith("zb-cctv")) return "央视";
-        if (id.endsWith("ws") && !id.startsWith("zb-cctv")) return "卫视";
-        if (id.startsWith("zb-cetv")) return "教育";
-        // 「法治天地」是中央/专题频道，非地方台：前缀虽含 zb-fz，需排除
-        if ("zb-fztd".equals(id)) return "特色";
+        // 【2026-10-13 分组合并】「卫视」「教育」「特色」并入「央视」；「地方」分组整个删除。
+        if ("zb-fztd".equals(id)) return "央视";   // 法治天地是中央/专题频道，例外先判（含 "zb-fz" 前缀）
         if (hasAnyPrefix(id, "zb-xm", "zb-qz", "zb-zz", "zb-pt", "zb-sm", "zb-nd", "zb-np",
-                "zb-klg", "zb-klcd", "zb-fz", "zb-ly", "zb-csxw", "zb-ydds")) return "地方";
-        return "特色";
+                "zb-klg", "zb-klcd", "zb-fz", "zb-ly", "zb-csxw", "zb-ydds")) return null; // 原「地方」→ 移除
+        return "央视";                              // 央视/卫视/教育/特色 全部并入央视
     }
 
     private static boolean hasAnyPrefix(String s, String... prefixes) {
         for (String p : prefixes) if (s.startsWith(p)) return true;
         return false;
+    }
+
+    /**
+     * 【2026-10-13 台标】按频道名推导 logo.catvod.com 台标 URL（对齐内置源1 playlist.m3u 的命名：
+     * {@code https://logo.catvod.com/<链路名>.png}）。
+     *
+     * <p>规则：取频道名前导 ASCII 段（如 {@code CCTV1综合} → {@code CCTV1}、{@code CETV1综合教育}
+     * → {@code CETV1}）；无前导 ASCII 的中文台名（如 {@code 浙江卫视}）则整体作为文件名。
+     * 图床上不存在该文件时 ChannelLogoLoader 会回退至本地 {@code ic_channel_logo_placeholder} 兜底，不影响展示。
+     */
+    private static String logoTvgUrl(String name) {
+        if (name == null || name.isEmpty()) return "";
+        String ascii = leadingAsciiTag(name);
+        String tag = ascii.isEmpty() ? name : ascii;
+        return "https://logo.catvod.com/" + tag + ".png";
+    }
+
+    /** 取频道名前导 ASCII 段（字母/数字/符号）；首个中文即截断返回前缀（无前导则返回空串）。 */
+    private static String leadingAsciiTag(String name) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c < 0x80 && c != ' ' && c != '\t') {
+                sb.append(c);
+            } else {
+                break;
+            }
+        }
+        return sb.toString();
     }
 
     private static String esc(String s) {

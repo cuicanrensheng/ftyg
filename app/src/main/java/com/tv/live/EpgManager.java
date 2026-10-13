@@ -630,6 +630,31 @@ public class EpgManager {
             return new ArrayList<>();
         }
 
+        // 【2026-10-12】内置源5（aiqiyi）VOD 频道：EPG 面板改为「选集列表」（参照源7 模式）。
+        //   只依赖 channelId 前缀 renyibo-vod: 判定，源1~7 其它频道行为零变化。
+        //   只读内存缓存（不联网）；未命中则后台抓一次 video_detail（与取流同端点、
+        //   同双闸门约束），完成后通知面板重渲染。项 customPlayUrl 已是视频_detail
+        //   明文里的直链 m3u8，点击即播（无需起播惰性解析）。
+        String renyiboVodId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(channel.getChannelId());
+        if (!TextUtils.isEmpty(renyiboVodId)) {
+            List<Channel.EpgItem> episodes =
+                    com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodEpisodes(renyiboVodId);
+            if (episodes != null && !episodes.isEmpty()) {
+                return episodes;
+            }
+            final String vid = renyiboVodId;
+            AppExecutors.io(() -> {
+                List<Channel.EpgItem> l =
+                        com.tv.live.renyibo.RenYiBoVodSourceLoader.fetchVodEpisodes(vid);
+                if (l != null && !l.isEmpty()) {
+                    LogBridge.i("EpgManager", "【EPG·源5】选集列表就绪 vodId=" + vid
+                            + " 共 " + l.size() + " 项");
+                    notifyEpgDataReady();
+                }
+            });
+            return new ArrayList<>();
+        }
+
         // 【2026-10-08】咪咕轮播/剧场频道（channelId = nowtv:<tvId>）：优先用咪咕自带的
         //   轮播节目单（播放时顺带缓存，零额外请求）。这类频道在 XMLTV 广播节目单里
         //   通常匹配不到（频道名是「电影-科幻」这类聚合名），原先面板只能空白。
@@ -1269,6 +1294,18 @@ public class EpgManager {
                         }
                     }
                 }
+                // 【2026-10-13】回看/自定义选集自动定位：定位「当前正在播放」的项，
+                // 而非按墙钟时间（源5/源7 选集项 time 恒空 → 永远定位第一集；
+                // 普通源回看目标时间 ≠ 现在 → 定位到直播中节目）。匹配不到维持原行为。
+                Channel.EpgItem curPlaying = findCurrentPlayingItem(currentChannel, data);
+                if (curPlaying != null) {
+                    int cp = data.indexOf(curPlaying);
+                    if (cp >= 0) {
+                        playingIndex = cp;
+                        LogBridge.i("EpgManager", "【EPG】自动定位当前播放项 [" + cp + "] "
+                                + curPlaying.title);
+                    }
+                }
                 final List<Channel.EpgItem> finalData = data;
                 final Channel finalChannel = currentChannel;
                 ((MainActivity) context).runOnUiThread(() -> {
@@ -1297,8 +1334,74 @@ public class EpgManager {
             });
         }
 
+        /**
+         * 【2026-10-13】回看/自定义选集下，找「当前正在播放」的 EPG 项：
+         * ① 自定义选集（customPlayUrl 非空）：源5 按 currentUrl 与选集项直链全等；
+         *    源7 按 afhgrjCurNid 解析 afhgrj://&lt;vodId&gt;-&lt;sid&gt;-&lt;nid&gt; 匹配；
+         * ② 普通源时移回看（playseek）：仅回看模式，解析 url 中 playseek=YYYY…HH:mm
+         *    与节目起点时间对齐。
+         * 匹配不到返回 null（维持原墙钟定位行为）。
+         */
+        private Channel.EpgItem findCurrentPlayingItem(Channel ch, List<Channel.EpgItem> data) {
+            if (data == null || data.isEmpty()) return null;
+            try {
+                TVPlayerManager tvm = TVPlayerManager.getInstance(context);
+                if (tvm == null) return null;
+                String curUrl = tvm.getCurrentUrl();
+                boolean isCustomPanel = !TextUtils.isEmpty(data.get(0).customPlayUrl);
+                if (isCustomPanel) {
+                    if (!TextUtils.isEmpty(curUrl)) {
+                        for (Channel.EpgItem it : data) {
+                            if (curUrl.equals(it.customPlayUrl)) return it; // 源5：直链全等
+                        }
+                    }
+                    int nid = tvm.getAfhgrjCurNid(); // 源7：当前集
+                    if (nid > 0) {
+                        for (Channel.EpgItem it : data) {
+                            String cp = it.customPlayUrl;
+                            if (cp != null && cp.startsWith("afhgrj://")) {
+                                String body = cp.substring("afhgrj://".length());
+                                String[] p = body.split("-");
+                                if (p.length >= 3 && String.valueOf(nid).equals(p[p.length - 1]))
+                                    return it;
+                            }
+                        }
+                    }
+                    return null;
+                }
+                // 普通源：回看模式 + playseek 目标时间对齐
+                if (!(context instanceof MainActivity)) return null;
+                if (!((MainActivity) context).isInCatchUpMode()) return null;
+                String hm = extractPlayseekHm(curUrl);
+                if (hm == null) return null;
+                for (Channel.EpgItem it : data) {
+                    if (it.time != null && it.time.startsWith(hm)) return it;
+                }
+            } catch (Throwable ignored) {
+            }
+            return null;
+        }
+
+        /** 从 url 的 playseek=YYYY-MM-DD HH:mm:ss-… 参数取 HH:mm；无则 null。 */
+        private static String extractPlayseekHm(String url) {
+            if (url == null) return null;
+            int k = url.indexOf("playseek=");
+            if (k < 0) return null;
+            String rest = url.substring(k + "playseek=".length());
+            if (rest.length() < 16) return null;
+            String hm = rest.substring(11, 16);
+            return hm.matches("\\d{2}:\\d{2}") ? hm : null;
+        }
+
         private void scrollToCurrentProgram(List<Channel.EpgItem> epgList) {
             if (epgList == null || epgList.isEmpty() || selectDayIndex != 0) {
+                return;
+            }
+            // 【2026-10-13】回看/自定义选集已按「当前播放项」定位时，禁止墙钟居中覆盖
+            boolean custom = !TextUtils.isEmpty(epgList.get(0).customPlayUrl);
+            boolean catchUp = (context instanceof MainActivity)
+                    && ((MainActivity) context).isInCatchUpMode();
+            if (custom || catchUp) {
                 return;
             }
             String now = getNow();
@@ -1407,10 +1510,12 @@ public class EpgManager {
                     String key = actionTag.key;
 
                     if (actionTag.isPast) {
-                        // ★【2026-10-10】内置源7（afhgrj 影视）：集数项携带 customPlayUrl，
-                        //   点击直接播放该集（起播时再由 AfhgrjUrlResolver 惰性解析真实 m3u8）。
+                        // ★【2026-10-10】内置源7（afhgrj 影视）+【2026-10-12】内置源5（aiqiyi VOD）：
+                        //   集数/选集项携带 customPlayUrl，点击直接播放。源7 起播时由
+                        //   AfhgrjUrlResolver 惰性解析真实 m3u8；源5 已直接携带 video_detail
+                        //   明文里的直链 m3u8，无需二次解析。
                         if (item != null && !TextUtils.isEmpty(item.customPlayUrl)) {
-                            playAfhgrjEpisode(item);
+                            playCustomEpisode(item);
                             return;
                         }
                         // ★【2026-10-08】咪咕轮播节目：走后端回看接口
@@ -1548,15 +1653,16 @@ public class EpgManager {
             }
 
             /**
-             * 【2026-10-10】内置源7（afhgrj 影视）切集：集数项携带 {@code customPlayUrl}
-             * （{@code afhgrj://<vodId>-<sid>-<nid>}），直接交给播放器 —— 起播那一刻才由
-             * {@code TVPlayerManager} 抓播放页取真实 m3u8（惰性解析）。
+             * 【2026-10-10/12】自定义播放项切集（内置源7 afhgrj 影视 + 内置源5 aiqiyi VOD）：
+             * 选集项携带 {@code customPlayUrl}（源7：{@code afhgrj://<vodId>-<sid>-<nid>}，
+             * 起播那一刻才由 {@code TVPlayerManager} 抓播放页取真实 m3u8；源5：video_detail
+             * 明文内的直链 m3u8），直接交给播放器。
              *
              * <p>【2026-10-10 回归修复】与源1 的「过去节目回看」一致，进入 {@code catchUpMode}
-             * （回看模式）：这样长按不再弹设置、双击唤起控制栏（见 GestureManager）对源7 同样生效，
-             * 且无需任何源7 专属特判即可隔离于其它源。
+             * （回看模式）：这样长按不再弹设置、双击唤起控制栏（见 GestureManager）对源7/源5
+             * 同样生效，且无需任何专属特判即可隔离于其它源。
              */
-            private void playAfhgrjEpisode(final Channel.EpgItem item) {
+            private void playCustomEpisode(final Channel.EpgItem item) {
                 final Context c = ctx;
                 if (!(c instanceof MainActivity)) return;
                 MainActivity activity = (MainActivity) c;
@@ -1568,7 +1674,7 @@ public class EpgManager {
                 activity.showExoController();
                 activity.mPlayerManager.playUrl(item.customPlayUrl,
                         currentChannel.getName(), currentChannel);
-                LogBridge.i("EpgManager", "【EPG·源7】切集播放：" + item.title
+                LogBridge.i("EpgManager", "【EPG·自定义】切集播放：" + item.title
                         + " → " + item.customPlayUrl);
                 Toast.makeText(c, "播放：" + item.title, Toast.LENGTH_SHORT).show();
             }

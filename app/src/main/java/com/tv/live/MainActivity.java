@@ -484,8 +484,12 @@ public class MainActivity extends AppCompatActivity {
                             return true;
                         }
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                        if (isInCatchUpMode && playerControlManager != null) {
-
+                        // 【2026-10-12 修复】回看模式下打开频道面板时，左右键应交给面板换台/浏览：
+                        // 面板打开期间暂时禁用播放器控制栏的进度条（快退），否则左右键被 seek 吞掉
+                        // 面板无法切台。仅当回看模式 && 面板未打开时才走进度条快退。
+                        if (isInCatchUpMode && !panelOpen && playerControlManager != null) {
+                            LogBridge.d("MainActivity", "回看模式左右键→进度条seek(面板未打开) key="
+                                    + (keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? "左" : "右"));
                             if (event.getRepeatCount() == 0) {
                                 playerControlManager.seekBackward();
                                 longPressKeyCode = keyCode;
@@ -499,7 +503,10 @@ public class MainActivity extends AppCompatActivity {
                             return true;
                         }
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        if (isInCatchUpMode && playerControlManager != null) {
+                        // 【2026-10-12 修复】同左键：面板打开期间禁用进度条快进，左右键归还面板。
+                        if (isInCatchUpMode && !panelOpen && playerControlManager != null) {
+                            LogBridge.d("MainActivity", "回看模式左右键→进度条seek(面板未打开) key="
+                                    + (keyCode == KeyEvent.KEYCODE_DPAD_LEFT ? "左" : "右"));
                             if (event.getRepeatCount() == 0) {
                                 playerControlManager.seekForward();
                                 longPressKeyCode = keyCode;
@@ -1262,17 +1269,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 【2026-10-10】单击（OK）动作分发：源7 进入回看模式（点集数）后，单击应唤起
-     * 频道/集数面板以便换集 —— 但 {@link #togglePanel()} 带回看守卫（回看模式返回），
-     * 故源7 单独绕开守卫直接开面板；其它源仍走带守卫的 {@link #togglePanel()}，
-     * 让源1 等的时移回看行为完全不变（只对源7 生效）。
+     * 【2026-10-10/13】单击（OK）动作分发：回看模式（时移回看 / 咪咕回看 / 源5·源7 选集）
+     * 下，单击应唤起频道面板以便切台、换集 —— 但 {@link #togglePanel()} 带回看守卫
+     * （回看模式直接返回）。此前只给源7/源5 单开通道，源1/源6 等走手势单击仍打不开面板；
+     * 现改为<b>按 {@code isInCatchUpMode} 统一绕开守卫</b>，所有内置源行为一致，
+     * 未来新增 VOD/回看源也无需再改此处。
      */
     public void handleSingleTap() {
-        boolean isSource7 = mPlayerManager != null
-                && com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(
-                        mPlayerManager.getCurrentChannel()) != null;
-        if (isSource7) {
+        if (isInCatchUpMode) {
             if (channelPanelController != null) {
+                LogBridge.d("MainActivity", "handleSingleTap: 回看模式绕开守卫唤起面板");
                 channelPanelController.togglePanel();
             }
             return;

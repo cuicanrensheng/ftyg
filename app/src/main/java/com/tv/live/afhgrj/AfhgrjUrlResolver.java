@@ -105,7 +105,37 @@ public final class AfhgrjUrlResolver {
      * 且是抽样 6 部片里 5 部都有的<b>唯一跨片通用 CDN</b>。这是「白名单兜底」：
      * 站点换域名后白名单会失效，届时由上面的测速逻辑自动接管。
      */
-    private static final String[] PREFERRED_HOSTS = { "play.ly166.com" };
+    private static final String[] PREFERRED_HOSTS = {
+            // 【2026-10-13 水印规避】原白名单 host "play.ly166.com" 已移除：
+            //   实测该 CDN 的正片分片内**烧录**了「249331.com 注册即送888！主营：棋牌 电子
+            //   真人 捕鱼 体育 电竞」横幅水印（压制在视频帧内，m3u8 层无法剥离），
+            //   故不再作为首选，改由 WATERMARK_HOST_MARKERS 统一降级为「兜底」。
+            //
+            // 【2026-10-13 线路体检·抽帧核验】把实测「干净且可达」的源7 CDN 提为优选，
+            //   让默认线路直接落在这类干净线上（命中后仍会过一次测速做可达性校验，
+            //   线路挂掉/被封时自动继续比别的线，不会因白名单而强选死线）。
+            //   样本：《吞噬星空》第01集三线路同帧对比（同一秒画面）——
+            //     sid=1 p.bvvvvvvvvv1f.com → 干净；sid=2 vod.feifei-kan.com → 干净；
+            //     sid=3 play.ly166.com:65 → 顶部博彩横幅（已降级）。
+            //   ⚠ 站点换域名后白名单会失效 → 自动退回测速选线，但「水印黑名单」始终生效。
+            "p.bvvvvvvvvv1f.com",
+            "vod.feifei-kan.com",
+    };
+
+    /**
+     * 【2026-10-13 水印规避】已知带「博彩烧录水印」的 CDN 主机特征（host 子串匹配，小写）。
+     *
+     * <p>背景：源7《吞噬星空》第 210 集三线路同日对比实测（抽帧核验）——
+     * <ul>
+     *   <li>sid=1 {@code v.baofeng9.com}（暴风系）：正片帧干净；</li>
+     *   <li>sid=2 {@code vip.ffzy-plays.com}（非凡系）：正片帧干净；</li>
+     *   <li>sid=3 {@code play.ly166.com}：正片帧<b>烧录博彩横幅水印</b>（片头/正片全程可见）。</li>
+     * </ul>
+     * 由于该水印压制在视频编码帧内（不是独立广告分片），广告剥离器（只作用于 m3u8 清单）
+     * 无法去除 → 唯一可行做法是<b>选线时避开这些 CDN</b>：命中即跳过并降级为兜底，
+     * 优先采用干净线路；只有全部干净线路不可达时才回退带水印线路（保证仍有画面）。</p>
+     */
+    private static final String[] WATERMARK_HOST_MARKERS = { "ly166.com" };
 
     /**
      * 线路测速结果短期缓存：{@code vodId + "-" + sid} → [kbps, 时间戳]。
@@ -213,7 +243,17 @@ public final class AfhgrjUrlResolver {
             sResolvedCacheTs.remove(key);
             return null;
         }
-        return sResolvedCache.get(key);
+        String v = sResolvedCache.get(key);
+        // 【2026-10-13 水印规避】缓存地址若落在带烧录水印的 CDN → 立即作废，强制重走选线。
+        // （否则改了选线策略也会被旧缓存短路，用户依旧看到 ly166 的水印）
+        if (v != null && isWatermarkHost(v)) {
+            LogBridge.w(TAG, "源7(影视) 落地缓存命中带水印线路，作废并重解析："
+                    + v.substring(0, Math.min(110, v.length())));
+            sResolvedCache.remove(key);
+            sResolvedCacheTs.remove(key);
+            return null;
+        }
+        return v;
     }
 
     /** 写入落地缓存（内存 + 异步落盘）。 */
@@ -228,7 +268,10 @@ public final class AfhgrjUrlResolver {
     /** 落地缓存是否处于「免检信任期」内（10 分钟）：是则直接复用，不发任何请求。 */
     private static boolean isResolvedFresh(String key) {
         Long ts = sResolvedCacheTs.get(key);
-        return ts != null && (System.currentTimeMillis() - ts) <= RESOLVED_TRUST_MS;
+        if (ts == null || (System.currentTimeMillis() - ts) > RESOLVED_TRUST_MS) return false;
+        // 【2026-10-13 水印规避】带水印线路的缓存不算「免检新鲜」（应改走完整选线）
+        String v = sResolvedCache.get(key);
+        return v == null || !isWatermarkHost(v);
     }
 
     /**
@@ -628,6 +671,9 @@ public final class AfhgrjUrlResolver {
         String bestM3u8 = null;
         int bestSid = requestedSid;
         int bestKbps = -1;
+        // 【2026-10-13 水印规避】带烧录水印线路的兜底候选（仅当无任何干净线路可用时才采用）
+        String wmFallbackM3u8 = null;
+        int wmFallbackSid = requestedSid;
         for (int cand : candidates) {
             String pageUrl = BASE + "/yplay/" + vodId + "-" + cand + "-" + nid + "/";
             String html = getText(pageUrl);
@@ -640,6 +686,9 @@ public final class AfhgrjUrlResolver {
                 LogBridge.w(TAG, "源7(影视) 未解析到 player_aaaa url：" + pageUrl);
                 continue;
             }
+            // 【2026-10-13 线路体检】逐条 sid 打印 host + 直链，供 PC 逐线抽帧判定广告/水印。
+            LogBridge.i(TAG, "源7(影视) 线路体检 vodId=" + vodId + " sid=" + cand
+                    + " host=" + hostOf(m3u8) + " url=" + m3u8);
             if (firstM3u8 == null) {
                 firstM3u8 = m3u8;
                 firstSid = cand;
@@ -649,6 +698,18 @@ public final class AfhgrjUrlResolver {
                 bestSid = cand;
                 bestKbps = 0;
                 break;
+            }
+
+            // ⓪ 【2026-10-13 水印规避】该线路正片带博彩烧录水印（如 ly166 系）→
+            //    不作为首选，仅记录为兜底；继续比较其它线路，避免整段正片画面带水印。
+            if (isWatermarkHost(m3u8)) {
+                if (wmFallbackM3u8 == null) {
+                    wmFallbackM3u8 = m3u8;
+                    wmFallbackSid = cand;
+                }
+                LogBridge.w(TAG, "源7(影视) 线路带烧录水印，降级为兜底 sid=" + cand
+                        + " host=" + hostOf(m3u8));
+                continue;
             }
 
             // ① 白名单命中：实测最快的 CDN。仍要过一次测速——测速本身就是可达性校验，
@@ -693,6 +754,14 @@ public final class AfhgrjUrlResolver {
                 bestSid = cand;
             }
             if (kbps >= SPEED_ACCEPT_KBPS) break;
+        }
+
+        // 【2026-10-13 水印规避】没有任何干净线路可用 → 回退到带水印线路（保证仍有画面）
+        if (bestM3u8 == null && wmFallbackM3u8 != null) {
+            LogBridge.w(TAG, "源7(影视) 全部线路带水印或不可达，回退带水印线路 sid=" + wmFallbackSid);
+            bestM3u8 = wmFallbackM3u8;
+            bestSid = wmFallbackSid;
+            bestKbps = 0;
         }
 
         if (bestM3u8 != null) {
@@ -998,6 +1067,21 @@ public final class AfhgrjUrlResolver {
         if (h.isEmpty()) return false;
         for (String p : PREFERRED_HOSTS) {
             if (h.equals(p) || h.endsWith("." + p)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 【2026-10-13 水印规避】m3u8 是否落在「带博彩烧录水印」的 CDN 上。
+     *
+     * <p>命中 {@link #WATERMARK_HOST_MARKERS} 任一子串即视为带水印线路，选线时降级为兜底。
+     * 大小写不敏感（hostOf 一般已小写，这里再兜一层）。</p>
+     */
+    private static boolean isWatermarkHost(String url) {
+        String h = hostOf(url).toLowerCase(java.util.Locale.ROOT);
+        if (h.isEmpty()) return false;
+        for (String m : WATERMARK_HOST_MARKERS) {
+            if (h.contains(m)) return true;
         }
         return false;
     }

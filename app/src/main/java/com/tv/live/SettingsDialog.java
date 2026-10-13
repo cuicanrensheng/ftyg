@@ -891,6 +891,23 @@ public class SettingsDialog extends android.app.Dialog {
     }
 
     /**
+     * 【2026-10-13】源5 线路的品质标签是否为「真实品质」：非空、不含「集」字、
+     * 且不是纯数字。剧集的 url 段标签是「第NN集」或纯数字（如 "1"），不属清晰度轴。
+     */
+    private static boolean isRealQuality(String q) {
+        if (q == null || q.isEmpty() || q.contains("集")) return false;
+        String t = q.trim();
+        boolean allDigits = !t.isEmpty();
+        for (int i = 0; i < t.length(); i++) {
+            if (!Character.isDigit(t.charAt(i))) {
+                allDigits = false;
+                break;
+            }
+        }
+        return !allDigits;
+    }
+
+    /**
      * 刷新「频道线路选择 / 清晰度选择」两行状态文字。
      *
      * 【2026-09-29 抽出】虎牙频道的线路表/清晰度表是**解析完成后**才写进 TVPlayerManager 的
@@ -975,6 +992,36 @@ public class SettingsDialog extends android.app.Dialog {
                 return;
             }
 
+            // 【2026-10-13】源5（aiqiyi VOD）频道：线路 = video_detail 的 vod_url_with_player
+            //   播放源；清晰度 = 该线路 url 的「品质$直链」标签（每线一档）。
+            //   轴未就绪时惰性抓取（复用选集 single-flight），就绪后回调刷新本方法。
+            String rnVid = currentChannel != null
+                    ? com.tv.live.renyibo.RenYiBoVodSourceLoader
+                            .vodIdOfChannelId(currentChannel.getChannelId()) : "";
+            if (!TextUtils.isEmpty(rnVid)) {
+                java.util.List<String[]> rnLines =
+                        com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLines(rnVid);
+                if (rnLines == null || rnLines.isEmpty()) {
+                    tv_channel_line.setText("加载中…");
+                    com.tv.live.renyibo.RenYiBoVodSourceLoader
+                            .ensureVodLinesAsync(rnVid, this::refreshStreamStatusRows);
+                } else {
+                    int rnIdx = com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLineIndex(rnVid);
+                    if (rnIdx < 0 || rnIdx >= rnLines.size()) rnIdx = 0;
+                    String[] rnLn = rnLines.get(rnIdx);
+                    // 【2026-10-13 修正】剧集的段标签是「第NN集」不是品质：线路行只显示播放源名，
+                    //   清晰度行显示「自适应」（集数切换由 EPG 面板负责）；电影才显示真实品质。
+                    if (isRealQuality(rnLn[2])) {
+                        tv_channel_line.setText(rnLn[0] + " · " + rnLn[2]);
+                        tv_resolution_status.setText(rnLn[2]);
+                    } else {
+                        tv_channel_line.setText(rnLn[0]);
+                        tv_resolution_status.setText("自适应");
+                    }
+                }
+                return;
+            }
+
             // 非虎牙频道（或无子线路）：沿用「主源 / 源N」+ 真实线路名
             int realLineUi = playerManager.getCurrentHuyaLineUiIndex();
             if (realLineUi >= 0) currentLineIndex = realLineUi;
@@ -1001,6 +1048,14 @@ public class SettingsDialog extends android.app.Dialog {
         // 【2026-10-11】源7（afhgrj 影视）频道：线路 = 该片播放源 sid，切换走 switchAfhgrjLine
         if (playerManager.isAfhgrjChannel()) {
             showAfhgrjLineDialog(playerManager);
+            return;
+        }
+
+        // 【2026-10-13】源5（aiqiyi VOD）频道：线路 = video_detail 的播放源，切换走本类弹窗
+        String rnVid = com.tv.live.renyibo.RenYiBoVodSourceLoader
+                .vodIdOfChannelId(currentChannel.getChannelId());
+        if (!TextUtils.isEmpty(rnVid)) {
+            showRenyiboVodLineDialog(playerManager, currentChannel, rnVid);
             return;
         }
 
@@ -1193,6 +1248,39 @@ public class SettingsDialog extends android.app.Dialog {
         });
     }
 
+    /**
+     * 【2026-10-13】源5（aiqiyi VOD）线路弹窗：列出该片全部<b>直链可播</b>播放源，
+     * 每项形如「畅享(白天用) · HD中字」（名称 · 品质标签）。选中即切该线并重播。
+     */
+    private void showRenyiboVodLineDialog(final TVPlayerManager playerManager,
+                                          final Channel currentChannel, final String vodId) {
+        java.util.List<String[]> lines =
+                com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLines(vodId);
+        if (lines == null || lines.isEmpty()) {
+            Toast.makeText(getContext(), "源5线路加载中，请稍候再试", Toast.LENGTH_SHORT).show();
+            com.tv.live.renyibo.RenYiBoVodSourceLoader
+                    .ensureVodLinesAsync(vodId, this::refreshStreamStatusRows);
+            return;
+        }
+        String[] lineArray = new String[lines.size()];
+        for (int i = 0; i < lines.size(); i++) {
+            String[] ln = lines.get(i);
+            // 【2026-10-13 修正】剧集段标签（第NN集）不是品质：只显示播放源名，不带「· 品质」。
+            lineArray[i] = isRealQuality(ln[2]) ? (ln[0] + " · " + ln[2]) : ln[0];
+        }
+        int cur = com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLineIndex(vodId);
+        int checkedItem = Math.max(0, Math.min(cur, lines.size() - 1));
+
+        showCommonSelectionDialog("频道线路选择", lineArray, checkedItem, (which) -> {
+            String url = com.tv.live.renyibo.RenYiBoVodSourceLoader.switchVodLine(vodId, which);
+            if (url != null) {
+                playerManager.playUrl(url, currentChannel.getName(), currentChannel);
+            }
+            refreshStreamStatusRows();
+            Toast.makeText(getContext(), "已切换到：" + lineArray[which], Toast.LENGTH_SHORT).show();
+        });
+    }
+
     private void initRedirectDefaultConfig() {
         if (!sp.contains(KEY_REDIRECT_MAX_COUNT)) {
             SharedPreferences.Editor editor = sp.edit();
@@ -1251,6 +1339,58 @@ public class SettingsDialog extends android.app.Dialog {
             showCommonSelectionDialog("清晰度选择", a7Items, 0, (which) -> {
                 tv_resolution_status.setText(a7Items[which]);
                 Toast.makeText(getContext(), "已切换至: " + a7Items[which], Toast.LENGTH_SHORT).show();
+            });
+            return;
+        }
+
+        // 【2026-10-13】源5（aiqiyi VOD）频道：清晰度 = 各播放源「品质」标签（每线一档），
+        //   选中某个品质即切到携带该品质的线路并重播。
+        String rnVid2 = cxChannel != null
+                ? com.tv.live.renyibo.RenYiBoVodSourceLoader
+                        .vodIdOfChannelId(cxChannel.getChannelId()) : "";
+        if (!TextUtils.isEmpty(rnVid2)) {
+            java.util.List<String[]> rnLines =
+                    com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLines(rnVid2);
+            if (rnLines == null || rnLines.isEmpty()) {
+                Toast.makeText(getContext(), "源5清晰度加载中，请稍候再试", Toast.LENGTH_SHORT).show();
+                com.tv.live.renyibo.RenYiBoVodSourceLoader
+                        .ensureVodLinesAsync(rnVid2, this::refreshStreamStatusRows);
+                return;
+            }
+            java.util.LinkedHashMap<String, Integer> qIdx = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < rnLines.size(); i++) {
+                String q = rnLines.get(i)[2];
+                // 【2026-10-13 修正】只有真实品质（HD中字/1080P 等）才进入清晰度轴；
+                //   剧集的「第NN集」段标签不列（集数切换走 EPG 面板）。
+                if (!isRealQuality(q)) continue;
+                if (!qIdx.containsKey(q)) qIdx.put(q, i);
+            }
+            if (qIdx.isEmpty()) {
+                // 剧集类：无枚举品质 —— 与源7 一样只给「自适应」档。
+                String[] a5Items = {"自适应"};
+                showCommonSelectionDialog("清晰度选择", a5Items, 0, (which) -> {
+                    tv_resolution_status.setText(a5Items[which]);
+                    Toast.makeText(getContext(), "已切换至: " + a5Items[which], Toast.LENGTH_SHORT).show();
+                });
+                return;
+            }
+            String[] qArray = qIdx.keySet().toArray(new String[0]);
+            int ci = com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLineIndex(rnVid2);
+            if (ci < 0 || ci >= rnLines.size()) ci = 0;
+            String curQ = rnLines.get(ci)[2];
+            int checked = 0;
+            for (int i = 0; i < qArray.length; i++) {
+                if (qArray[i].equals(curQ)) { checked = i; break; }
+            }
+            showCommonSelectionDialog("清晰度选择", qArray, checked, (which) -> {
+                Integer lineIdx = qIdx.get(qArray[which]);
+                String url = com.tv.live.renyibo.RenYiBoVodSourceLoader
+                        .switchVodLine(rnVid2, lineIdx != null ? lineIdx : 0);
+                if (url != null && cxChannel != null) {
+                    playerManager.playUrl(url, cxChannel.getName(), cxChannel);
+                }
+                refreshStreamStatusRows();
+                Toast.makeText(getContext(), "已切换至: " + qArray[which], Toast.LENGTH_SHORT).show();
             });
             return;
         }

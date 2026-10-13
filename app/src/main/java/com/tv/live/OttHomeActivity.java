@@ -103,6 +103,8 @@ public class OttHomeActivity extends AppCompatActivity {
     private static final int EPG_LIST_MAX_HEIGHT_DP = 190;
     /** 【2026-10-11 源7】当前播放的集数下标（-1=未知/非源7），用于 EPG 面板高亮 */
     private int mCurrentAfhgrjEpisodeIdx = -1;
+    /** 【2026-10-13 源5】当前播放的选集下标（-1=未知/非源5），用于 renyibo EPG 面板高亮 */
+    private int mCurrentRenyiboEpisodeIdx = -1;
     private EpgManager.OnEpgDataReadyListener epgDataReadyListener;
 
     // ==================== 【2026-10-11】OTT 播放历史 + 源7 联播/续播 ====================
@@ -123,6 +125,8 @@ public class OttHomeActivity extends AppCompatActivity {
     private TVPlayerManager.OnPlayStateListener ottPlayStateListener;
     /** 【2026-10-11 源7 联播】专用回调（独立槽位，MainActivity 不会清它） */
     private TVPlayerManager.OnAfhgrjEpisodeListener afhgrjEpisodeListener;
+    /** 【2026-10-13 源5 联播】专用回调（独立槽位，与源7 各自独立，互不清理） */
+    private TVPlayerManager.OnRenyiboEpisodeListener renyiboEpisodeListener;
     private TextView tvMetadata;
     private TextView tvPreviewTip;
     private TextView tvBreadcrumb;
@@ -323,6 +327,8 @@ public class OttHomeActivity extends AppCompatActivity {
         gvChannel.setOnItemClickListener((parent, view, position, id) -> {
             if (position >= 0 && position < shownChannels.size()) {
                 playChannel(shownChannels.get(position));
+                // 【2026-10-13】网格点击频道立即全屏，取消 5s 自动全屏等待
+                enterFullscreenImmediately();
             }
         });
 
@@ -478,6 +484,34 @@ public class OttHomeActivity extends AppCompatActivity {
             }
         };
         mPlayerManager.setOnAfhgrjEpisodeListener(afhgrjEpisodeListener);
+
+        // 【2026-10-13 源5 联播】专用回调（独立槽位）：自动联播换集 → 同步 renyibo 选集面板
+        //   高亮 + 「正在播放·第N集」 + 播放历史；全部播完 → 退出全屏并收起控制栏（与源7 同行为）。
+        renyiboEpisodeListener = new TVPlayerManager.OnRenyiboEpisodeListener() {
+            @Override
+            public void onRenyiboEpisodeChanged(int ordinal) {
+                mCurrentRenyiboEpisodeIdx = Math.max(0, ordinal - 1);
+                Channel ch = playingChannel;
+                if (ch == null) return;
+                String vodId = com.tv.live.renyibo.RenYiBoVodSourceLoader
+                        .vodIdOfChannelId(ch.getChannelId());
+                if (!TextUtils.isEmpty(vodId)) {
+                    appConfig.addOttHistory(ch.getName(), vodId, ordinal);
+                }
+                renderHistoryPanel();
+                refreshEpgPanel(ch);
+                // 「正在播放 · 第N集」也要跟着联播更新（否则一直停在起播那一集）
+                refreshNowPlayingProgram();
+            }
+
+            @Override
+            public void onRenyiboAllEpisodesEnded() {
+                LogBridge.i(TAG, "【OTT·源5】全部集数播完 → 退出全屏并停止");
+                if (fullscreen) setFullscreen(false);
+                hideSource7Controller();
+            }
+        };
+        mPlayerManager.setOnRenyiboEpisodeListener(renyiboEpisodeListener);
 
         // 【2026-09-29 方案 A 电信 IPTV 风格】LiveInfo（分辨率/码率/格式/音频）回调刷元数据小字
         mPlayerManager.setOnLiveInfoUpdateListener(info -> mainHandler.post(() -> refreshMetadata()));
@@ -1006,6 +1040,8 @@ public class OttHomeActivity extends AppCompatActivity {
         int resumeIdx = (resumeOrdinal > 0) ? (resumeOrdinal - 1) : -1;
         mCurrentAfhgrjEpisodeIdx = (vodId != null) ? Math.max(0, resumeIdx) : -1;
         pendingResumeEpisodeIdx = -1;
+        // 【2026-10-13 源5】切台时清空源5 选集下标（联播/手动切集会重新写入）
+        mCurrentRenyiboEpisodeIdx = -1;
         String playUrl = channel.getPlayUrl();
         if (vodId != null && resumeIdx > 0) {
             Channel.EpgItem cachedEp = cachedAfhgrjEpisode(channel, resumeIdx);
@@ -1065,8 +1101,19 @@ public class OttHomeActivity extends AppCompatActivity {
      *  触摸点击被卡片自己消费、GridView.onItemClick 收不到 → 点频道无反应。这里显式接上。 */
     private void onChannelCardClick(int position) {
         if (position < 0 || position >= shownChannels.size()) return;
+        Channel clicked = shownChannels.get(position);
+        // 【2026-10-13 触摸修复】日志：确认触摸点击确实到达 playChannel 链路
+        LogBridge.i(TAG, "触摸点击频道卡片 position=" + position + " 频道=" + clicked.getName());
         if (gvChannel != null) gvChannel.setSelection(position);   // 让焦点框跟着走
-        playChannel(shownChannels.get(position));
+        playChannel(clicked);
+        // 【2026-10-13】触摸点击频道同样立即全屏，取消 5s 自动全屏等待
+        enterFullscreenImmediately();
+    }
+
+    /** 【2026-10-13】网格点击频道后立即全屏：取消 5s 自动全屏计时并直接进入全屏态。 */
+    private void enterFullscreenImmediately() {
+        cancelAutoFullscreen();
+        if (!fullscreen) setFullscreen(true);
     }
 
     /** 【2026-09-29】Channel 没有 equals/hashCode，源刷新后对象会整体换新，
@@ -1108,6 +1155,14 @@ public class OttHomeActivity extends AppCompatActivity {
                 //   用当前集下标 mCurrentAfhgrjEpisodeIdx 取标题作为「正在播放」。
                 if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null) {
                     int idx = mCurrentAfhgrjEpisodeIdx;
+                    if (idx < 0) idx = 0;
+                    if (idx < items.size() && items.get(idx) != null) {
+                        program = items.get(idx).title;
+                    }
+                } else if (!TextUtils.isEmpty(com.tv.live.renyibo.RenYiBoVodSourceLoader
+                        .vodIdOfChannelId(ch.getChannelId()))) {
+                    // 【2026-10-13 源5】renyibo-vod 选集：用 mCurrentRenyiboEpisodeIdx 取标题
+                    int idx = mCurrentRenyiboEpisodeIdx;
                     if (idx < 0) idx = 0;
                     if (idx < items.size() && items.get(idx) != null) {
                         program = items.get(idx).title;
@@ -1210,6 +1265,13 @@ public class OttHomeActivity extends AppCompatActivity {
             refreshAfhgrjEpgPanel(ch);
             return;
         }
+        // 【2026-10-12 源5】内置源5（aiqiyi VOD）与源7 同形态：EPG 面板为「选集列表」。
+        //   只依赖 channelId 前缀 renyibo-vod: 判定，源1~源7 其它频道行为零变化。
+        String rnVodId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId());
+        if (!TextUtils.isEmpty(rnVodId)) {
+            refreshRenyiboEpgPanel(ch);
+            return;
+        }
         List<Channel.EpgItem> items = null;
         try {
             EpgManager epg = EpgManager.getInstance(getApplicationContext());
@@ -1307,6 +1369,37 @@ public class OttHomeActivity extends AppCompatActivity {
     }
 
     /**
+     * 【2026-10-12】内置源5（aiqiyi VOD）在 OTT 左面板 EPG 区展示「选集列表」（与源7
+     * 集数列表同形态：每行一项、整行可点）。
+     *
+     * <p>数据源与直播模式完全一致：{@link EpgManager#getEpg(Channel)} 对
+     * {@code renyibo-vod:} 前缀频道返回选集项（{@code title=集数/清晰度}、
+     * {@code customPlayUrl=video_detail 明文里的直链 m3u8}）。只读内存缓存；未命中时
+     * EpgManager 会后台抓一次 video_detail，完成后 {@code notifyEpgDataReady()} →
+     * 本页已注册监听 → 自动重刷。行点击直接播放直链（无需起播惰性解析）。
+     */
+    private void refreshRenyiboEpgPanel(Channel ch) {
+        List<Channel.EpgItem> items = null;
+        try {
+            EpgManager epg = EpgManager.getInstance(getApplicationContext());
+            items = epg.getEpg(ch);
+        } catch (Exception ignored) {}
+        if (items == null || items.isEmpty()) {
+            // 选集尚未就绪（首次进入后台抓 video_detail 中）；就绪后由 EPG 监听器自动重刷
+            addEpgRow("选集加载中…", "", false);
+            return;
+        }
+        for (int i = 0; i < items.size(); i++) {
+            Channel.EpgItem it = items.get(i);
+            if (it == null) continue;
+            String title = TextUtils.isEmpty(it.title) ? ("第" + (i + 1) + "集") : it.title;
+            // 复用源7 的可点击行样式（点击 → playAfhgrjEpisodeOtt → 直接播放 customPlayUrl）；
+            // 【2026-10-13 源5 联播】用 mCurrentRenyiboEpisodeIdx 高亮当前播放的选集项。
+            addAfhgrjEpgRow(title, it, i == mCurrentRenyiboEpisodeIdx);
+        }
+    }
+
+    /**
      * 【2026-10-11】统一重连 OTT 左面板（预览卡 / 集数列表 / 历史记录 / 频道网格）的遥控焦点。
      *
      * <p>原布局 {@code 预览卡↓=网格}、{@code 网格←=预览卡} 是<b>闭环</b>，集数行/历史行
@@ -1393,20 +1486,28 @@ public class OttHomeActivity extends AppCompatActivity {
         return ch != null && com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null;
     }
 
+    /** 【2026-10-13】是否支持全屏播放器控制栏：源7（afhgrj）或源5（renyibo-vod）点播 */
+    private boolean isVodControllerEligible() {
+        Channel ch = playingChannel;
+        return ch != null && (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null
+                || isRenyiboVodChannel(ch));
+    }
+
     /**
-     * 【源7 专属】全屏下唤起播放器控制栏。
-     * 非全屏 / 非源7 / 播放器未就绪时直接返回，不做任何事（源1~源6 因此完全不受影响）。
+     * 【2026-10-11 源7 / 2026-10-13 扩展源5】全屏下唤起播放器控制栏（可拖动进度、±15s、继续/暂停）。
+     * 非全屏 / 非点播频道（源7 afhgrj、源5 renyibo-vod）/ 播放器未就绪时直接返回，
+     * 其它源因此完全不受影响。
      */
     private void showSource7Controller() {
         if (!fullscreen || playerView == null) return;
-        if (!isSource7Playing()) return;
+        if (!isVodControllerEligible()) return;
         if (playerView.getPlayer() == null) return;
         mainHandler.removeCallbacks(hideOttControllerRunnable);
         playerView.setUseController(true);
         playerView.showController();
         ottControllerShowing = true;
         mainHandler.postDelayed(hideOttControllerRunnable, CONTROLLER_HIDE_MS);
-        LogBridge.i(TAG, "【OTT·源7】唤起播放器控制栏（5s 后自动收起）");
+        LogBridge.i(TAG, "【OTT·点播】唤起播放器控制栏（源7/源5，5s 后自动收起）");
         // 遥控用：把焦点落到控制栏上（触摸用不需要焦点，拿不到就跳过）
         playerView.postDelayed(() -> {
             if (!ottControllerShowing || playerView == null) return;
@@ -1601,6 +1702,24 @@ public class OttHomeActivity extends AppCompatActivity {
     private void playAfhgrjEpisodeOtt(Channel.EpgItem item) {
         Channel ch = playingChannel;
         if (item == null || TextUtils.isEmpty(item.customPlayUrl) || ch == null) return;
+        // 【2026-10-13 源5】renyibo-vod 选集项走同一切集路径，但下标/历史记到源5 名下，
+        //   与源7 各自独立（自动联播回调同样只认各自的槽位）。
+        String rnVodId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId());
+        if (!TextUtils.isEmpty(rnVodId)) {
+            mCurrentRenyiboEpisodeIdx = indexOfAfhgrjEpisode(item);
+            if (mCurrentRenyiboEpisodeIdx >= 0) {
+                appConfig.addOttHistory(ch.getName(), rnVodId, mCurrentRenyiboEpisodeIdx + 1);
+                renderHistoryPanel();
+            }
+            LogBridge.i(TAG, "【OTT·源5·自定义】切集播放：" + item.title + " → " + item.customPlayUrl);
+            mPlayerManager.playUrl(item.customPlayUrl, ch.getName(), ch);
+            refreshEpgPanel(ch);
+            refreshNowPlayingProgram();
+            focusAfhgrjEpgRow(mCurrentRenyiboEpisodeIdx);
+            Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
         mCurrentAfhgrjEpisodeIdx = indexOfAfhgrjEpisode(item);
         // 【2026-10-11 播放历史 / 续播】把「看到第几集」记进历史：手动切集、自动联播、
         //   以及历史点播都汇到这一处，重启后即可据此续播。
@@ -1609,7 +1728,7 @@ public class OttHomeActivity extends AppCompatActivity {
             appConfig.addOttHistory(ch.getName(), vodId, mCurrentAfhgrjEpisodeIdx + 1);
             renderHistoryPanel();
         }
-        LogBridge.i(TAG, "【OTT·EPG·源7】切集播放：" + item.title + " → " + item.customPlayUrl);
+        LogBridge.i(TAG, "【OTT·EPG·自定义】切集播放：" + item.title + " → " + item.customPlayUrl);
         mPlayerManager.playUrl(item.customPlayUrl, ch.getName(), ch);
         refreshEpgPanel(ch);
         refreshNowPlayingProgram();
@@ -2247,9 +2366,9 @@ public class OttHomeActivity extends AppCompatActivity {
                     return true;
                 case KeyEvent.KEYCODE_DPAD_CENTER:
                 case KeyEvent.KEYCODE_ENTER:
-                    // 【2026-10-11 源7 专属】源7 全屏按确认 → 唤起播放器控制栏（不退出全屏）；
-                    //   源1~源6 维持原行为：确认键退出全屏。
-                    if (isSource7Playing()) {
+                    // 【2026-10-11 源7 / 2026-10-13 扩展源5】点播频道（源7/源5）全屏按确认 →
+                    //   唤起播放器控制栏（不退出全屏）；其它源维持原行为：确认键退出全屏。
+                    if (isVodControllerEligible()) {
                         showSource7Controller();
                         return true;
                     }
@@ -2325,6 +2444,9 @@ public class OttHomeActivity extends AppCompatActivity {
             if (mPlayerManager.getOnAfhgrjEpisodeListener() == afhgrjEpisodeListener) {
                 mPlayerManager.setOnAfhgrjEpisodeListener(null);
             }
+            if (mPlayerManager.getOnRenyiboEpisodeListener() == renyiboEpisodeListener) {
+                mPlayerManager.setOnRenyiboEpisodeListener(null);
+            }
             mPlayerManager.setOnPlayerViewRecreatedListener(null);
             if (isFinishing() && !switchingToLive) {
                 mPlayerManager.release();
@@ -2379,17 +2501,24 @@ public class OttHomeActivity extends AppCompatActivity {
 
             Channel channel = shownChannels.get(position);
             holder.name.setText(channel.getName());
-            // 【2026-09-29 频道台标】【2026-10-11 改版式】按内容形态选择缩放方式（图片区已改为铺满卡片）：
+            // 【2026-09-29 频道台标】【2026-10-11 改版式】【2026-10-13 电视视觉修复】按内容形态渲染：
             //   · 虎牙同看频道：台标来自直播封面，是 16:9 实拍截图 → centerCrop 满铺；
-            //   · 源7(afhgrj) 影视：绑定的是影视海报图（多为 2:3 竖版）→ centerCrop 满铺，
-            //     否则 fitCenter 会把竖版海报缩成中间一个小方块（即「图片太小」）；
-            //   · M3U / 畅享频道：台标是透明底 logo 图（方形 210×210、长条 640×320 等都有）
-            //     → 必须 fitCenter，用 centerCrop 会把 logo 上下裁掉只剩中间一条。
-            holder.logo.setScaleType(
-                    (channel.isTogetherWatch() || channel.isHuyaSdkTogetherWatch()
-                            || isAfhgrjChannel(channel))
-                            ? ImageView.ScaleType.CENTER_CROP
-                            : ImageView.ScaleType.FIT_CENTER);
+            //   · 源7(afhgrj) 影视 / 源5(renyibo-vod) 点播：绑定的是竖版海报图 → centerCrop 满铺；
+            //   · M3U / 畅享 / 源5 直播台标：透明底 logo（210×210、640×320 等）→ fitCenter，
+            //     且【电视修复】限制为 64×36dp 居中小块——之前 fitCenter 在 88dp 卡片里会把
+            //     长条台标撑到整宽（占卡 60-70%），电视上看「图片太大」。
+            final boolean posterStyle = channel.isTogetherWatch() || channel.isHuyaSdkTogetherWatch()
+                    || isAfhgrjChannel(channel) || isRenyiboVodChannel(channel);
+            if (posterStyle) {
+                holder.logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                holder.logo.setLayoutParams(new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            } else {
+                holder.logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(64), dp(36),
+                        Gravity.CENTER);
+                holder.logo.setLayoutParams(lp);
+            }
             // 加载频道台标（空/失败回退占位图，内部已做复用防错位）
             ChannelLogoLoader.getInstance(getApplicationContext())
                     .load(holder.logo, channel.getLogoUrl(), R.drawable.ic_channel_logo_placeholder);
@@ -2411,6 +2540,13 @@ public class OttHomeActivity extends AppCompatActivity {
         if (channel == null) return false;
         String url = channel.getMainPlayUrl();
         return url != null && url.startsWith("afhgrj://");
+    }
+
+    /** 源5点播(renyibo-vod) 频道判定：其主播放地址为自定义协议 {@code renyibo-vod://<typeId>:<vodId>} */
+    private static boolean isRenyiboVodChannel(Channel channel) {
+        if (channel == null) return false;
+        String url = channel.getMainPlayUrl();
+        return url != null && url.startsWith("renyibo-vod://");
     }
 
     private static class ViewHolder {

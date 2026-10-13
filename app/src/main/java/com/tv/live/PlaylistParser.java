@@ -170,6 +170,8 @@ public class PlaylistParser {
      *       由 {@code MiguUrlResolver} 在起播那一刻实时换成带签名的 m3u8；</li>
      *   <li>内置源5（爱其意）{@code renyibo://<apiId>}（2026-10-07 新增）—— 同为待解析地址，
      *       起播时经 live.php + 302 解析落地（惰性解析，参照咪咕模式）。</li>
+     *   <li>内置源5 点播（爱其意影视）{@code renyibo-vod://<typeId>:<vodId>}（2026-10-12 新增）
+     *       —— 同为待解析协议串；本期播放地址待加密接口补齐，解析返回 null。</li>
      *   <li>内置源7（afhgrj 影视）{@code afhgrj://<vodId>}（2026-10-10 新增）—— 待解析地址，
      *       起播时抓播放页 player_aaaa 取真实 m3u8（惰性解析）。</li>
      * </ul>
@@ -180,6 +182,7 @@ public class PlaylistParser {
                 || uri.startsWith(com.tv.live.migu.MiguUrlResolver.SCHEME)
                 || uri.startsWith(com.tv.live.migu.MiguSourceLoader.SCHEME_NOWTV)
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoSourceLoader.SCHEME)
+                || uri.startsWith(com.tv.live.renyibo.RenYiBoVodSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME);
     }
 

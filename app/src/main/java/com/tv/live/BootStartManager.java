@@ -8,16 +8,191 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
+import android.os.SystemClock;
 import com.tv.live.util.LogBridge;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class BootStartManager {
 
     private static final String TAG = "BootStartManager";
     private static final String KEY_BOOT_AUTO_START = "boot_auto_start";
+
+    // ------------------------------------------------------------------
+    // 【2026-10-13 单飞闸门】修复「频道刚出来又整个刷新一遍」
+    //
+    //   现象：开机自启后 OTT 首页会重复重建 4~5 次，用户观感是"界面自己刷新了一遍"。
+    //   成因：
+    //     ① 拉起路径有多条且互不协调 —— AlarmManager(两个开机 action 各排一次)、
+    //        JobScheduler 兜底、BootStartForegroundService(sticky)；
+    //     ② MainActivity 是「跳转 OTT 首页后 finish 自己」的路由页，且 MainActivity 与
+    //        OttHomeActivity 都没配 launchMode（默认 standard）→ 每次拉起都是全新实例，
+    //        整条 OTT 界面被销毁重建（频道列表清空 → 重新加载）。
+    //   对策：所有「拉起前台」的路径先过这道闸门，同一进程 30s 窗口内只真正拉起一次。
+    // ------------------------------------------------------------------
+    /** 触发来源：开机广播 / 闹钟 / Job —— 明确的「自启」意图 */
+    public static final int SRC_BOOT = 0;
+    /** 触发来源：sticky 前台服务 —— 职责只是保活，"App 已在前台"时绝不该再拉 */
+    public static final int SRC_SERVICE = 1;
+
+    private static final long START_SINGLEFLIGHT_WINDOW_MS = 30_000L;
+    private static final AtomicLong sLastForegroundStartAtMs = new AtomicLong(0L);
+
+    /** 【自启兜底】每次拉起后最多补拉次数，防无限重试 */
+    private static final int MAX_RECOVERY_PER_BOOT = 2;
+    private static final java.util.concurrent.atomic.AtomicInteger sRecoveryCount =
+            new java.util.concurrent.atomic.AtomicInteger(0);
+
+    /** 兼容旧调用（按开机路径处理） */
+    public static boolean allowForegroundStart(Context context) {
+        return allowForegroundStart(context, SRC_BOOT);
+    }
+
+    /**
+     * 单飞闸门：决定"这次拉起要不要真的执行"。
+     *
+     * <p><b>为什么必须分来源</b>（2026-10-13 黑屏修复·第二轮）：
+     * <ul>
+     *   <li><b>开机路径</b>（{@link #SRC_BOOT}：Alarm / Job / BootReceiver 直连）＝明确的
+     *       "自启"意图。这条路径<b>不看</b>「是否已在前台」—— 因为
+     *       {@code getRunningAppProcesses()} 在部分 TV ROM 上可能误报前台，
+     *       一旦据此拦截，整条自启链会被挡死（那比多重建一次严重得多）。故这里 fail-open。</li>
+     *   <li><b>sticky 前台服务</b>（{@link #SRC_SERVICE}）＝职责只是"保活"。它由
+     *       {@code MyApplication.onCreate} 在<b>每次</b> App 启动时拉起，若 App 已经在前台
+     *       还去 startActivity，就会把 MainActivity 重新带到前台 → OttHome 重建 →
+     *       <b>Surface detach → 黑屏</b>（实测：用户在设置里开关「开机自启」时必然复现，
+     *       日志为 {@code 播放异常 cause链=[{yq: Detaching surface}}）。
+     *       所以这条路径必须过「已在前台」判断。</li>
+     * </ul>
+     *
+     * <p>时间窗（{@link #START_SINGLEFLIGHT_WINDOW_MS}）对两条路径都生效：进程刚起来、
+     * 还没变成前台的那几秒里，防止 Alarm + Job + sticky 服务同时开火。
+     *
+     * @param source {@link #SRC_BOOT} 或 {@link #SRC_SERVICE}
+     * @return {@code true} 允许拉起；{@code false} 跳过
+     */
+    public static boolean allowForegroundStart(Context context, int source) {
+        final long now = SystemClock.elapsedRealtime();
+        final long last = sLastForegroundStartAtMs.get();
+
+        // ① 时间窗：同一进程 30s 内只真正拉起一次
+        if (last > 0L && (now - last) < START_SINGLEFLIGHT_WINDOW_MS) {
+            LogBridge.i(TAG, "【单飞闸门】距上次拉起仅 " + (now - last) + "ms（< "
+                    + START_SINGLEFLIGHT_WINDOW_MS + "ms），跳过本次拉起"
+                    + "（来源=" + sourceName(source) + "）");
+            return false;
+        }
+
+        // ② sticky 服务：App 已在前台就绝不打扰（否则重建界面 → Surface detach → 黑屏）
+        if (source == SRC_SERVICE && isSelfForeground(context)) {
+            LogBridge.i(TAG, "【单飞闸门】App 已在前台，sticky 服务跳过本次拉起（避免黑屏重建）");
+            return false;
+        }
+
+        sLastForegroundStartAtMs.set(now);
+        sRecoveryCount.set(0);      // 新一轮拉起，补拉额度重置
+        LogBridge.i(TAG, "【单飞闸门】放行本次拉起（来源=" + sourceName(source) + "）");
+        return true;
+    }
+
+    private static String sourceName(int source) {
+        return source == SRC_SERVICE ? "sticky前台服务" : "开机路径";
+    }
+
+    /**
+     * 【2026-10-13 自启兜底】"到前台确认"专用的补拉闸门。
+     *
+     * <p>与 {@link #allowForegroundStart} 的区别：<b>刻意忽略时间窗</b> ——
+     * 首次拉起后的前 30 秒恰恰是最容易被系统 Launcher / 厂商清理抢走焦点的窗口，
+     * 用时间窗会把最需要补拉的时刻挡掉。这里只要求「当前确实不在前台」+ 次数未超上限。
+     *
+     * @return {@code true} 允许补拉
+     */
+    public static boolean allowRecoveryStart(Context context) {
+        if (isSelfForeground(context)) {
+            // 已在前台：绝不打扰，更不会重建界面
+            return false;
+        }
+        final int n = sRecoveryCount.get();
+        if (n >= MAX_RECOVERY_PER_BOOT) {
+            LogBridge.i(TAG, "【自启兜底】补拉次数已达上限 " + MAX_RECOVERY_PER_BOOT + " 次，放弃");
+            return false;
+        }
+        sRecoveryCount.incrementAndGet();
+        LogBridge.i(TAG, "【自启兜底】确认 App 不在前台，补拉第 " + (n + 1) + " 次");
+        return true;
+    }
+
+    /** 供自启兜底判断"App 是否真的在前台"（对外暴露，内部走同一实现） */
+    public static boolean isSelfForegroundSafe(Context context) {
+        return isSelfForeground(context);
+    }
+
+    // ==================================================================
+    // 【2026-10-13 自启埋点】记录"本次由哪条路径拉起 / 闸门是否放行"
+    //
+    //   背景：bootlog 原先只记广播链路（BootReceiver 收到什么 action），而
+    //   JobScheduler（BootJobService）与 sticky 前台服务（BootStartForegroundService）
+    //   这两条路径**完全没有记录** —— 事后无法判断"自启到底是哪条路径拉起的、
+    //   有没有被闸门拦住"，也就没法定位"偶尔自启失效"。
+    //   以下埋点补齐这一环，写 bootlog（持久化文件，不受 9527 环形缓冲影响）+ 9527 日志。
+    // ==================================================================
+
+    /**
+     * 记录一次拉起来源。
+     *
+     * @param source 路径名，如 {@code Alarm(BootStartReceiver)} / {@code JobScheduler} /
+     *               {@code sticky前台服务} / {@code BootReceiver直连} / {@code 开机窗口补拉}
+     * @param detail 细节，如 action 名、闸门是否放行、调用结果
+     */
+    public static void noteLaunchSource(Context context, String source, String detail) {
+        String line = "来源=" + source + (detail == null || detail.isEmpty() ? "" : " | " + detail);
+        LogBridge.i(TAG, "【自启埋点】" + line);
+        try {
+            BootReceiver.writeBootLog(context, "【自启埋点】" + line);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 本 App 是否已处于前台（只查自己的进程，Android 8+ 允许）。
+     *
+     * <p>App 不在运行、或在后台/被缓存时返回 {@code false}，此时应当放行拉起
+     * （后者是为了让「按遥控器把 App 拉回前台」这类正常行为仍然有效）。
+     */
+    private static boolean isSelfForeground(Context context) {
+        if (context == null) {
+            return false;
+        }
+        try {
+            android.app.ActivityManager am =
+                    (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) {
+                return false;
+            }
+            final java.util.List<android.app.ActivityManager.RunningAppProcessInfo> list =
+                    am.getRunningAppProcesses();
+            if (list == null) {
+                return false;
+            }
+            final String pkg = context.getPackageName();
+            for (android.app.ActivityManager.RunningAppProcessInfo pi : list) {
+                if (pi == null) {
+                    continue;
+                }
+                if (pkg.equals(pi.processName)) {
+                    return pi.importance
+                            == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+                }
+            }
+        } catch (Throwable ignored) {
+            // 受限时按「不在前台」处理，宁可多拉一次也不要把 App 彻底拉不起来
+        }
+        return false;
+    }
 
     private final Context context;
     private final SharedPreferences sp;

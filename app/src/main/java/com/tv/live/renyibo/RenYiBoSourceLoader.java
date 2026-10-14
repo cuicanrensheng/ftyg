@@ -1,6 +1,11 @@
 package com.tv.live.renyibo;
 
+import android.content.Context;
+import android.text.TextUtils;
+
+import com.tv.live.security.SecurityCore;
 import com.tv.live.util.LogBridge;
+import com.tv.live.util.M3uDiskCache;
 import com.tv.live.util.NetUtil;
 
 import okhttp3.Response;
@@ -19,24 +24,28 @@ import java.util.concurrent.Future;
  *
  * <p>机制（逆向自爱其意 App 运行时抓包）：
  * <pre>
- *   GET http://110.42.52.180:6688/live/live.php?token=<TOKEN>&type=json&id=<频道ID>
+ *   GET http://&lt;自有服务器&gt;/live/live.php?token=&lt;TOKEN&gt;&type=json&id=&lt;频道ID&gt;
  *     → {"code":200,"msg":"获取成功","name":"CCTV1综合","url":"&lt;实时生成的m3u8直链&gt;","epg":"..."}
  * </pre>
  * 频道 ID 固定 97 个（zb-cctv1..zb-cctv8k / zb-*ws / ...），分组由 ID 前缀推导。
  * 逐个频道取回 url 后拼成 M3U，交给 PlaylistParser.parseContent 复用既有解析链路。
  *
  * <p><b>【2026-10-07 惰性解析】</b>参照源6（咪咕）模式：{@link #loadAllLiveAsM3u} 只发
- * live.php 取链请求（列表必须的 97 次），M3U 里存<b>跳转地址原样</b>（110.42.52.180 的
+ * live.php 取链请求（列表必须的 97 次），M3U 里存<b>跳转地址原样</b>（自有服务器的
  * php 302 跳转器），不再为 97 个频道各做一次全量 CDN GET 预解析 —— 实测该项把源5
  * 加载拖到 30.5s（换台/启动全程黑等）。真实落地地址延迟到「起播这一刻」解析：
  * {@code TVPlayerManager.doPlay} 识别待解析地址（{@link #isPendingResolveUrl}）→
  * {@link #resolveUrl}（单频道 1 次 GET，带 5 分钟缓存）→ 播落地地址。
  *
- * <p><b>⚠️ token 说明</b>：token 由服务端下发并会轮换（曾为 76AYudAHan，现为 0oujsAM7），
- * 失效时接口返回 {@code msg="token异常请检查"}。重新获取方法：
- * 在装有爱其意的设备（雷电模拟器）上对 host {@code 110.42.52.180} 抓包
- * （设备自带 tcpdump，{@code tcpdump -i any -s0 -w /data/local/tmp/cap.pcap}），
- * 过滤 {@code GET /live/live.php?token=xxx} 取出新 token 替换下面常量即可。
+ * <p><b>⚠️ token 说明</b>：token 由服务端下发并会轮换，失效时接口返回
+ * {@code msg="token异常请检查"}。重新获取：在装有爱其意的设备上对<b>自有服务器主机</b>
+ * 抓包（{@code tcpdump -i any -s0 -w /data/local/tmp/cap.pcap}），过滤
+ * {@code GET /live/live.php?token=xxx} 取新 token，替换 {@code cpp/secstore.cpp} 中
+ * {@code K_LIVE_PHP} 一行即可（无需外部脚本）。
+ *
+ * <p><b>【2026-10-13 SO 内建加密】</b>端点前缀（host + token）原为明文常量，
+ * 反编译 dex 直读 host 与 token；现下沉到 {@code cpp/secstore.cpp}（id=C_LIVE_PHP），
+ * 编译期加密后进 .so 的 .rodata，dex 与 strings 均扫不到。
  *
  * <p><b>【2026-10-12 影视点播移植】</b>本类只负责直播部分（5 组）。
  * 影视点播（电影/电视剧/综艺/动漫/纪录/少儿 6 分类 + 首页推荐）由
@@ -63,10 +72,31 @@ public final class RenYiBoSourceLoader {
      */
     public static final String SCHEME = "renyibo://";
 
-    /** 任意播直播源 API token（随服务端轮换，失效时需重新抓包获取） */
-    private static final String TOKEN = "0oujsAM7";
-    private static final String BASE =
-            "http://110.42.52.180:6688/live/live.php?token=" + TOKEN + "&type=json&id=";
+    /**
+     * 源5 直播端点前缀（host + 服务端下发的 token 一起加密存放于 SO）。
+     * 见类头「SO 内建加密」说明；轮换 token 改 {@code cpp/secstore.cpp} 即可。
+     */
+    private static volatile String sBase;
+
+    /** 取端点前缀（惰性；SO 不可用返回空串，调用方会得到一次失败请求而非 NPE） */
+    private static String base() {
+        String v = sBase;
+        if (v != null) return v;
+        String plain = SecurityCore.secureString(SecurityCore.C_LIVE_PHP);
+        sBase = plain != null ? plain : "";
+        return sBase;
+    }
+
+    /** 直播服务器主机名（SO 内建，dex 里不再出现明文 IP） */
+    private static volatile String sHost;
+
+    private static String host() {
+        String v = sHost;
+        if (v != null) return v;
+        String p = SecurityCore.secureString(SecurityCore.C_LIVE_HOST);
+        sHost = p != null ? p : "";
+        return sHost;
+    }
 
     private RenYiBoSourceLoader() {}
 
@@ -98,24 +128,58 @@ public final class RenYiBoSourceLoader {
     // 入口
     // ------------------------------------------------------------------
 
+    // ------------------------------------------------------------------
+    // 【2026-10-13 磁盘缓存】照源7（AfhgrjSourceLoader）模板：
+    //   缓存优先（stale-while-revalidate）+ TTL + 失败冷却 + 原子写 + 后台刷新单飞。
+    //   原实现只有 3 分钟「进程内」缓存，冷启动（尤其开机自启）仍要现场发 97 个取链请求；
+    //   而源5 直播端点实测有 10s 超时，会把 OTT 首屏的分组频道拖到空几十秒。
+    // ------------------------------------------------------------------
+    private static final long LIVE_CACHE_TTL_MS = 12L * 60L * 60L * 1000L;
+    private static final long FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
+
+    private static final M3uDiskCache sLiveCache = new M3uDiskCache(
+            TAG, "源5(爱其意)直播", "renyibo_live.m3u", LIVE_CACHE_TTL_MS, FAIL_COOLDOWN_MS,
+            new M3uDiskCache.Fetcher() {
+                @Override
+                public String fetch() {
+                    return buildLiveM3uBlocking();
+                }
+            });
+
     /**
-     * 【2026-10-07 性能修复】M3U 列表缓存：TTL 内重复切换到源5直接复用，零网络请求。
-     * TTL 只需覆盖「用户来回切源」的短窗口；过期待解析 php 地址由起播时的
-     * {@link #resolveUrl} 重新解析，失效兜底由 {@code tryRefreshRenyiboSource} 负责。
+     * 拉取全部频道并拼成 M3U 文本（供 PlaylistParser.parseContent 复用）。
+     *
+     * <p>【2026-10-13 磁盘缓存】直播部分走「缓存优先」；点播分组由
+     * {@link RenYiBoVodSourceLoader#loadVodFragmentCached(Context)} 独立缓存。
+     * 两者各自命中缓存即瞬时返回 —— 原先点播必须等直播 97 个请求拉完才开始，
+     * 是开机首屏空窗的主因之一。
+     *
+     * <p>M3U 行地址是 {@code renyibo://<apiId>} 协议串（永不过期，起播时才解析落地），
+     * 故整段直播 M3U 文本可以安全落盘缓存。
+     *
+     * @return M3U 文本；直播部分无缓存且抓取失败时返回 {@code null}
      */
-    private static volatile String sCachedM3u = null;
-    private static volatile long sCachedM3uAtMs = 0L;
-    private static final long M3U_CACHE_TTL_MS = 3L * 60L * 1000L;
-
-    /** 拉取全部频道并拼成 M3U 文本（供 PlaylistParser.parseContent 复用） */
-    public static String loadAllLiveAsM3u() {
-        // 【2026-10-07】短 TTL 缓存：来回切源不再重新发 97 个请求
-        String cached = sCachedM3u;
-        if (cached != null && System.currentTimeMillis() - sCachedM3uAtMs < M3U_CACHE_TTL_MS) {
-            LogBridge.i(TAG, "任意播(爱其意)源5：命中列表缓存（" + (System.currentTimeMillis() - sCachedM3uAtMs) + "ms 前生成），零请求复用");
-            return cached;
+    public static String loadAllLiveAsM3u(Context context) {
+        String live = sLiveCache.load(context);
+        if (TextUtils.isEmpty(live)) {
+            return null;
         }
+        StringBuilder out = new StringBuilder(live);
+        try {
+            String vod = RenYiBoVodSourceLoader.loadVodFragmentCached(context);
+            if (!TextUtils.isEmpty(vod)) {
+                out.append(vod);
+                LogBridge.i(TAG, "任意播(爱其意)源5：已追加影视点播分组（"
+                        + RenYiBoVodSourceLoader.categorySummary().size() + " 个分类 + 首页推荐）");
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "源5点播分组生成失败（不影响直播）：" + t.getMessage());
+        }
+        return out.toString();
+    }
 
+    /** 纯网络构建直播 M3U（仅在缓存未命中时由 {@link M3uDiskCache} 调用） */
+    private static String buildLiveM3uBlocking() {
         List<String[]> items = new ArrayList<>();   // 每项 = {id, name, group, url(服务端原始)}
         int threads = Math.min(12, IDS.length);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -176,27 +240,11 @@ public final class RenYiBoSourceLoader {
         LogBridge.i(TAG, "源5：卫视/教育/特色 已合并入央视分组，共 " + mergedCctv
                 + " 个频道（地方分组已删除）");
 
-        // ── 【2026-10-12 VOD 移植】直播之后追加影视点播分组 ──
-        //   源5 组织为「两大类」：直播 1 组（央视，原央视/卫视/教育/特色合并）+
-        //   点播 8 组（首页推荐 + 电影/电视剧/综艺/动漫/纪录/少儿/短剧）。
-        //   点播部分见 RenYiBoVodSourceLoader：本期为「明文+骨架落地」，
-        //   不发任何网络请求，条目来自抓包明文；加密调用留桩待补齐。
-        //   ⚠️ 直播部分逻辑保持完全不变（12 线程并发仅用于既有 live.php 取链，
-        //   不新增任何对 naiqiyi.php 的请求）。
-        try {
-            String vod = RenYiBoVodSourceLoader.buildVodM3uFragment();
-            if (vod != null && !vod.isEmpty()) {
-                sb.append(vod);
-                LogBridge.i(TAG, "任意播(爱其意)源5：已追加影视点播分组（"
-                        + RenYiBoVodSourceLoader.categorySummary().size() + " 个分类 + 首页推荐）");
-            }
-        } catch (Throwable t) {
-            LogBridge.w(TAG, "源5点播分组生成失败（不影响直播）：" + t.getMessage());
-        }
-
-        if (written > 0) {
-            sCachedM3u = sb.toString();
-            sCachedM3uAtMs = System.currentTimeMillis();
+        // 【2026-10-13 磁盘缓存】点播分组已拆到 RenYiBoVodSourceLoader 独立缓存，
+        // 这里只负责直播部分；写 0 条视为失败（返回 null → 不写缓存 + 进入失败冷却）。
+        if (written == 0) {
+            LogBridge.w(TAG, "源5直播：全部频道取链失败，本次结果不写入缓存");
+            return null;
         }
         return sb.toString();
     }
@@ -218,13 +266,18 @@ public final class RenYiBoSourceLoader {
     // ------------------------------------------------------------------
 
     /**
-     * 是否为「待解析」的源5跳转地址（110.42.52.180 的 php 302 跳转器，
+     * 是否为「待解析」的源5跳转地址（自有服务器的 php 302 跳转器，
      * 命中它说明还没解析到真实 CDN 地址）。真实 CDN 地址（各台域名各异）不命中。
+     *
+     * <p>【2026-10-13 SO 内建加密】判定用的主机名原先以字面量写在代码里，
+     * dex 里能直接搜到（正是「全部暴露」的一处）；现改为从 SO 取
+     * （secstore.cpp id=C_LIVE_HOST）。
      */
     public static boolean isPendingResolveUrl(String url) {
         if (url == null) return false;
         String lower = url.toLowerCase();
-        if (!lower.contains("110.42.52.180")) return false;
+        String h = host();
+        if (h.isEmpty() || !lower.contains(h)) return false;
         int q = lower.indexOf('?');
         String path = q > 0 ? lower.substring(0, q) : lower;
         return path.endsWith(".php");
@@ -312,7 +365,7 @@ public final class RenYiBoSourceLoader {
      */
     private static String[] fetchOne(String id, boolean resolve302) {
         try {
-            String text = NetUtil.getInstance().syncGetText(BASE + id);
+            String text = NetUtil.getInstance().syncGetText(base() + id);
             if (text == null || text.isEmpty()) return null;
             JSONObject o = new JSONObject(text);
             int code = o.optInt("code", 0);
@@ -327,7 +380,7 @@ public final class RenYiBoSourceLoader {
             if (resolve302) {
                 // ★关键：live.php 下发的直链会 302 跳到真实 CDN（如 live-play-hls.cctvnews.cctv.com/…m3u8?auth_key=…），
                 //   而 m3u8 里的分片地址是**相对路径**。ExoPlayer 以「原始请求 URI」为基准解析相对地址
-                //   → 会拼成 http://110.42.52.180:6688/zb/<分片>.ts → 404（实测）。
+                //   → 会拼成 http://<自有服务器>/zb/<分片>.ts → 404（实测）。
                 //   故这里先把跳转解析掉，直接给出最终 CDN 地址作为播放地址。
                 playUrl = resolveFinalUrl(url);
             }

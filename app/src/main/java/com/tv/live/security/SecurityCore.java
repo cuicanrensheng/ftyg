@@ -80,11 +80,14 @@ public final class SecurityCore {
         }
 
         try {
-            String status = readFile("/proc/self/status");
+            // 【2026-10-13 加固】proc 路径与字段名由 ObStr 运行时解码
+            final String statusPath = ObStr.d(ObStr.S_PROC_STATUS);
+            final String tracerKey = ObStr.d(ObStr.T_TRACERPID_COLON);
+            String status = readFile(statusPath);
             if (status != null) {
                 for (String line : status.split("\n")) {
-                    if (line.startsWith("TracerPid:")) {
-                        String v = line.substring(10).trim();
+                    if (line.startsWith(tracerKey)) {
+                        String v = line.substring(tracerKey.length()).trim();
                         if (!"0".equals(v) && !v.isEmpty()) {
                             android.os.Process.killProcess(android.os.Process.myPid());
                             System.exit(9);
@@ -111,6 +114,68 @@ public final class SecurityCore {
     public static String getSecurityStatus() {
         if (!sLoaded) return "SecurityCore not loaded";
         try { return nativeGetSecurityStatus(); } catch (Throwable t) { return "error: " + t.getMessage(); }
+    }
+
+    // =============================================================
+    // 【2026-10-13 原生扩展】以下能力全部走 libtvlive_security.so，
+    // 任一失败都返回 null / 负数，不抛异常——调用方按「不可用」处理即可。
+    // 与既有 CBC 解密路径完全解耦，不影响 UrlConfig 的解密。
+    // =============================================================
+
+    /** SHA-256，返回 32 字节；不可用返回 null */
+    public static byte[] sha256(byte[] data) {
+        if (!sLoaded || data == null) return null;
+        try { return nativeSha256(data); } catch (Throwable t) { return null; }
+    }
+
+    /** HMAC-SHA256，返回 32 字节；不可用返回 null */
+    public static byte[] hmacSha256(byte[] key, byte[] msg) {
+        if (!sLoaded || key == null || msg == null) return null;
+        try { return nativeHmacSha256(key, msg); } catch (Throwable t) { return null; }
+    }
+
+    /** HKDF-SHA256 派生密钥，salt/info 允许为 null；不可用返回 null */
+    public static byte[] hkdfSha256(byte[] ikm, byte[] salt, byte[] info, int outLen) {
+        if (!sLoaded || ikm == null || outLen <= 0) return null;
+        try { return nativeHkdfSha256(ikm, salt, info, outLen); } catch (Throwable t) { return null; }
+    }
+
+    /** AES-256-GCM 加密。iv 建议 12 字节；aad 可为 null。返回 密文‖16 字节标签 */
+    public static byte[] aesGcmEncrypt(byte[] key, byte[] iv, byte[] plain, byte[] aad) {
+        if (!sLoaded || key == null || key.length != 32 || iv == null || iv.length == 0 || plain == null) {
+            return null;
+        }
+        try { return nativeAesGcmEncrypt(key, iv, plain, aad); } catch (Throwable t) { return null; }
+    }
+
+    /** AES-256-GCM 解密并验签。入参为 密文‖16 字节标签；标签不符返回 null */
+    public static byte[] aesGcmDecrypt(byte[] key, byte[] iv, byte[] ctAndTag, byte[] aad) {
+        if (!sLoaded || key == null || key.length != 32 || iv == null || iv.length == 0
+                || ctAndTag == null || ctAndTag.length < 16) {
+            return null;
+        }
+        try { return nativeAesGcmDecrypt(key, iv, ctAndTag, aad); } catch (Throwable t) { return null; }
+    }
+
+    /**
+     * 代码段自校验：0=未改动，1=.text 被改写（疑似 inline hook），负数=不可用。
+     * 只在 so 加载成功时有意义。
+     */
+    public static int selfCheck() {
+        if (!sLoaded) return -1;
+        try { return nativeSelfCheck(); } catch (Throwable t) { return -1; }
+    }
+
+    /** 自身可执行段长度（字节），用于确认自校验真的在跑 */
+    public static int textSegmentLength() {
+        if (!sLoaded) return -1;
+        try { return nativeTextLen(); } catch (Throwable t) { return -1; }
+    }
+
+    /** 最近一次自校验结果（不重新计算） */
+    public static int lastSelfCheck() {
+        if (!sLoaded) return -1;
+        try { return nativeLastSelfCheck(); } catch (Throwable t) { return -1; }
     }
 
     public static String decryptToString(String cipherB64) {
@@ -167,6 +232,60 @@ public final class SecurityCore {
         } catch (Throwable t) {
             LogBridge.e(TAG, "Java fallback 解密异常: " + t.getMessage());
             LogBridge.e(TAG, "DECRYPT: Java fallback exception: " + t.getMessage());
+            return null;
+        }
+    }
+
+    // =============================================================
+    // 【2026-10-13 SO 内建加密】敏感常量仓库 + 正向加密
+    //
+    // 取代原先「Java 侧 Base64 密文常量 + 外部脚本生成」的方案：
+    //   · 明文与密文都不再出现在 dex 里，常量整表下沉到 cpp/secstore.cpp，
+    //     编译期异或后存进 .so 的 .rodata；
+    //   · 增删/轮换常量 = 改 secstore.cpp 一行 + 重新编译，
+    //     不再依赖 gen_cipher.py / _gen_cipher.mjs（脚本丢了也不影响）；
+    //   · encryptToString() 提供对称的加密出口，需要密文时随时可由 SO 产出。
+    // =============================================================
+
+    /** secstore.cpp 常量编号（必须与 native 侧 switch 严格一致） */
+    public static final int C_LIVE_1   = 1;   // 源1 订阅地址
+    public static final int C_LIVE_2   = 2;   // 源2 订阅地址
+    public static final int C_EPG_2    = 3;   // EPG-2（erw.cc 镜像）
+    public static final int C_EPG_1    = 6;   // EPG-1（catvod，主 EPG）
+    public static final int C_VOD_BASE = 4;   // 源5 点播端点
+    public static final int C_LIVE_PHP = 5;   // 源5 直播端点（含 token）
+    public static final int C_LIVE_HOST = 7;  // 源5 直播服务器主机名（识别 302 跳转器用）
+    public static final int C_VOD_KEY   = 8;  // 源5 点播 AES-128 密钥（hex）
+
+    /**
+     * 取加密常量明文。SO 不可用时返回 null（调用方按「该源不可用」降级）。
+     * 不可缓存到 static final：init() 要 loadLibrary，可能耗时。
+     */
+    public static String secureString(int id) {
+        if (!sLoaded) {
+            try { init(); } catch (Throwable ignored) {}
+        }
+        if (!sLoaded) return null;
+        try { return nativeConst(id); } catch (Throwable t) { return null; }
+    }
+
+    /**
+     * AES-256-CBC 加密（与 {@link #decryptToString} 完全对称：iv(16B)‖ct，整体 base64）。
+     * 用于需要落盘/下发的密文场景；SO 不可用返回 null。
+     */
+    public static String encryptToString(String plain) {
+        if (plain == null) return null;
+        if (!sLoaded) {
+            try { init(); } catch (Throwable ignored) {}
+        }
+        if (!sLoaded) return null;
+        try {
+            byte[] ct = nativeEncrypt(plain.getBytes(StandardCharsets.UTF_8));
+            if (ct == null) return null;
+            String b64 = Base64.encodeToString(ct, Base64.NO_WRAP);
+            Arrays.fill(ct, (byte) 0);
+            return b64;
+        } catch (Throwable t) {
             return null;
         }
     }
@@ -235,6 +354,20 @@ public final class SecurityCore {
     private static native int  nativeCheck();
     private static native byte[] nativeDecrypt(byte[] cipher);
     private static native String nativeGetSecurityStatus();
+
+    // 【2026-10-13 原生扩展】AES-GCM / SHA-256 / HMAC / HKDF 与代码段自校验
+    private static native byte[] nativeSha256(byte[] data);
+    private static native byte[] nativeHmacSha256(byte[] key, byte[] msg);
+    private static native byte[] nativeHkdfSha256(byte[] ikm, byte[] salt, byte[] info, int outLen);
+    private static native byte[] nativeAesGcmEncrypt(byte[] key, byte[] iv, byte[] plain, byte[] aad);
+    private static native byte[] nativeAesGcmDecrypt(byte[] key, byte[] iv, byte[] ctAndTag, byte[] aad);
+    private static native int  nativeSelfCheck();
+    private static native int  nativeTextLen();
+    private static native int  nativeLastSelfCheck();
+
+    // 【2026-10-13 SO 内建】敏感常量仓库（cpp/secstore.cpp）与正向加密
+    private static native String nativeConst(int id);
+    private static native byte[] nativeEncrypt(byte[] plain);
 
     public static class SecurityGuard {
 
@@ -355,6 +488,7 @@ public final class SecurityCore {
     }
 
     private static int getResponseLevel(int threatType) {
+        // 【保持】调试构建一律只记录 —— 否则会杀掉自己的调试会话
         if (BuildConfig.IS_DEBUG) {
 
             return RESPONSE_LOG;
@@ -364,9 +498,14 @@ public final class SecurityCore {
             case THREAT_DEBUGGER:
                 return RESPONSE_EXIT;
 
+            // 【2026-10-13 策略调整】原为 RESPONSE_SELF_DESTRUCT。
+            // selfDestruct() 会 clearSensitiveData() + corruptDexFiles()，在真机上会把 APK 的
+            // dex 破坏到不可启动 —— 不可逆，对"注入环境"这一档过重。
+            // 改为 BLOCK：禁用敏感功能、降级运行。既让检测真正生效，又不毁用户数据。
+            // 明确的攻击行为（重打包 TAMPER_DETECTED / 签名不符 SIGNATURE_MISMATCH）仍保留自毁。
             case THREAT_FRIDA:
             case THREAT_XPOSED:
-                return RESPONSE_SELF_DESTRUCT;
+                return RESPONSE_BLOCK;
 
             case THREAT_ROOT:
                 return RESPONSE_WARN;
@@ -528,15 +667,15 @@ public final class SecurityCore {
                     Thread.sleep(30000);
 
                     if (checkFrida()) {
-                        if (!reported[0]) { LogBridge.w(TAG, "检测到 Frida 工具"); reported[0] = true; }
-                        else { LogBridge.d(TAG, "安全监控：Frida 仍存在（已报告，跳过重复告警）"); }
-                        onThreatDetected(THREAT_FRIDA, "检测到 Frida");
+                        if (!reported[0]) { LogBridge.w(TAG, "安全监控：命中 [CHK-01]"); reported[0] = true; }
+                        else { LogBridge.d(TAG, "安全监控：[CHK-01] 仍存在（已报告，跳过重复告警）"); }
+                        onThreatDetected(THREAT_FRIDA, "运行时注入环境异常");
                     }
 
                     if (checkXposed()) {
-                        if (!reported[1]) { LogBridge.w(TAG, "检测到 Xposed 框架"); reported[1] = true; }
-                        else { LogBridge.d(TAG, "安全监控：Xposed 仍存在（已报告，跳过重复告警）"); }
-                        onThreatDetected(THREAT_XPOSED, "检测到 Xposed");
+                        if (!reported[1]) { LogBridge.w(TAG, "安全监控：命中 [CHK-02]"); reported[1] = true; }
+                        else { LogBridge.d(TAG, "安全监控：[CHK-02] 仍存在（已报告，跳过重复告警）"); }
+                        onThreatDetected(THREAT_XPOSED, "运行时注入框架异常");
                     }
 
                     if (android.os.Debug.isDebuggerConnected()) {
@@ -573,13 +712,33 @@ public final class SecurityCore {
                 }
             }
 
-            String[] fridaProcesses = {"frida-server", "frida-agent", "frida-injector"};
-            String processList = executeCommand("ps");
+            // 【2026-10-13 加固】进程名与命令改由 ObStr 运行时解码
+            String[] fridaProcesses = {
+                ObStr.d(ObStr.F_FRIDA_SRV),
+                ObStr.d(ObStr.F_FRIDA_AGENT),
+                ObStr.d(ObStr.F_FRIDA_INJECT)
+            };
+            String processList = executeCommand(ObStr.d(ObStr.R_PS_CMD));
             if (processList != null) {
                 for (String proc : fridaProcesses) {
                     if (processList.contains(proc)) {
                         return true;
                     }
+                }
+            }
+
+            // 【2026-10-13 口径对齐 · 关键修复】原实现只查端口与进程，漏掉了文件路径检测，
+            // 于是出现「AntiDebug 命中文件、本监控线程判定未命中」的错位，
+            // 导致 release 包检测到 Frida 也不进阻断分支（实测 2.0.204 即如此）。
+            String[] fridaPaths = {
+                ObStr.d(ObStr.F_P_TMP_FRIDA),
+                ObStr.d(ObStr.F_P_TMP_GADGET),
+                ObStr.d(ObStr.F_P_BIN_FRIDA),
+                ObStr.d(ObStr.F_P_XBIN_FRIDA)
+            };
+            for (String path : fridaPaths) {
+                if (new File(path).exists()) {
+                    return true;
                 }
             }
 
@@ -592,7 +751,7 @@ public final class SecurityCore {
     private static boolean checkXposed() {
         try {
 
-            Class.forName("de.robv.android.xposed.XposedBridge");
+            Class.forName(ObStr.d(ObStr.X_CLASS_BRIDGE));
             return true;
         } catch (ClassNotFoundException e) {
 
@@ -600,17 +759,28 @@ public final class SecurityCore {
 
         try {
 
-            Class.forName("com.saurik.substrate.MS");
+            Class.forName(ObStr.d(ObStr.X_CLASS_SUBSTRATE));
             return true;
         } catch (ClassNotFoundException e) {
 
         }
 
-        String xposedProp = System.getProperty("de.robv.android.xposed.IXposedHookLoadPackage");
+        String xposedProp = System.getProperty(ObStr.d(ObStr.X_PROP_HOOKLOAD));
         if (xposedProp != null) return true;
 
-        File xposedFile = new File("/data/local/tmp/Xposed");
+        File xposedFile = new File(ObStr.d(ObStr.X_P_TMP_XPOSED));
         if (xposedFile.exists()) return true;
+
+        // 【2026-10-13 口径对齐】补齐 AntiDebug 侧的 LSPosed 目录与 jar 路径
+        String[] xposedPaths = {
+            ObStr.d(ObStr.X_P_LSPD_CFG),
+            ObStr.d(ObStr.X_P_LSPD_MOD),
+            ObStr.d(ObStr.X_P_JAR_FW),
+            ObStr.d(ObStr.X_P_JAR_TMP)
+        };
+        for (String path : xposedPaths) {
+            if (new File(path).exists()) return true;
+        }
 
         return false;
     }
@@ -618,16 +788,20 @@ public final class SecurityCore {
     private static boolean checkRoot() {
         try {
 
-            String result = executeCommand("which su");
-            if (result != null && result.contains("su")) return true;
+            // 【2026-10-13 加固】命令与路径改由 ObStr 运行时解码
+            final String su = ObStr.d(ObStr.R_SU_CMD);
+            final String busybox = ObStr.d(ObStr.R_BUSYBOX);
 
-            result = executeCommand("which busybox");
-            if (result != null && result.contains("busybox")) return true;
+            String result = executeCommand(ObStr.d(ObStr.R_WHICH_SU));
+            if (result != null && result.contains(su)) return true;
 
-            File magiskFile = new File("/sbin/magisk");
+            result = executeCommand(ObStr.d(ObStr.R_WHICH_BUSYBOX));
+            if (result != null && result.contains(busybox)) return true;
+
+            File magiskFile = new File(ObStr.d(ObStr.M_P_SBIN));
             if (magiskFile.exists()) return true;
 
-            File suFile = new File("/system/bin/su");
+            File suFile = new File(ObStr.d(ObStr.S_P_BIN_SU));
             if (suFile.exists()) return true;
 
             return false;
@@ -638,7 +812,8 @@ public final class SecurityCore {
 
     private static String executeCommand(String command) {
         try {
-            java.lang.Process process = Runtime.getRuntime().exec(new String[]{"/system/bin/sh", "-c", command});
+            // 【2026-10-13 加固】shell 路径由 ObStr 运行时解码
+            java.lang.Process process = Runtime.getRuntime().exec(new String[]{ObStr.d(ObStr.R_SH), "-c", command});
             java.io.InputStream inputStream = process.getInputStream();
             byte[] buffer = new byte[4096];
             int n = inputStream.read(buffer);
@@ -651,12 +826,14 @@ public final class SecurityCore {
     }
 
     private static String getThreatName(int threatType) {
+        // 【2026-10-13 日志脱敏】威胁名统一改为代号，避免日志本身变成"绕过指引"。
+        // 对照表见 LogRedactor 类注释。
         switch (threatType) {
-            case THREAT_DEBUGGER: return "调试器";
-            case THREAT_FRIDA: return "Frida Hook";
-            case THREAT_XPOSED: return "Xposed 框架";
-            case THREAT_ROOT: return "Root 权限";
-            case THREAT_EMULATOR: return "模拟器";
+            case THREAT_DEBUGGER: return "[CHK-07]";
+            case THREAT_FRIDA: return "[CHK-01]";
+            case THREAT_XPOSED: return "[CHK-02]";
+            case THREAT_ROOT: return "[CHK-05]";
+            case THREAT_EMULATOR: return "[CHK-06]";
             case TAMPER_DETECTED: return "APK 篡改";
             case SIGNATURE_MISMATCH: return "签名不匹配";
             case HOOK_DETECTED: return "Hook 攻击";
@@ -770,9 +947,12 @@ public final class SecurityCore {
             File[] files = dir.listFiles();
             if (files == null) return;
 
+            // 【2026-10-13 加固】可疑文件名词表由 ObStr 运行时解码。
+            // 注：原表里的 " freedom" 带一个前导空格（笔误），这里按 "freedom" 修正。
             String[] suspiciousNames = {
-                "xposed", "frida", "substrate", "gameguardian",
-                "lucky_patcher", " freedom", "creeper"
+                ObStr.d(ObStr.X_LOWER), ObStr.d(ObStr.F_FRIDA), ObStr.d(ObStr.X_SUBSTRATE),
+                ObStr.d(ObStr.G_GAMEGUARDIAN), ObStr.d(ObStr.G_LUCKY),
+                ObStr.d(ObStr.G_FREEDOM), ObStr.d(ObStr.G_CREEPER)
             };
 
             for (File file : files) {
@@ -921,10 +1101,11 @@ public final class SecurityCore {
         debugDetected = fridaFound || xposedFound || confirmedDebugger;
 
         if (debugDetected) {
+            // 【2026-10-13 日志脱敏】不再直写特征名，改用代号（对照表见 LogRedactor）
             LogBridge.w(TAG, "⚠️ 检测到可疑环境: " +
-                (confirmedDebugger ? "调试器" : "") +
-                (fridaFound ? "Frida" : "") +
-                (xposedFound ? "Xposed" : ""));
+                (confirmedDebugger ? "[CHK-07]" : "") +
+                (fridaFound ? "[CHK-01]" : "") +
+                (xposedFound ? "[CHK-02]" : ""));
 
             if (!BuildConfig.IS_DEBUG) {
                 if (confirmedDebugger && !fridaFound && !xposedFound) {
@@ -937,13 +1118,29 @@ public final class SecurityCore {
 
                     TamperReporter.reportTamper(
                         TamperReporter.TAMPER_FRIDA,
-                        "AntiDebug检测到Frida工具");
+                        "AntiDebug检测到注入工具");
                 }
                 if (xposedFound) {
 
                     TamperReporter.reportTamper(
                         TamperReporter.TAMPER_XPOSED,
-                        "AntiDebug检测到Xposed框架");
+                        "AntiDebug检测到注入框架");
+                }
+
+                // 【2026-10-13 阻断打通 · 关键修复】原实现只上报 TamperReporter（写日志），
+                // 从不进入 SecurityGuard 的响应分级链路 —— 这正是"检测到了却不阻断"的直接根因。
+                // 此处补齐，使 AntiDebug 的命中同样触发分级动作。
+                if (fridaFound) {
+                    SecurityGuard.onThreatDetected(
+                        SecurityGuard.THREAT_FRIDA, "运行时注入环境异常");
+                }
+                if (xposedFound) {
+                    SecurityGuard.onThreatDetected(
+                        SecurityGuard.THREAT_XPOSED, "运行时注入框架异常");
+                }
+                if (confirmedDebugger && !fridaFound && !xposedFound) {
+                    SecurityGuard.onThreatDetected(
+                        SecurityGuard.THREAT_DEBUGGER, "检测到调试器连接");
                 }
             }
         }
@@ -962,7 +1159,7 @@ public final class SecurityCore {
         }
 
         if (debuggerFound && !confirmedDebugger) {
-            LogBridge.w(TAG, "调试器检测结果存疑：TracerPid检测到异常但Debug.isDebuggerConnected()未确认");
+            LogBridge.w(TAG, "调试器检测结果存疑：[CHK-04] 异常但 Debug.isDebuggerConnected() 未确认");
         }
 
         return debugDetected;
@@ -985,7 +1182,10 @@ public final class SecurityCore {
             }
 
             try {
-                File file = new File("/proc/self/status");
+                // 【2026-10-13 加固】路径与字段名由 ObStr 运行时解码，日志改代号
+                final String statusPath = ObStr.d(ObStr.S_PROC_STATUS);
+                final String tracerKey = ObStr.d(ObStr.T_TRACERPID_COLON);
+                File file = new File(statusPath);
                 if (file.exists()) {
                     FileInputStream fis = new FileInputStream(file);
                     byte[] buffer = new byte[1024];
@@ -994,12 +1194,12 @@ public final class SecurityCore {
                     String content = new String(buffer, 0, len);
 
                     for (String line : content.split("\n")) {
-                        if (line.startsWith("TracerPid:")) {
-                            String pidStr = line.substring("TracerPid:".length()).trim();
+                        if (line.startsWith(tracerKey)) {
+                            String pidStr = line.substring(tracerKey.length()).trim();
                             int pid = Integer.parseInt(pidStr);
 
                             if (pid != 0) {
-                                LogBridge.d(TAG, "TracerPid=" + pid + " (参考信息)");
+                                LogBridge.d(TAG, "[CHK-04]=" + pid + " (参考信息)");
 
                             }
                             break;
@@ -1020,6 +1220,10 @@ public final class SecurityCore {
     private static boolean checkFrida() {
         try {
 
+            // 【2026-10-13 加固】特征串改由 ObStr 运行时解码，dex 内不再出现明文常量
+            final String sFrida = ObStr.d(ObStr.F_FRIDA);
+            final String sReject = ObStr.d(ObStr.R_REJECT);
+
             File procDir = new File("/proc");
             String[] pids = procDir.list();
             if (pids != null) {
@@ -1032,11 +1236,9 @@ public final class SecurityCore {
                             int len = fis.read(buffer);
                             fis.close();
                             String cmdline = new String(buffer, 0, len);
-                            if (cmdline.contains("frida") ||
-                                cmdline.contains("frida-server") ||
-                                cmdline.contains("frida-qt") ||
-                                cmdline.contains("REJECT")) {
-                                LogBridge.w(TAG, "检测到 Frida 相关进程");
+                            // 用 "frida" 一个词即可覆盖 frida-server / frida-qt / frida-agent 等全部变体
+                            if (cmdline.contains(sFrida) || cmdline.contains(sReject)) {
+                                LogBridge.w(TAG, "检测到可疑注入进程");
                                 return true;
                             }
                         }
@@ -1053,28 +1255,29 @@ public final class SecurityCore {
                     socket.connect(new java.net.InetSocketAddress("127.0.0.1",
                         Integer.parseInt(port)), 100);
                     socket.close();
-                    LogBridge.w(TAG, "检测到 Frida 默认端口: " + port);
+                    LogBridge.w(TAG, "检测到可疑监听端口: " + port);
                     return true;
                 } catch (Exception e) {
 
                 }
             }
 
+            // 命中路径不再回写日志：原实现会把 /data/local/tmp/... 明文打进 9527 日志
             String[] fridaPaths = {
-                "/data/local/tmp/frida-server",
-                "/data/local/tmp/frida-gadget",
-                "/system/bin/frida-server",
-                "/system/xbin/frida-server"
+                ObStr.d(ObStr.F_P_TMP_FRIDA),
+                ObStr.d(ObStr.F_P_TMP_GADGET),
+                ObStr.d(ObStr.F_P_BIN_FRIDA),
+                ObStr.d(ObStr.F_P_XBIN_FRIDA)
             };
             for (String path : fridaPaths) {
                 if (new File(path).exists()) {
-                    LogBridge.w(TAG, "检测到 Frida 文件: " + path);
+                    LogBridge.w(TAG, "检测到特征文件命中");
                     return true;
                 }
             }
 
         } catch (Exception e) {
-            LogBridge.e(TAG, "检测 Frida 失败: " + e.getMessage());
+            LogBridge.e(TAG, "检测失败: " + e.getMessage());
         }
         return false;
     }
@@ -1082,32 +1285,35 @@ public final class SecurityCore {
     private static boolean checkXposed() {
         try {
 
+            // 【2026-10-13 加固】类名 / 路径 / 环境变量名全部由 ObStr 运行时解码
             try {
-                Class.forName("de.robv.android.xposed.XposedBridge");
-                LogBridge.w(TAG, "检测到 Xposed 框架");
+                Class.forName(ObStr.d(ObStr.X_CLASS_BRIDGE));
+                LogBridge.w(TAG, "检测到注入框架");
                 return true;
             } catch (ClassNotFoundException e) {
 
             }
 
             String[] xposedPaths = {
-                "/data/adb/lspd/config",
-                "/data/adb/modules/lsposed",
-                "/system/framework/XposedBridge.jar",
-                "/data/local/tmp/XposedBridge.jar"
+                ObStr.d(ObStr.X_P_LSPD_CFG),
+                ObStr.d(ObStr.X_P_LSPD_MOD),
+                ObStr.d(ObStr.X_P_JAR_FW),
+                ObStr.d(ObStr.X_P_JAR_TMP)
             };
             for (String path : xposedPaths) {
                 if (new File(path).exists()) {
-                    LogBridge.w(TAG, "检测到 Xposed/LSPosed: " + path);
+                    LogBridge.w(TAG, "检测到注入框架特征文件");
                     return true;
                 }
             }
 
             try {
+                final String upper = ObStr.d(ObStr.X_UPPER);
+                final String lower = ObStr.d(ObStr.X_LOWER);
                 for (java.util.Map.Entry<String, String> entry : System.getenv().entrySet()) {
-                    if (entry.getKey().contains("XPOSED") ||
-                        entry.getValue().contains("xposed")) {
-                        LogBridge.w(TAG, "检测到 Xposed 环境变量");
+                    if (entry.getKey().contains(upper) ||
+                        entry.getValue().contains(lower)) {
+                        LogBridge.w(TAG, "检测到注入框架环境变量");
                         return true;
                     }
                 }
@@ -1116,7 +1322,7 @@ public final class SecurityCore {
             }
 
         } catch (Exception e) {
-            LogBridge.e(TAG, "检测 Xposed 失败: " + e.getMessage());
+            LogBridge.e(TAG, "检测失败: " + e.getMessage());
         }
         return false;
     }
@@ -1124,16 +1330,17 @@ public final class SecurityCore {
     private static boolean checkEmulator(Context context) {
         try {
 
+            // 【2026-10-13 加固】模拟器特征路径由 ObStr 运行时解码；命中路径不再回写日志
             String[] emulatorFiles = {
-                "/dev/socket/qemud",
-                "/dev/qemu_pipe",
-                "/system/lib/libc_malloc_debug_qemu.so",
-                "/sys/qemu_trace",
-                "/system/bin/qemu-props"
+                ObStr.d(ObStr.Q_SOCKET),
+                ObStr.d(ObStr.Q_PIPE),
+                ObStr.d(ObStr.Q_LIBMALLOC),
+                ObStr.d(ObStr.Q_TRACE),
+                ObStr.d(ObStr.Q_PROPS)
             };
             for (String path : emulatorFiles) {
                 if (new File(path).exists()) {
-                    LogBridge.w(TAG, "检测到模拟器文件: " + path);
+                    LogBridge.w(TAG, "检测到模拟器特征");
                     return true;
                 }
             }
@@ -1728,11 +1935,12 @@ public final class SecurityCore {
             case TAMPER_PACKAGE_NAME: return "包名不匹配";
             case TAMPER_DEX_INTEGRITY: return "DEX完整性校验失败";
             case TAMPER_DEBUGGER: return "调试器检测";
-            case TAMPER_FRIDA: return "Frida检测";
-            case TAMPER_XPOSED: return "Xposed框架检测";
+            // 【2026-10-13 日志脱敏】类型名改代号（对照表见 LogRedactor）
+            case TAMPER_FRIDA: return "[CHK-01]检测";
+            case TAMPER_XPOSED: return "[CHK-02]检测";
             case TAMPER_HOOK: return "Hook攻击检测";
-            case TAMPER_ROOT: return "Root环境";
-            case TAMPER_EMULATOR: return "模拟器环境";
+            case TAMPER_ROOT: return "[CHK-05]环境";
+            case TAMPER_EMULATOR: return "[CHK-06]环境";
             case TAMPER_MEMORY: return "内存篡改检测";
             default: return "未知篡改类型(" + tamperType + ")";
         }
@@ -2120,13 +2328,14 @@ public final class SecurityCore {
         }
 
         try {
-            String tracerPid = readProcStatus("TracerPid:");
+            // 【2026-10-13 加固】字段名由 ObStr 运行时解码，日志改代号
+            String tracerPid = readProcStatus(ObStr.d(ObStr.T_TRACERPID_COLON));
             if (tracerPid != null) {
                 int pid = Integer.parseInt(tracerPid.trim());
                 if (pid > 0) {
                     report.debugDetected = true;
-                    report.threats.add("检测到调试器(TracerPid=" + pid + ")");
-                    LogBridge.w(TAG, "⚠️ TracerPid=" + pid);
+                    report.threats.add("检测到调试器([CHK-04]=" + pid + ")");
+                    LogBridge.w(TAG, "⚠️ [CHK-04]=" + pid);
                 }
             }
         } catch (Exception e) {
@@ -2147,24 +2356,25 @@ public final class SecurityCore {
 
     private void checkHookingFrameworks(SecurityReport report) {
 
+        // 【2026-10-13 日志脱敏】命中文案改代号，避免日志成为"绕过指引"
         if (isFridaPortOpen()) {
             report.fridaDetected = true;
             report.hookDetected = true;
-            report.threats.add("检测到 Frida 框架");
-            LogBridge.w(TAG, "⚠️ Frida 端口已开启");
+            report.threats.add("检测到 [CHK-01] 框架");
+            LogBridge.w(TAG, "⚠️ [CHK-01] 端口已开启");
         }
 
         if (isXposedFrameworkDetected()) {
             report.xposedDetected = true;
             report.hookDetected = true;
-            report.threats.add("检测到 Xposed/Substrate 框架");
-            LogBridge.w(TAG, "⚠️ Xposed 框架已加载");
+            report.threats.add("检测到 [CHK-02] 框架");
+            LogBridge.w(TAG, "⚠️ [CHK-02] 框架已加载");
         }
 
         if (isMagiskDetected()) {
             report.hookDetected = true;
-            report.threats.add("检测到 Magisk 模块");
-            LogBridge.w(TAG, "⚠️ Magisk 已安装");
+            report.threats.add("检测到 [CHK-03] 模块");
+            LogBridge.w(TAG, "⚠️ [CHK-03] 已安装");
         }
 
         if (detectSuspiciousLibraries()) {
@@ -2192,18 +2402,19 @@ public final class SecurityCore {
     private boolean isXposedFrameworkDetected() {
         try {
 
-            Class.forName("de.robv.android.xposed.XposedBridge", false, null);
+            // 【2026-10-13 加固】类名与路径全部由 ObStr 运行时解码
+            Class.forName(ObStr.d(ObStr.X_CLASS_BRIDGE), false, null);
             return true;
         } catch (ClassNotFoundException e) {
 
         }
 
         String[] suspiciousFiles = {
-            "/system/lib/libxposed_art.so",
-            "/system/lib64/libxposed_art.so",
-            "/system/framework/XposedBridge.jar",
-            "/data/local/tmp/xposed",
-            "/data/local/tmp/frida-server"
+            ObStr.d(ObStr.X_P_LIB32),
+            ObStr.d(ObStr.X_P_LIB64),
+            ObStr.d(ObStr.X_P_JAR_FW),
+            ObStr.d(ObStr.X_P_TMP_LOWER),
+            ObStr.d(ObStr.F_P_TMP_FRIDA)
         };
 
         for (String path : suspiciousFiles) {
@@ -2214,7 +2425,7 @@ public final class SecurityCore {
 
         try {
             java.util.Enumeration<java.net.URL> libraries = ClassLoader.getSystemClassLoader()
-                .getSystemResources("META-INF/xposed/init");
+                .getSystemResources(ObStr.d(ObStr.X_META_INIT));
             if (libraries.hasMoreElements()) {
                 return true;
             }
@@ -2226,11 +2437,12 @@ public final class SecurityCore {
     }
 
     private boolean isMagiskDetected() {
+        // 【2026-10-13 加固】路径与环境变量名由 ObStr 运行时解码
         String[] magiskPaths = {
-            "/sbin/magisk",
-            "/system/bin/magisk",
-            "/data/adb/magisk",
-            "/data/adb/modules"
+            ObStr.d(ObStr.M_P_SBIN),
+            ObStr.d(ObStr.M_P_BIN_MAGISK),
+            ObStr.d(ObStr.M_P_ADB_MAGISK),
+            ObStr.d(ObStr.M_P_MODULES)
         };
 
         for (String path : magiskPaths) {
@@ -2240,7 +2452,7 @@ public final class SecurityCore {
         }
 
         try {
-            String magiskPath = System.getenv("MAGISK_PATH");
+            String magiskPath = System.getenv(ObStr.d(ObStr.M_ENV_MAGISK));
             if (magiskPath != null && !magiskPath.isEmpty()) {
                 return true;
             }
@@ -2254,16 +2466,17 @@ public final class SecurityCore {
     private boolean detectSuspiciousLibraries() {
         try {
 
+            // 【2026-10-13 加固】maps 路径与可疑库名词表由 ObStr 运行时解码
             java.io.BufferedReader reader = new java.io.BufferedReader(
-                new java.io.FileReader("/proc/self/maps"));
+                new java.io.FileReader(ObStr.d(ObStr.S_PROC_MAPS)));
             String line;
             Set<String> suspiciousNames = new HashSet<>();
-            suspiciousNames.add("frida");
-            suspiciousNames.add("xposed");
-            suspiciousNames.add("substrate");
-            suspiciousNames.add("gameguardian");
-            suspiciousNames.add("lucky_patcher");
-            suspiciousNames.add("magisk");
+            suspiciousNames.add(ObStr.d(ObStr.F_FRIDA));
+            suspiciousNames.add(ObStr.d(ObStr.X_LOWER));
+            suspiciousNames.add(ObStr.d(ObStr.X_SUBSTRATE));
+            suspiciousNames.add(ObStr.d(ObStr.G_GAMEGUARDIAN));
+            suspiciousNames.add(ObStr.d(ObStr.G_LUCKY));
+            suspiciousNames.add(ObStr.d(ObStr.M_MAGISK));
 
             while ((line = reader.readLine()) != null) {
                 for (String name : suspiciousNames) {
@@ -2282,14 +2495,15 @@ public final class SecurityCore {
 
     private void checkRootAccess(SecurityReport report) {
 
+        // 【2026-10-13 加固】su 路径由 ObStr 运行时解码，日志改代号
         String[] suPaths = {
-            "/system/bin/su",
-            "/system/xbin/su",
-            "/system/bin/.ext/.su",
-            "/system/usr/we-initialization/recurse.sh",
-            "/system/etc/init.d/99startfdroid",
-            "/su/bin/su",
-            "/magisk/.core/bin/su"
+            ObStr.d(ObStr.S_P_BIN_SU),
+            ObStr.d(ObStr.S_P_XBIN_SU),
+            ObStr.d(ObStr.S_P_EXT_SU),
+            ObStr.d(ObStr.S_P_RECURSE),
+            ObStr.d(ObStr.S_P_INITD),
+            ObStr.d(ObStr.S_P_SU_BIN),
+            ObStr.d(ObStr.M_P_CORE_SU)
         };
 
         boolean suFound = false;
@@ -2302,8 +2516,8 @@ public final class SecurityCore {
 
         if (suFound || isTestKeyBuild() || hasWriteAccess("/system")) {
             report.rootDetected = true;
-            report.threats.add("检测到 Root 权限");
-            LogBridge.w(TAG, "⚠️ 检测到 Root 环境");
+            report.threats.add("检测到 [CHK-05] 权限");
+            LogBridge.w(TAG, "⚠️ 检测到 [CHK-05] 环境");
         }
     }
 
@@ -2435,12 +2649,13 @@ public final class SecurityCore {
 
     private boolean isEmulator() {
 
+        // 【2026-10-13 加固】模拟器特征路径由 ObStr 运行时解码
         String[] emulatorFiles = {
-            "/dev/socket/qemud",
-            "/dev/qemu_pipe",
-            "/system/lib/libc_malloc_debug_qemu.so",
-            "/sys/qemu_trace",
-            "/system/bin/qemu-props"
+            ObStr.d(ObStr.Q_SOCKET),
+            ObStr.d(ObStr.Q_PIPE),
+            ObStr.d(ObStr.Q_LIBMALLOC),
+            ObStr.d(ObStr.Q_TRACE),
+            ObStr.d(ObStr.Q_PROPS)
         };
 
         for (String path : emulatorFiles) {

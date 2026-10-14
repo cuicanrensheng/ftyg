@@ -165,6 +165,9 @@ public class AppCoreManager {
             } else {
                 log("【直播源】上一次加载仍在进行，跳过重复加载");
             }
+            // 【修复】本实例尚无数据（如 Activity 重建产生的新 AppCoreManager 实例被全局闸门挡住）：
+            // 不能直接 return 导致本实例 UI 永远空白。纯本地读磁盘缓存补一份数据回调本实例 listener。
+            supplyCacheToListenerIfEmpty();
             return;
         }
 
@@ -179,6 +182,10 @@ public class AppCoreManager {
             }
         } else if (now - lastLiveSourceLoadAtMs < LOAD_DEDUPE_WINDOW_MS) {
             log("【直播源】距上次加载不足 " + (LOAD_DEDUPE_WINDOW_MS / 1000) + "s，跳过重复加载");
+            // 【修复】全局 6s 去重窗口是为防止重复请求第三方；但 Activity 重建产生的新实例
+            // 自己 channelSourceList 为空，被挡后没有数据填充 UI（表现为退出再进 OTT 只剩播放器、
+            // 分组与频道全空）。此处同样纯本地读缓存补回调，不请求第三方。
+            supplyCacheToListenerIfEmpty();
             return;
         }
 
@@ -212,6 +219,32 @@ public class AppCoreManager {
      *
      * <p>幂等：重复调用只会把闸门再置 false，无害。
      */
+    /**
+     * 【2026-10-14 修复】本实例频道列表为空时，从磁盘缓存补一份数据回调给本实例 listener。
+     * 用途：Activity 重建产生新的 AppCoreManager 实例后，其 loadLiveAndEpg() 被全局去重闸门
+     * （liveSourceLoadInFlight / 6s 窗口）挡住时，不能让本实例 UI 永远空白。
+     * 纯本地读磁盘缓存文件（readLiveSourceCacheRaw），不请求第三方站点。
+     * 回调走 OttHomeActivity 内部的 mainHandler.post，从任意线程调用均安全。
+     */
+    private void supplyCacheToListenerIfEmpty() {
+        if (dataLoadListener == null) return;
+        synchronized (channelListLock) {
+            if (!channelSourceList.isEmpty()) return;
+            try {
+                String cacheContent = readLiveSourceCacheRaw();
+                if (cacheContent == null || cacheContent.isEmpty()) return;
+                List<Channel> cached = parseLiveSource(cacheContent);
+                if (cached == null || cached.isEmpty()) return;
+                channelSourceList.clear();
+                channelSourceList.addAll(cached);
+                dataLoadListener.onLiveSourceLoaded(cached, true);
+                log("【直播源】被全局去重窗口拦截，已从磁盘缓存补回调本实例，频道数：" + cached.size());
+            } catch (Throwable t) {
+                log("【直播源】补缓存回调异常：" + t.getMessage());
+            }
+        }
+    }
+
     private void finishLiveSourceLoad(long gen) {
         if (gen != sLoadGeneration.get()) {
             log("【直播源】忽略过期加载的收口（gen=" + gen + "，当前=" + sLoadGeneration.get()

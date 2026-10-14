@@ -50,7 +50,14 @@ public class BootReceiver extends BroadcastReceiver {
 
     private static final String ACTION_CONNECTIVITY_CHANGE = "android.net.conn.CONNECTIVITY_CHANGE";
 
-    private static final long START_DELAY_MS = 3000;
+    /**
+     * 【2026-10-13 开机提速】原为 3000ms。
+     *
+     * <p>实测（创维 8N05_Q840 / Android 8）：开机 → 系统冷启动占 26.6s，
+     * App 进程在 26.6s 被广播拉起，再等 3000ms 才拉起 MainActivity → 界面出现在 ~29.9s。
+     * 这 3000ms 里 Application 初始化只占 ~0.3s，其余是纯等待，故下调到 1200ms。
+     */
+    private static final long START_DELAY_MS = 1200;
     private static final long SHORT_DELAY_MS = 1000;
 
     private static final long SCREEN_ON_DELAY_MS = 1500;
@@ -240,6 +247,12 @@ public class BootReceiver extends BroadcastReceiver {
     }
 
     private void startMainActivity(Context context) {
+        // 【2026-10-13 单飞闸门】与 JobScheduler / sticky 前台服务互斥，避免重复拉起重建 OTT 首页
+        final boolean allowed = BootStartManager.allowForegroundStart(context);
+        BootStartManager.noteLaunchSource(context, "BootReceiver直连", "闸门放行=" + allowed);
+        if (!allowed) {
+            return;
+        }
         try {
             Intent mainIntent = new Intent(context, MainActivity.class);
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

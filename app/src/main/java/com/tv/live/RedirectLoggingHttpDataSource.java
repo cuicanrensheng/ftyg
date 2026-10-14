@@ -162,7 +162,9 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
         } else {
 
             if (BuildConfig.IS_DEBUG) {
-                LogBridge.d(TAG, finalMsg);
+                // 【2026-10-13 日志双写修复】同一事件此前同时写 LogBridge.d（debug）+ LogCollector.network（network），
+                // 两者都进 9527 同一环形缓冲 → 每条业务事件固定双行，RedirectHttp 一个 Tag 占日志总量 74%。
+                // 保留 network（类型即"网络请求"，前端"网络"分组依赖它），去掉重复的 debug 行。
                 LogCollector.getInstance().network(TAG, msg);
             }
         }

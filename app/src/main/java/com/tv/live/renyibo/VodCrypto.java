@@ -8,6 +8,8 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import com.tv.live.security.SecurityCore;
+
 /**
  * 内置源5（爱其意/任意播）影视点播（VOD）加解密工具类。
  *
@@ -15,7 +17,7 @@ import javax.crypto.spec.SecretKeySpec;
  * （见 F 盘既有分析报告），已通过「用固定 key + 任意 iv 解密已抓请求密文」铁证确认：
  * <ul>
  *   <li>算法：AES-128-CBC + PKCS7</li>
- *   <li>密钥：固定 {@code 7dbe4c69aa5b98ad90ba3468e21c6fd2}（16 字节）</li>
+ *   <li>密钥：固定 16 字节 AES-128（已下沉 SO，见 cpp/secstore.cpp C_VOD_KEY）</li>
  *   <li>密文载体：URL-safe Base64、无 {@code =} 填充，长度恒为 16 的倍数</li>
  *   <li>IV：每个请求随机</li>
  * </ul>
@@ -30,11 +32,24 @@ public final class VodCrypto {
 
     private VodCrypto() {}
 
-    /** 已破译真密钥（32 hex = AES-128）。与 {@link RenYiBoVodCatalog#VOD_KEY}（废弃）不同。 */
-    public static final String VOD_KEY_HEX = "7dbe4c69aa5b98ad90ba3468e21c6fd2";
+    /**
+     * AES-128 密钥字节（惰性从 SO 取，16 字节）。
+     *
+     * <p>【2026-10-13 SO 内建加密】密钥原为 public 明文 hex 常量 —— 反编译 dex
+     * 可直接读出这个第三方服务的 AES 密钥。现下沉到 cpp/secstore.cpp
+     * （id=C_VOD_KEY），编译期加密后进 .so 的 .rodata。
+     */
+    private static volatile byte[] sKeyBytes;
 
-    /** 运行时密钥字节（16 字节）。 */
-    private static final byte[] VOD_KEY_BYTES = hexToBytes(VOD_KEY_HEX);
+    /** 取密钥字节。SO 不可用返回 null，调用方按「解密不可用」处理。 */
+    private static byte[] keyBytes() {
+        byte[] v = sKeyBytes;
+        if (v != null) return v;
+        String hex = SecurityCore.secureString(SecurityCore.C_VOD_KEY);
+        if (hex == null || hex.length() != 32) return null;
+        sKeyBytes = hexToBytes(hex);
+        return sKeyBytes;
+    }
 
     private static final SecureRandom SRANDOM = new SecureRandom();
 
@@ -125,7 +140,7 @@ public final class VodCrypto {
     public static byte[] encrypt(String plaintext, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         cipher.init(Cipher.ENCRYPT_MODE,
-                new SecretKeySpec(VOD_KEY_BYTES, "AES"), new IvParameterSpec(iv));
+                new SecretKeySpec(requireKey(), "AES"), new IvParameterSpec(iv));
         return cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -133,8 +148,17 @@ public final class VodCrypto {
     public static byte[] decrypt(byte[] cipherBytes, byte[] iv) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         cipher.init(Cipher.DECRYPT_MODE,
-                new SecretKeySpec(VOD_KEY_BYTES, "AES"), new IvParameterSpec(iv));
+                new SecretKeySpec(requireKey(), "AES"), new IvParameterSpec(iv));
         return cipher.doFinal(cipherBytes);
+    }
+
+    /** 密钥不可用（SO 未加载）时给出明确错误，而非让 SecretKeySpec 抛含糊的 NPE。 */
+    private static byte[] requireKey() {
+        byte[] k = keyBytes();
+        if (k == null) {
+            throw new IllegalStateException("VOD key unavailable: libtvlive_security.so not loaded");
+        }
+        return k;
     }
 
     /** 解密为字符串。 */

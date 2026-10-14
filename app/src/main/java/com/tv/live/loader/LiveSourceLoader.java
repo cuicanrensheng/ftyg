@@ -164,13 +164,13 @@ public class LiveSourceLoader {
                     long tDlStart = System.currentTimeMillis();
                     if (isChanxiang) {
                         LogBridge.i(TAG, "【畅享】走内置畅享源分支，本地实时生成 M3U");
-                        rawContent = com.tv.live.chanxiang.ChanxiangSourceLoader.loadAllLiveAsM3u();
+                        rawContent = com.tv.live.chanxiang.ChanxiangSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isAsset) {
                         LogBridge.i(TAG, "【内置】走 assets 内置源分支：" + url);
                         rawContent = readAssetSource(url.substring("asset://".length()));
                     } else if (isRenyibo) {
                         LogBridge.i(TAG, "【爱其意】走内置源5分支，本地实时拉取频道并生成 M3U");
-                        rawContent = com.tv.live.renyibo.RenYiBoSourceLoader.loadAllLiveAsM3u();
+                        rawContent = com.tv.live.renyibo.RenYiBoSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isMigu) {
                         LogBridge.i(TAG, "【咪咕】走内置源6分支，取官方频道目录生成 M3U（地址为 miguhd:// 惰性解析）");
                         rawContent = com.tv.live.migu.MiguSourceLoader.loadAllLiveAsM3u(context);

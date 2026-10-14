@@ -1273,7 +1273,7 @@ public class TVPlayerManager {
                             com.tv.live.renyibo.RenYiBoVodCatalog.byTypeId(typeId);
                     String groupName = cat == null ? ("分类 " + typeId) : cat.name;
                     LogBridge.w(TAG, "【爱其意·点播】[" + groupName + "] 播放入口待补齐"
-                            + "（依赖 naiqiyi.php 加密接口），本次不发请求");
+                            + "（依赖点播加密接口），本次不发请求");
                     if (listener != null) {
                         listener.onPlayError("源5点播[" + groupName + "]播放地址待补齐（加密接口待接通）");
                     }
@@ -3249,6 +3249,51 @@ public class TVPlayerManager {
 
     private void switchRenderer(boolean useTexture) {
         if (player == null || playerView == null || context == null) return;
+
+        // 【2026-10-13 黑屏修复】mCurrentUseTexture == null 只代表「当前视图的渲染类型未知」
+        //   （attachPlayerView 刚把 Activity 里 inflate 好的实例传进来时就有意作废它）。
+        //   旧逻辑只要 mCurrentUseTexture 为 null 就一律走下方「重建分支」：
+        //   把刚 attach 好的 playerView 拆掉、再 new 一个同尺寸的新 PlayerView。
+        //   Surface 一拆一建期间必然黑屏 —— 实测「开机自启进全屏时黑屏重建一次」就是这里。
+        //
+        //   修法：先用视图的<b>真实</b>渲染类型判断。若它已经与目标一致，直接走早退逻辑
+        //   （只补绑 Surface 回调），完全不动视图。类型判断不了（既非 SurfaceView 也非
+        //   TextureView）时保持原行为，继续重建，避免引入未知风险。
+        if (mCurrentUseTexture == null) {
+            final android.view.View videoSurface = playerView.getVideoSurfaceView();
+            final boolean isTextureView = videoSurface instanceof android.view.TextureView;
+            final boolean typeKnown = isTextureView
+                    || (videoSurface instanceof android.view.SurfaceView);
+            if (typeKnown && isTextureView == useTexture) {
+                mCurrentUseTexture = useTexture;
+                LogBridge.i(TAG, "switchRenderer 渲染类型已匹配，跳过重建（避免黑屏）: useTexture="
+                        + useTexture + ", view=" + System.identityHashCode(playerView));
+                // 【2026-10-13 黑边修复】跳过重建时视图保留的是 XML 里的 resize_mode="fit"：
+                //   OTT 预览容器（高 200dp、宽 match_parent）比例远宽于 16:9，fit 下视频按
+                //   原始比例居中缩放，两侧露出 SurfaceView 黑色背景 → 黑边。重建分支在
+                //   newPlayerView.setResizeMode(...) 处会应用 mCurrentScaleMode（默认 FILL），
+                //   这里跳过重建，必须手动补上同一应用，缩放行为才与重建分支/备份版本一致。
+                switch (mCurrentScaleMode) {
+                    case FILL:
+                        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+                        break;
+                    case ZOOM:
+                        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+                        break;
+                    case FIT:
+                    default:
+                        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+                        break;
+                }
+                if (playerView.getPlayer() != player) playerView.setPlayer(player);
+                if (!useTexture) {
+                    surfaceCallbackBound = false;
+                    bindSurfaceCallback(playerView);
+                }
+                return;
+            }
+        }
+
         if (mCurrentUseTexture != null && mCurrentUseTexture == useTexture) {
             // 【2026-09-29 黑屏根因修复·第二轮】埋点：确认是否命中早退分支（用 i 级，release 版可见）
             LogBridge.i(TAG, "switchRenderer 早退分支: useTexture=" + useTexture
@@ -4140,7 +4185,7 @@ public class TVPlayerManager {
             boolean isYunTuLb = com.tv.live.migu.source.CarouselApi.isYunTuLookBackUrl(playUrl);
             // 【2026-10-07】源5（爱其意）待解析地址，两种形态：
             //   ① renyibo://<apiId> 协议串（新 M3U 行地址，参照咪咕 nowtv:// 模式）；
-            //   ② 110.42.52.180 的 php 302 跳转器（旧缓存 M3U 遗留，兼容处理）。
+            //   ② 自有服务器的 php 302 跳转器（旧缓存 M3U 遗留，兼容处理）。
             //   都不是真实流地址，不能被「频道线路表」覆盖，须先解析落地再播。
             boolean isRenyiboScheme =
                     com.tv.live.renyibo.RenYiBoSourceLoader.isRenyiboSchemeUrl(playUrl);

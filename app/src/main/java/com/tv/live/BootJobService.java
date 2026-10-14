@@ -14,6 +14,15 @@ public class BootJobService extends JobService {
     public boolean onStartJob(JobParameters params) {
         LogBridge.d(TAG, "JobScheduler 触发启动");
 
+        // 【2026-10-13 单飞闸门】与 Alarm / sticky 前台服务互斥，避免重复拉起重建 OTT 首页
+        final boolean allowed = BootStartManager.allowForegroundStart(this);
+        BootStartManager.noteLaunchSource(this, "JobScheduler(BootJobService)",
+                "闸门放行=" + allowed);
+        if (!allowed) {
+            jobFinished(params, false);
+            return false;
+        }
+
         new Thread(() -> {
             boolean success = false;
 

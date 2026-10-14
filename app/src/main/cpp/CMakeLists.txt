@@ -18,6 +18,10 @@ add_compile_options(
         -ffunction-sections
         -fdata-sections
         -Os
+        # 2026-10-13：arm32(Thumb) 下 r7 默认被占作帧指针，raw syscall 需要它
+        # 承载调用号（svc #0 约定 r7=__NR_*）。放掉帧指针后 r7 才可分配。
+        # 代价：本 .so 自身不再带 FP 链——本库不参与 App 的崩溃回溯，无影响。
+        -fomit-frame-pointer
 )
 # 不导出无关符号，strip 后体积更小
 add_link_options(
@@ -30,11 +34,17 @@ add_link_options(
 
 add_library(tvlive_security SHARED
         security.cpp
-        aes.cpp)
+        aes.cpp
+        crypto2.cpp
+        selfcheck.cpp
+        # 2026-10-13：敏感常量仓库（源地址/端点），编译期加密后落 .rodata，
+        # 取代原先「Base64 密文常量 + 外部生成脚本」的做法。
+        secstore.cpp)
 
-# log 库
+# log 库 + 动态加载（selfcheck 需要 dl_iterate_phdr / dladdr 定位自身 .text）
 find_library(log-lib log)
-target_link_libraries(tvlive_security ${log-lib})
+find_library(dl-lib dl)
+target_link_libraries(tvlive_security ${log-lib} ${dl-lib})
 
 # =============================================================
 # 2026-09-17 移除 3 个空转 stub target（udbauthunify / hyquic / nsdt）：

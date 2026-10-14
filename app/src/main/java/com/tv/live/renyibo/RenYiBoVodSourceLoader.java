@@ -1,7 +1,11 @@
 package com.tv.live.renyibo;
 
+import android.content.Context;
+import android.text.TextUtils;
+
 import com.tv.live.Channel;
 import com.tv.live.util.LogBridge;
+import com.tv.live.util.M3uDiskCache;
 import com.tv.live.util.NetUtil;
 
 import org.json.JSONArray;
@@ -103,6 +107,53 @@ public final class RenYiBoVodSourceLoader {
      */
     private static final int CATEGORY_FETCH_PAGES = 3;
 
+    // ------------------------------------------------------------------
+    // 【2026-10-13 磁盘缓存】照源7（AfhgrjSourceLoader）模板。
+    //   点播分组原先<b>零缓存</b>：每次启动都要串行拉 7 个分类 × 3 页 = 21 个请求，
+    //   而且被直播拉取阻塞（见 RenYiBoSourceLoader），是 OTT 首屏「分组频道都没有」
+    //   的直接原因之一。
+    //
+    //   防退化（照源6 残表检测 / 源7 截断保护）：抓取失败时 buildVodM3uFragment()
+    //   仍会写入「分类骨架占位」（vodId 为空），因此这里用真实条目数做下限校验，
+    //   低于阈值视为失败 → 不覆盖已有好缓存。
+    // ------------------------------------------------------------------
+    private static final long VOD_CACHE_TTL_MS = 6L * 60L * 60L * 1000L;
+    private static final long VOD_FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
+    /** 真实条目数下限：健康一次约 455 条（7 分类 × 63 + 首页 14）；低于此值视为残表 */
+    private static final int MIN_REAL_ITEMS = 20;
+
+    /** 本次 build 累计的真实条目数（有 vodId 的条目） */
+    private static volatile int sRealCount = 0;
+    /** 上一次 build 结束时的真实条目数（供缓存层判断结果是否可用） */
+    private static volatile int sLastRealCount = 0;
+
+    private static final M3uDiskCache sVodCache = new M3uDiskCache(
+            TAG, "源5点播分组", "renyibo_vod.m3u", VOD_CACHE_TTL_MS, VOD_FAIL_COOLDOWN_MS,
+            new M3uDiskCache.Fetcher() {
+                @Override
+                public String fetch() {
+                    String fragment = buildVodM3uFragment();
+                    final int real = sLastRealCount;
+                    if (real < MIN_REAL_ITEMS) {
+                        LogBridge.w(TAG, "源5点播：真实条目仅 " + real + " 条（< "
+                                + MIN_REAL_ITEMS + "，疑似残表），本次结果不写入缓存");
+                        return null;
+                    }
+                    return fragment;
+                }
+            });
+
+    /**
+     * 缓存优先取「点播分组 M3U 片段」。
+     *
+     * <p>命中缓存（含过期）即瞬时返回，不阻塞首屏；过期时异步刷新。
+     *
+     * @return 片段文本；无缓存且抓取失败/残表时返回 {@code null}（调用方应跳过点播部分）
+     */
+    public static String loadVodFragmentCached(Context context) {
+        return sVodCache.load(context);
+    }
+
     /**
      * 【2026-10-13 海报加速】图床域名镜像重写表：不可达主机 → 可达镜像主机。
      * 照搬源7 {@code com.tv.live.afhgrj.AfhgrjSourceLoader.POSTER_HOST_MIRROR}（已实测验证）：
@@ -144,6 +195,7 @@ public final class RenYiBoVodSourceLoader {
         sThumbUsedCount = 0;
         sPosterFallbackCount = 0;
         sMirrorRewrites = 0;
+        sRealCount = 0;
 
         // ① 首页推荐（真实明文，含海报）
         List<String[]> home = RenYiBoVodCatalog.homeVideos();
@@ -172,7 +224,9 @@ public final class RenYiBoVodSourceLoader {
                 if (real != null && !real.isEmpty()) {
                     for (String[] v : real) {
                         if (v[1] == null || v[1].isEmpty()) continue;
-                        if (!seen.add(cat.typeId + "|" + v[0])) continue;
+                        // 【2026-10-14】去重 key 用分组名而非 typeId：电影与恐怖共享 type_id=1，
+                        // 若仍按 typeId 去重，恐怖分组会被电影分组已收录的影片全部挡掉而恒为空。
+                        if (!seen.add(cat.name + "|" + v[0])) continue;
                         appendItem(catSb, v[0], v[1], v[2], cat.name, v[4]);
                         written++;
                     }
@@ -190,7 +244,7 @@ public final class RenYiBoVodSourceLoader {
             for (String[] v : home) {
                 int t = parseIntSafe(v[3], 0);
                 if (t != cat.typeId) continue;
-                if (!seen.add(cat.typeId + "|" + v[0])) continue;
+                if (!seen.add(cat.name + "|" + v[0])) continue;
                 appendItem(catSb, v[0], v[1], v[2], cat.name, v[4]);
                 written++;
             }
@@ -211,6 +265,8 @@ public final class RenYiBoVodSourceLoader {
                     + " 条，回退原图 vod_pic " + sPosterFallbackCount
                     + " 条，图床镜像重写 " + sMirrorRewrites + " 次");
         }
+        // 【2026-10-13 磁盘缓存】记录本次真实条目数，供缓存层做残表校验
+        sLastRealCount = sRealCount;
         return sb.toString();
     }
 
@@ -219,7 +275,7 @@ public final class RenYiBoVodSourceLoader {
      * {@code video_list} 列表，并按 {@code vod_id} 去重合并（同片在首页与分类页会重复出现）。
      *
      * <p>沿用 {@link #fetchCategoryPageReal} 既有的「AES-128-CBC（固定 key、随机 IV 前置）+
-     * {@link VodResponse} 三段信封解密」管线，仅在同一授权端点（{@link RenYiBoVodCatalog#VOD_BASE}）
+     * {@link VodResponse} 三段信封解密」管线，仅在同一授权端点（{@link RenYiBoVodCatalog#vodBase()}）
      * 上多发几页，<b>不新增任何请求逻辑</b>。某页返回 null（接口失败）或空（该组再无更多页）即
      * 停止向后翻页，<b>不做无限翻页</b>。
      *
@@ -229,7 +285,7 @@ public final class RenYiBoVodSourceLoader {
         Map<String, String[]> dedup = new LinkedHashMap<>();
         for (int page = 1; page <= CATEGORY_FETCH_PAGES; page++) {
             if (!canSendRealRequest()) break;
-            List<String[]> pageList = fetchCategoryPageReal(cat.typeId, page);
+            List<String[]> pageList = fetchCategoryPageReal(cat.typeId, page, cat.classFilter);
             if (pageList == null) {
                 LogBridge.w(TAG, "源5点播：分组[" + cat.name + "] 第" + page + "页接口失败，停止拉取");
                 break;
@@ -291,6 +347,12 @@ public final class RenYiBoVodSourceLoader {
 
     private static void appendItem(StringBuilder sb, String vodId, String name,
                                    String poster, String group, String remarks) {
+        // 【2026-10-13 磁盘缓存】统计「真实条目」（有 vodId）；
+        // 抓取失败时本方法仍会写「分类骨架占位」（vodId 为空），故缓存层需要这个计数
+        // 来判断本次结果是否可用，避免用残表覆盖好缓存。
+        if (vodId != null && !vodId.isEmpty()) {
+            sRealCount++;
+        }
         String display = name;
         if (remarks != null && !remarks.isEmpty()) {
             display = name + " · " + remarks;
@@ -368,7 +430,7 @@ public final class RenYiBoVodSourceLoader {
      *
      * <p>服务端协议（已从抓包确证，2026-10-12）：
      * <pre>
-     *   POST {RenYiBoVodCatalog#VOD_BASE}
+     *   POST {RenYiBoVodCatalog#vodBase()}
      *   headers: Dart 客户端模板（见 {@link RenYiBoVodCatalog#DART_HEADERS}）
      *   body:    URL-safe Base64( AES-128-CBC+PKCS7 加密的请求明文 )   ← 已确证
      *   resp:    明文 JSON（列表类）或
@@ -423,9 +485,13 @@ public final class RenYiBoVodSourceLoader {
      * @return 条目列表 {vodId, vodName, vodPic, typeId, remarks}；失败返回 {@code null}
      */
     private static List<String[]> fetchCategoryPageReal(int typeId, int page) {
+        return fetchCategoryPageReal(typeId, page, "");
+    }
+
+    private static List<String[]> fetchCategoryPageReal(int typeId, int page, String classFilter) {
         try {
             byte[] iv = VodCrypto.genRandomIv();
-            String plain = VodRequest.videoList(typeId, page);
+            String plain = VodRequest.videoList(typeId, page, classFilter);
             byte[] cipher = VodCrypto.encrypt(plain, iv);
             // 【2026-10-12 线上实测定案】请求体 = base64url( IV(16B) ‖ 密文 )，IV 前置。
             byte[] payload = new byte[iv.length + cipher.length];
@@ -461,7 +527,7 @@ public final class RenYiBoVodSourceLoader {
     private static String postVod(String cipherBody) {
         try {
             Request.Builder rb = new Request.Builder()
-                    .url(RenYiBoVodCatalog.VOD_BASE)
+                    .url(RenYiBoVodCatalog.vodBase())
                     .post(RequestBody.create(MediaType.get("text/plain"), cipherBody));
             for (String[] h : RenYiBoVodCatalog.DART_HEADERS) {
                 rb.header(h[0], h[1]);

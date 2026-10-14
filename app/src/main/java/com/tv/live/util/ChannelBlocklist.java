@@ -137,8 +137,13 @@ public final class ChannelBlocklist {
             String name = c.getName();
             if (isBlocked(name)) {
                 removed++;
-                LogBridge.i(TAG, "已屏蔽频道：[" + name + "] group=" + c.getGroup()
-                        + (BLOCKED_NAMES.contains(name == null ? null : name.trim()) ? "（点名）" : "（成人关键词）"));
+                // 【2026-10-13 去名字化】原实现把频道名整条打进日志。对被屏蔽的成人内容而言，
+                //     这等于在日志里复现了一遍片名：既暴露了"屏蔽机制命中哪一类"，又把违规
+                //     标题二次留存（9527 可被同网段任意设备拉取）。改为只记录分组 + 命中规则，
+                //     数量由下方汇总行体现，排障时靠组名定位是哪一批源出的问题。
+                final boolean byName = BLOCKED_NAMES.contains(name.trim());
+                LogBridge.i(TAG, "已屏蔽 1 条 group=" + c.getGroup()
+                        + " 规则=" + (byName ? "点名" : "关键词"));
                 continue;
             }
             out.add(c);

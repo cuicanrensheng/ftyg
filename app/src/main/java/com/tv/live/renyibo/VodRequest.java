@@ -47,10 +47,15 @@ public final class VodRequest {
      * 热播大片（哪吒2/抓娃娃/热辣滚烫…），六个点播分组统一走最热分支。
      */
     public static String videoList(int typeId, int page) {
+        return videoList(typeId, page, "");
+    }
+
+    /** 【2026-10-14】带分组级 class 筛选的分类列表（如恐怖分组传 "恐怖"）。其余参数不变。 */
+    public static String videoList(int typeId, int page, String classFilter) {
         JSONObject data = new JSONObject();
         put(data, "pg", page);
         put(data, "tid", typeId);
-        put(data, "class", "");
+        put(data, "class", classFilter == null ? "" : classFilter);
         put(data, "area", "");
         put(data, "lang", "");
         put(data, "year", "");

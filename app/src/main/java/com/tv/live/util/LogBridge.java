@@ -296,15 +296,21 @@ public final class LogBridge {
             if (msg != null && msg.length() > 500) {
                 msg = msg.substring(0, 500) + "...[已截断]";
             }
-            final String fTag = tag, fMsg = msg, fType = type;
+            // 【2026-10-13 日志脱敏】分工明确：
+            //   fMsg    → 脱敏后正文，进 9527 的 logs / logEntries（可被局域网任意设备 GET /api/logs 拉取）
+            //   fMsgRaw → 原文，仅用于 logcat echo 与 ExceptionReporter 上报（都走授权通道）
+            final String fTag = tag, fType = type;
+            final String fMsgRaw = msg;
+            final String fMsg = LogRedactor.redact(msg);
             final boolean fReport = autoReport;
             final boolean fEcho = echoToLogcat;
             final long ts = System.currentTimeMillis(); // 提交时打时间戳，保证异步后仍单调
-            sLogWriter.execute(() -> addLogInternalOnWriter(fTag, fMsg, fType, fReport, fEcho, ts));
+            sLogWriter.execute(() -> addLogInternalOnWriter(fTag, fMsg, fType, fReport, fEcho, ts, fMsgRaw));
         }
 
         private void addLogInternalOnWriter(String tag, String msg, String type, boolean autoReport,
-                                            boolean echoToLogcat, long timestamp) {
+                                            boolean echoToLogcat, long timestamp, String rawMsg) {
+            // msg = 已脱敏（展示/落盘）；rawMsg = 原文（logcat echo 与异常上报）
             LogEntry entry = createLogEntry(tag, msg, type, timestamp);
             String line;
             if (!TextUtils.isEmpty(tag)) {
@@ -327,17 +333,19 @@ public final class LogBridge {
             notifyListeners(entry);
 
             if (autoReport && (TYPE_ERROR.equals(type) || TYPE_CRASH.equals(type))) {
-                if (shouldReportError(msg)) {
+                // 【2026-10-13 脱敏】去重判定与上报都用原文，避免脱敏干扰服务端诊断
+                final String rMsg = rawMsg != null ? rawMsg : msg;
+                if (shouldReportError(rMsg)) {
                     try {
                         ExceptionReporter.reportError(
                                 tag != null ? tag : "TVLive",
-                                msg != null ? msg : "Unknown error",
-                                new RuntimeException(msg != null ? msg : "Unknown error"));
+                                rMsg != null ? rMsg : "Unknown error",
+                                new RuntimeException(rMsg != null ? rMsg : "Unknown error"));
                     } catch (Throwable ignored) {}
                 } else {
 
                     android.util.Log.w("LogCollector", "日志已过滤不记录: " +
-                        (msg != null ? msg.substring(0, Math.min(100, msg.length())) : ""));
+                        (rMsg != null ? rMsg.substring(0, Math.min(100, rMsg.length())) : ""));
                 }
             }
 
@@ -347,34 +355,38 @@ public final class LogBridge {
             if (!echoToLogcat) return;
 
             try {
+                // 【2026-10-13 脱敏】logcat 走原文：需要 adb 授权才能读，
+                // 且 release 包的 android.util.Log 已被 proguard 整体剥离，不存在额外的暴露面。
+                // 这样 debug 包调试时仍能看清完整特征串。
+                final String echoMsg = rawMsg != null ? rawMsg : msg;
                 String logTag = TextUtils.isEmpty(tag) ? "TVLive" : tag;
                 switch (type) {
                     case TYPE_ERROR:
-                        android.util.Log.e(logTag, msg);
+                        android.util.Log.e(logTag, echoMsg);
                         break;
                     case TYPE_WARN:
-                        android.util.Log.w(logTag, msg);
+                        android.util.Log.w(logTag, echoMsg);
                         break;
                     case TYPE_DEBUG:
-                        android.util.Log.d(logTag, msg);
+                        android.util.Log.d(logTag, echoMsg);
                         break;
                     case TYPE_CRASH:
-                        android.util.Log.e(logTag, "CRASH: " + msg);
+                        android.util.Log.e(logTag, "CRASH: " + echoMsg);
                         break;
                     case TYPE_NETWORK:
-                        android.util.Log.i(logTag, "[NET] " + msg);
+                        android.util.Log.i(logTag, "[NET] " + echoMsg);
                         break;
                     case TYPE_PARSE:
-                        android.util.Log.i(logTag, "[PARSE] " + msg);
+                        android.util.Log.i(logTag, "[PARSE] " + echoMsg);
                         break;
                     case TYPE_PLAYBACK:
-                        android.util.Log.i(logTag, "[PLAY] " + msg);
+                        android.util.Log.i(logTag, "[PLAY] " + echoMsg);
                         break;
                     case TYPE_OPERATION:
-                        android.util.Log.i(logTag, "[OP] " + msg);
+                        android.util.Log.i(logTag, "[OP] " + echoMsg);
                         break;
                     default:
-                        android.util.Log.i(logTag, msg);
+                        android.util.Log.i(logTag, echoMsg);
                         break;
                 }
             } catch (Throwable ignored) {}
@@ -1013,8 +1025,29 @@ public final class LogBridge {
                 m.put("dalvikPssMb", round1(mi.dalvikPss / 1024.0));
                 m.put("nativePssMb", round1(mi.nativePss / 1024.0));
                 m.put("otherPssMb", round1(mi.otherPss / 1024.0));
+
+                // 【2026-10-13 补口径】部分环境（模拟器 / 受限 ROM）Debug.getMemoryInfo 全字段返回 0
+                // （实测 totalPss=dalvikPss=nativePss=otherPss=0），内存分析因此缺一维。
+                // 回退顺序：/proc/self/smaps_rollup 的 Pss → /proc/self/statm 的 RSS。
+                if (mi.getTotalPss() <= 0) {
+                    long pssKb = readSmapsRollupKb("Pss:");
+                    if (pssKb >= 0) {
+                        m.put("memSource", "smaps_rollup");
+                    } else {
+                        pssKb = readStatmRssKb();
+                        m.put("memSource", pssKb >= 0 ? "statm_rss" : "unavailable");
+                    }
+                    if (pssKb >= 0) {
+                        double mb = pssKb / 1024.0;
+                        m.put("totalPssMb", round1(mb));
+                        m.put("otherPssMb", round1(mb));
+                    }
+                } else {
+                    m.put("memSource", "debug_api");
+                }
             } catch (Exception e) {
                 m.put("totalPssMb", -1);
+                m.put("memSource", "error");
             }
             try {
                 Runtime rt = Runtime.getRuntime();
@@ -1069,6 +1102,45 @@ public final class LogBridge {
                 return null;
             } finally {
                 if (r != null) try { r.close(); } catch (Exception ignored) {}
+            }
+        }
+
+        /** 【2026-10-13】读 /proc/self/smaps_rollup 指定字段（单位 kB）；不可用返回 -1 */
+        private long readSmapsRollupKb(String field) {
+            java.io.BufferedReader r = null;
+            try {
+                r = new java.io.BufferedReader(new java.io.FileReader("/proc/self/smaps_rollup"));
+                String line;
+                while ((line = r.readLine()) != null) {
+                    if (line.startsWith(field)) {
+                        String[] p = line.trim().split("\\s+");
+                        if (p.length >= 2) return Long.parseLong(p[1]);
+                    }
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                if (r != null) try { r.close(); } catch (Throwable ignored) {}
+            }
+            return -1;
+        }
+
+        /** 【2026-10-13】读 /proc/self/statm 第 2 列（resident pages）并换算为 kB；不可用返回 -1 */
+        private long readStatmRssKb() {
+            String s = readFirstLine("/proc/self/statm");
+            if (s == null) return -1;
+            try {
+                String[] p = s.trim().split("\\s+");
+                if (p.length < 2) return -1;
+                long pages = Long.parseLong(p[1]);
+                int pageKb = 4;
+                try {
+                    pageKb = (int) (android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE) / 1024);
+                } catch (Throwable ignored) {
+                }
+                if (pageKb <= 0) pageKb = 4;
+                return pages * pageKb;
+            } catch (Throwable e) {
+                return -1;
             }
         }
 

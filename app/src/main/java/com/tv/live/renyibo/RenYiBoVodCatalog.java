@@ -1,5 +1,7 @@
 package com.tv.live.renyibo;
 
+import com.tv.live.security.SecurityCore;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -32,18 +34,31 @@ public final class RenYiBoVodCatalog {
     // ------------------------------------------------------------------
 
     /**
-     * VOD 唯一业务端点。⚠️ 注意 host 是 {@code 110.42.3.76:37255}，
-     * <b>不是</b>直播源那台 {@code 110.42.52.180:6688}（两台服务互相独立）。
+     * VOD 唯一业务端点。⚠️ 这是<b>点播服务</b>主机（常量见 cpp/secstore.cpp C_VOD_BASE），
+     * 与直播源那台<b>互相独立</b>，不要混用。
+     *
+     * <p>【2026-10-13 SO 内建加密】原为明文常量（反编译 dex 直读）→ 上午改 Base64 密文
+     * （但密文生产依赖外部脚本）→ 现整表下沉到 {@code app/src/main/cpp/secstore.cpp}，
+     * 编译期加密后进 .so 的 .rodata，dex 与 strings 均扫不到，也不再需要生成脚本。
+     * 该 host 是<b>自有服务器</b>，比第三方订阅地址更应保护。
      */
-    public static final String VOD_BASE = "http://110.42.3.76:37255/naiqiyi.php/v7/logs";
+    private static volatile String sVodBase;
 
     /**
-     * 【废弃】早期抓包登记的"密钥明文"（{@code xddappsecretkey124}，长度 19）。
-     * 与破译出的<b>真密钥不同</b> —— 真密钥为 AES-128 固定密钥
-     * {@code 7dbe4c69aa5b98ad90ba3468e21c6fd2}（见 {@link VodCrypto#VOD_KEY_HEX}）。
-     * 保留此字段仅备历史核查，<b>不得用于任何加密运算</b>。
+     * 取授权端点。惰性取值（{@code SecurityCore.init()} 需 loadLibrary，不能放进
+     * {@code <clinit>}）；取不到返回空串，调用方会得到一次失败请求而非 NPE。
      */
-    public static final String VOD_KEY = "xddappsecretkey124";
+    public static String vodBase() {
+        String v = sVodBase;
+        if (v != null) return v;
+        String plain = SecurityCore.secureString(SecurityCore.C_VOD_BASE);
+        sVodBase = plain != null ? plain : "";
+        return sVodBase;
+    }
+
+    // 【2026-10-13 移除】早期抓包登记的那条"密钥明文"常量曾留在本类里（长度 19，
+    // 与破译出的真密钥不同、从未参与任何加密运算）。留在 dex 里只会被逆向者
+    // 当候选密钥去试 —— 已删除。真密钥见 {@link VodCrypto}（下沉 SO，dex 内无明文）。
 
     /**
      * Dart 客户端请求头模板（原样来自抓包）。服务端会校验其中若干项，
@@ -70,11 +85,19 @@ public final class RenYiBoVodCatalog {
         public final String name;
         /** 每项 = {维度名, 逗号分隔的候选值}，维度顺序与服务端一致 */
         public final String[][] filters;
+        /** 【2026-10-14】分组级 class 筛选值（如"恐怖"）；空 = 不筛选。
+         *  用于「电影」大类下派生独立分组（恐怖分组走 tid=1 + class=恐怖 + order=最热）。 */
+        public final String classFilter;
 
         Category(int typeId, String name, String[][] filters) {
+            this(typeId, name, filters, "");
+        }
+
+        Category(int typeId, String name, String[][] filters, String classFilter) {
             this.typeId = typeId;
             this.name = name;
             this.filters = filters;
+            this.classFilter = classFilter == null ? "" : classFilter;
         }
 
         public String filterValues(String key) {
@@ -93,6 +116,14 @@ public final class RenYiBoVodCatalog {
                     {"lang", "国语,英语,粤语,闽南语,韩语,日语,法语,德语,其它"},
                     {"year", "2026,2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014,2013,2012,2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000,1999,1998,1997,1996"},
             }),
+            // 【2026-10-14】恐怖分组：电影大类(tid=1)下的 class=恐怖 子集，走统一 order=最热 分支。
+            // 与电影分组共享 type_id=1，独立 group-title="恐怖"，频道来自 video_list(tid=1, class=恐怖)。
+            new Category(1, "恐怖", new String[][]{
+                    {"class", "恐怖"},
+                    {"area", "大陆,香港,台湾,美国,韩国,日本,法国,英国,德国,泰国,印度,其他"},
+                    {"lang", "国语,英语,粤语,闽南语,韩语,日语,法语,德语,其它"},
+                    {"year", "2026,2025,2024,2023,2022,2021,2020,2019,2018,2017,2016,2015,2014,2013,2012,2011,2010,2009,2008,2007,2006,2005,2004,2003,2002,2001,2000,1999,1998,1997,1996"},
+            }, "恐怖"),
             new Category(2, "电视剧", new String[][]{
                     {"class", "喜剧,古装,家庭,犯罪,动作,奇幻,武侠,爱情,青春,悬疑,科幻,警匪,谍战,商战,偶像,军事,神话,战争,都市,青春偶像,剧情,历史,经典,乡村,情景,网剧,其他"},
                     {"area", "大陆,香港,台湾,美国,韩国,日本,法国,英国,德国,泰国,印度,其他"},

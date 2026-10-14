@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
  *       SEG2 为原始字节。真实密文缓冲
  *       {@code buf = decodeSeg1(SEG1) ‖ decode(SEG2)}，且
  *       <b>IV = buf[0:16]、密文 = buf[16:]</b>，AES-128-CBC + PKCS7、
- *       固定密钥 {@link VodCrypto#VOD_KEY_HEX} 解密即业务明文 JSON。</li>
+ *       固定密钥（下沉 SO，见 {@link VodCrypto}）解密即业务明文 JSON。</li>
  * </ol>
  *
  * <p><b>⛔ 本类不联网</b>，只做解析与本地解密。

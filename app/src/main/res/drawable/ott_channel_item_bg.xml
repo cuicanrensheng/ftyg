@@ -4,21 +4,21 @@
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#CC12406E" />
-            <stroke android:width="2dp" android:color="#FF3AA0FF" />
+            <!-- 【2026-10-13 焦点框去重】去掉本状态的描边：GridView 的 listSelector
+                 (ott_channel_focus, 3dp 蓝框) 已绘制焦点框，这里再画 2dp 描边会与焦点框
+                 叠加成「蓝框内多出的一横」（卡片底边横线）。焦点表现统一由 listSelector 承担。 -->
             <corners android:radius="8dp" />
         </shape>
     </item>
     <item android:state_selected="true">
         <shape android:shape="rectangle">
             <solid android:color="#CC12406E" />
-            <stroke android:width="2dp" android:color="#FF3AA0FF" />
             <corners android:radius="8dp" />
         </shape>
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
             <solid android:color="#CC12406E" />
-            <stroke android:width="2dp" android:color="#FF3AA0FF" />
             <corners android:radius="8dp" />
         </shape>
     </item>

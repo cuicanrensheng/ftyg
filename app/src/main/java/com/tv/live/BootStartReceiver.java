@@ -23,6 +23,17 @@ public class BootStartReceiver extends BroadcastReceiver {
             return;
         }
 
+        // 【2026-10-13 单飞闸门】与 JobScheduler / sticky 前台服务互斥：
+        // 开机阶段这几条路径会在几秒内互相重复拉起，而 MainActivity 跳转 OTT 首页后会
+        // finish 自己、OTT 首页又是 standard 启动模式 → 每次拉起都重建整条界面，
+        // 用户观感就是「频道刚出来，界面又自己刷新加载了一遍」。
+        final boolean allowed = BootStartManager.allowForegroundStart(context);
+        BootStartManager.noteLaunchSource(context, "Alarm(BootStartReceiver)",
+                "action=" + action + " | 闸门放行=" + allowed);
+        if (!allowed) {
+            return;
+        }
+
         LogBridge.d(TAG, "开始启动应用...");
 
         boolean success = startActivityDirectly(context);

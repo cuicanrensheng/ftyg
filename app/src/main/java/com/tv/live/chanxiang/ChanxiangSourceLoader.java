@@ -1,9 +1,12 @@
 package com.tv.live.chanxiang;
 
+import android.content.Context;
+import android.text.TextUtils;
 import android.util.Base64;
 
 import com.tv.live.Channel;
 import com.tv.live.util.LogBridge;
+import com.tv.live.util.M3uDiskCache;
 import com.tv.live.util.NetUtil;
 
 import org.json.JSONArray;
@@ -122,9 +125,35 @@ public final class ChanxiangSourceLoader {
         return all;
     }
 
-    /** 拉取全部频道并转成 M3U（供 PlaylistParser.parseContent 复用） */
-    public static String loadAllLiveAsM3u() {
-        return toM3u(loadAllLive());
+    // ------------------------------------------------------------------
+    // 【2026-10-13 磁盘缓存】照源7（AfhgrjSourceLoader）模板：缓存优先 + TTL +
+    //   失败冷却 + 原子写 + 后台刷新单飞。
+    //   原实现是纯同步网络（清单 + 逐频道解析源），冷启动必须现场跑完才有分组。
+    //
+    //   TTL 取 6h：本源 M3U 行地址是「已解析的直链」，签名有效期约 48h
+    //   （见 TVPlayerManager#tryRefreshChanxiangSource 注释），6h 远小于 48h；
+    //   即便个别直链失效，播放路径还有「每频道最多重取 1 次」的自动兜底。
+    // ------------------------------------------------------------------
+    private static final long M3U_CACHE_TTL_MS = 6L * 60L * 60L * 1000L;
+    private static final long FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
+
+    private static final M3uDiskCache sM3uCache = new M3uDiskCache(
+            TAG, "源3(畅享)", "chanxiang_source.m3u", M3U_CACHE_TTL_MS, FAIL_COOLDOWN_MS,
+            new M3uDiskCache.Fetcher() {
+                @Override
+                public String fetch() {
+                    List<ChannelItem> items = loadAllLive();
+                    if (items == null || items.isEmpty()) {
+                        return null;
+                    }
+                    String m3u = toM3u(items);
+                    return TextUtils.isEmpty(m3u) ? null : m3u;
+                }
+            });
+
+    /** 拉取全部频道并转成 M3U（供 PlaylistParser.parseContent 复用）；缓存优先 */
+    public static String loadAllLiveAsM3u(Context context) {
+        return sM3uCache.load(context);
     }
 
     /** 关键字搜索（在已拉取的清单里本地过滤） */

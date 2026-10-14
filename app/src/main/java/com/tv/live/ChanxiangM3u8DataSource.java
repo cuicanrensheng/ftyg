@@ -59,6 +59,25 @@ public final class ChanxiangM3u8DataSource implements DataSource {
     private static final String AD_PATH_MARK = "/adjump/";
 
     /**
+     * 【2026-10-13 起播优化】广告剥离超时上限。
+     * 剥离是纯 CPU 计算，正常路径 &lt;50ms；设上限纯属防御 —— 一旦异常耗时，
+     * 宁可先播未剥离版本，也不让起播线程被阻塞（实测曾出现「严重卡顿 6901ms」）。
+     */
+    private static final long AD_STRIP_TIMEOUT_MS = 1500;
+
+    /**
+     * 【2026-10-13 起播优化】广告剥离专用线程池。
+     * 用 cached 池而非单线程池：超时的任务无法真正中断（剥离内部无中断检查），
+     * cached 池能保证它跑完即回收，不会让后续请求排队等一个卡死的任务。
+     */
+    private static final java.util.concurrent.ExecutorService AD_STRIP_POOL =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "AdStrip");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /**
      * 【2026-10-13 直播硬跳过】m3u8 地址中的直播特征标记（小写比对）。
      * 命中任一即视为直播源，广告剥离整体跳过。方向「保守放行」：
      * 误命中只会少剥一次广告，绝不损伤直播播放。
@@ -97,8 +116,8 @@ public final class ChanxiangM3u8DataSource implements DataSource {
         String uri = dataSpec.uri.toString();
         // 仅对 m3u8（排除 .ts）做归一化；其他资源透传给上游
         if (uri.contains(".m3u8") && !uri.contains(".ts")) {
+            final long t0 = android.os.SystemClock.elapsedRealtime();
             long opened = upstream.open(dataSpec);
-            Log.d(TAG, "拦截 m3u8 进行归一化: " + uri);
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
@@ -112,18 +131,30 @@ public final class ChanxiangM3u8DataSource implements DataSource {
                 } catch (IOException ignored) {
                 }
             }
+            final long t1 = android.os.SystemClock.elapsedRealtime();   // 上游下载完
             String text = new String(bos.toByteArray(), StandardCharsets.UTF_8);
             String normalized = normalize(text);
+            final long t2 = android.os.SystemClock.elapsedRealtime();   // 归一化完
+
             // 【2026-10-13 直播硬跳过】URL 带直播特征 → 只做 EXTINF 归一化，不做广告剥离
+            long t3 = t2;
             if (stripAds && !isLikelyLiveUrl(uri)) {
-                String stripped = stripAdSegments(normalized);
+                String stripped = stripWithTimeout(normalized, AD_STRIP_TIMEOUT_MS);
                 if (!stripped.equals(normalized)) {
                     LogBridge.i(TAG, "内置源中插广告已剥离: " + uri);
                 }
                 normalized = stripped;
+                t3 = android.os.SystemClock.elapsedRealtime();
             } else if (stripAds) {
                 LogBridge.i(TAG, "直播源跳过广告剥离: " + uri);
             }
+
+            // 【2026-10-13 起播埋点】release 包的 android.util.Log 被 proguard 整体剥离，
+            // 走 LogBridge 才看得见。用于定位「起播卡顿」究竟花在下载、归一化还是广告剥离。
+            LogBridge.i(TAG, "起播耗时分解: 下载=" + (t1 - t0) + "ms 归一化=" + (t2 - t1)
+                    + "ms 剥离=" + (t3 - t2) + "ms 总计=" + (t3 - t0)
+                    + "ms 原始字节=" + text.length() + " 分片=" + countSegments(normalized));
+
             byte[] out = normalized.getBytes(StandardCharsets.UTF_8);
             rewritten = new ByteArrayInputStream(out);
             return C.LENGTH_UNSET;
@@ -417,22 +448,70 @@ public final class ChanxiangM3u8DataSource implements DataSource {
         return a.equals(b);
     }
 
-    /** Levenshtein 编辑距离（哦了电视同源判定的距离函数） */
+    /**
+     * 【2026-10-13 起播优化】带超时保护的广告剥离。
+     * 超时或异常时返回未剥离的原文 —— 方向是「保守放行」：宁可少剥一次广告，也不卡住起播。
+     */
+    private static String stripWithTimeout(String text, long timeoutMs) {
+        // 显式声明 Callable，避免 submit(Runnable) / submit(Callable) 的重载歧义
+        java.util.concurrent.Future<String> f = AD_STRIP_POOL.submit(
+                (java.util.concurrent.Callable<String>) () -> stripAdSegments(text));
+        try {
+            return f.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException te) {
+            f.cancel(true);
+            LogBridge.w(TAG, "广告剥离超时(" + timeoutMs + "ms)，先用原始列表起播");
+            return text;
+        } catch (Throwable e) {
+            f.cancel(true);
+            return text;
+        }
+    }
+
+    /** 【2026-10-13 埋点用】统计分片数（#EXTINF 出现次数） */
+    private static int countSegments(String text) {
+        if (text == null || text.isEmpty()) return 0;
+        int c = 0;
+        int i = 0;
+        while ((i = text.indexOf("#EXTINF", i)) >= 0) {
+            c++;
+            i += 7;
+        }
+        return c;
+    }
+
+    /**
+     * Levenshtein 编辑距离（哦了电视同源判定的距离函数）
+     *
+     * <p>【2026-10-13 起播优化】原实现每次调用都 {@code new int[lb+1][la+1]}：
+     * 一个 500 分片的播放列表约分配 500 × 80×80 × 4B ≈ 12.8MB，在电视端（Android 8 / 内存紧张）
+     * 造成明显 GC 压力。改为滚动数组，空间从 O(la·lb) 降到 O(la)，算法与结果完全等价；
+     * 另加相等快速路径（相邻分片 URL 相同的场景很常见）。
+     */
     private static int editDistance(String a, String b) {
         if (a.isEmpty()) return b.length();
         if (b.isEmpty()) return a.length();
-        int la = a.length();
-        int lb = b.length();
-        int[][] dp = new int[lb + 1][la + 1];
-        for (int i = 0; i <= la; i++) dp[0][i] = i;
-        for (int j = 0; j <= lb; j++) dp[j][0] = j;
+        if (a.equals(b)) return 0;
+        final int la = a.length();
+        final int lb = b.length();
+        int[] prev = new int[la + 1];
+        int[] cur = new int[la + 1];
+        for (int i = 0; i <= la; i++) prev[i] = i;
         for (int j = 1; j <= lb; j++) {
+            cur[0] = j;
+            final char bj = b.charAt(j - 1);
             for (int i = 1; i <= la; i++) {
-                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
-                dp[j][i] = Math.min(Math.min(dp[j][i - 1] + 1, dp[j - 1][i] + 1), dp[j - 1][i - 1] + cost);
+                int cost = a.charAt(i - 1) == bj ? 0 : 1;
+                int del = cur[i - 1] + 1;
+                int ins = prev[i] + 1;
+                int sub = prev[i - 1] + cost;
+                cur[i] = del < ins ? (del < sub ? del : sub) : (ins < sub ? ins : sub);
             }
+            int[] tmp = prev;
+            prev = cur;
+            cur = tmp;
         }
-        return dp[lb][la];
+        return prev[la];
     }
 
     /** 日志用截断（最多 60 字符） */

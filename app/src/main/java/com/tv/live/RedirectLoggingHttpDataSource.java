@@ -36,6 +36,7 @@ import com.tv.live.BuildConfig;
 public class RedirectLoggingHttpDataSource extends BaseDataSource implements HttpDataSource {
     private static final String TAG = "RedirectHttp";
     private static final Map<String, Long> LAST_FAIL_LOG = new ConcurrentHashMap<>();
+    private boolean isTsRequest = false; // ts分片请求只打印错误，避免刷屏
 
     /**
      * 【2026-09-19 404 专项】最近一次 404 的时间戳（epoch ms）。

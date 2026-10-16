@@ -712,8 +712,7 @@ public final class AfhgrjUrlResolver {
                 continue;
             }
 
-            // ① 白名单命中：实测最快的 CDN。仍要过一次测速——测速本身就是可达性校验，
-            //    不能只信主机名（白名单线路当时挂了/被封时必须继续比别的线，而不是强选）。
+            // ① 白名单命中：固定主线路，禁止自动切换到其他线路
             if (isPreferredHost(m3u8)) {
                 int kbps = cachedSpeedKbps(vodId, cand);
                 if (kbps < 0) {
@@ -724,12 +723,14 @@ public final class AfhgrjUrlResolver {
                     bestM3u8 = m3u8;
                     bestSid = cand;
                     bestKbps = kbps;
-                    LogBridge.i(TAG, "源7(影视) 命中优先线路（白名单 host=" + hostOf(m3u8)
+                    LogBridge.i(TAG, "源7(影视) 固定主线路（白名单 host=" + hostOf(m3u8)
                             + "）sid=" + cand + " 实测 " + kbps + " KB/s");
                     break;
                 }
-                LogBridge.w(TAG, "源7(影视) 优先线路本次不可达 sid=" + cand
-                        + " host=" + hostOf(m3u8) + "，继续比较其它线路");
+                LogBridge.w(TAG, "源7(影视) 主线路不可达 sid=" + cand
+                        + " host=" + hostOf(m3u8));
+                // 【2026-10-14 固定线路】主线路不可达时，不再自动切换到其他线路
+                // 直接返回 null，让上层重试/重拉
                 continue;
             }
 

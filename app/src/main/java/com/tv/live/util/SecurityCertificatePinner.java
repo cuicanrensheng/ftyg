@@ -1,6 +1,7 @@
 package com.tv.live.util;
 
 import android.content.Context;
+import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import com.tv.live.util.LogBridge;
 
@@ -25,6 +26,7 @@ import javax.net.ssl.X509TrustManager;
 import okhttp3.CertificatePinner;
 import okhttp3.OkHttpClient;
 
+@SuppressLint("StaticFieldLeak")
 public class SecurityCertificatePinner {
 
     private static final String TAG = "SSLCertPinner";
@@ -291,6 +293,7 @@ public class SecurityCertificatePinner {
         return builder;
     }
 
+    @SuppressLint("CustomX509TrustManager")
     private class CertAwareTrustManager implements X509TrustManager {
         private final X509TrustManager systemTm;
 
@@ -324,6 +327,7 @@ public class SecurityCertificatePinner {
         }
     }
 
+    @SuppressLint("BadHostnameVerifier")
     private class CertAwareHostnameVerifier implements HostnameVerifier {
         @Override
         public boolean verify(String hostname, SSLSession session) {

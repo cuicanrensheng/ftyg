@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.tv.live.security.SecurityCore;
 import okhttp3.Response;
 
 /**
@@ -47,18 +49,37 @@ public final class NowTvSourceApi {
 
     private static final String TAG = "NowTvSource";
 
-    /** 直播服务 host（原版 ServiceHostManager$Host.nowtv_new_service） */
-    public static final String HOST = "http://nowtv-new.xiaoyouzb.cn";
+    // 【2026-10-15 密文化】host 原为 public static final String —— 编译期常量会被**内联到
+    // 每个使用点**，dex 里处处可见。改为惰性 getter，明文只存在于 SO（cpp/secstore.cpp）。
+    // ⚠️ 惰性解密铁律：不可写进 static final / <clinit>（SecurityCore.init() 需 loadLibrary，会卡线程）。
+    private static volatile String sHost, sHostUser;
+
+    private static String soApi(int id) {
+        String d = SecurityCore.secureString(id);
+        return d == null ? "" : d;
+    }
+
+    /** 直播服务 host（原常量 HOST）。解密失败返回空串 → 上层得到一次失败请求并降级。 */
+    public static String host() {
+        String v = sHost;
+        if (v == null) v = sHost = soApi(SecurityCore.C_API_NOWTV_NEW);
+        return v;
+    }
 
     /**
      * 用户服务 host（原版 ServiceHostManager$Host.user_service）。
      *
      * <p><b>关键</b>：首页分类表 {@code /v3/conf/app_page_cate} 走的是<b>这个</b> host
-     * （原版 {@code HomeTabList extends UserServer}），打到 {@link #HOST} 上会 404。
+     * （原版 {@code HomeTabList extends UserServer}），打到 {@link #host()} 上会 404。
      * 实测 {@code http://user.xiaoyouzb.cn/v3/conf/app_page_cate} → 200 + 明文
      * {@code cateList}（29 项，含 id/title/type）。
+     * <p>【2026-10-15 密文化】原为 public static final 明文常量，现改为 {@code hostUser()}。
      */
-    public static final String HOST_USER = "http://user.xiaoyouzb.cn";
+    public static String hostUser() {
+        String v = sHostUser;
+        if (v == null) v = sHostUser = soApi(SecurityCore.C_API_USER_CN);
+        return v;
+    }
 
     /** 单频道取源 */
     private static final String API_CHANNEL_SOURCE = "/channel/get_channel_source";
@@ -185,10 +206,10 @@ public final class NowTvSourceApi {
          */
         public boolean isYunTuLookBack() {
             if (!TextUtils.isEmpty(backUrl)
-                    && backUrl.toLowerCase().contains("yuntulunbo")) return true;
+                    && backUrl.toLowerCase(Locale.ROOT).contains("yuntulunbo")) return true;
             for (SourceLabel l : backSources) {
                 if (l != null && l.source != null
-                        && l.source.toLowerCase().contains("yuntulunbo")) return true;
+                        && l.source.toLowerCase(Locale.ROOT).contains("yuntulunbo")) return true;
             }
             return false;
         }
@@ -567,7 +588,7 @@ public final class NowTvSourceApi {
     /**
      * 拉取首页分类表（{@code HomeTabList} / {@code CategoryViewModel.getHomeTabList*}）。
      *
-     * <p><b>host 是 {@link #HOST_USER}</b>（{@code user.xiaoyouzb.cn}），不是直播 host。
+     * <p><b>host 是 {@link #hostUser()}</b>（{@code user.xiaoyouzb.cn}），不是直播 host。
      * 实测响应是<b>明文</b>（无 {@code hasEncryption}），形如：
      * <pre>
      *   {"data":{"updateTime":"...","cateList":[
@@ -586,9 +607,9 @@ public final class NowTvSourceApi {
         List<Category> out = new ArrayList<>();
         if (ctx == null) return out;
 
-        String body = httpGet(buildUrl(HOST_USER, API_PAGE_CATE, publicParams(ctx)));
+        String body = httpGet(buildUrl(hostUser(), API_PAGE_CATE, publicParams(ctx)));
         if (TextUtils.isEmpty(body)) {
-            LogBridge.w(TAG, "首页分类表为空（host=" + HOST_USER + "）");
+            LogBridge.w(TAG, "首页分类表为空（host=" + hostUser() + "）");
             return out;
         }
         try {
@@ -669,7 +690,7 @@ public final class NowTvSourceApi {
             if (cate.id > 0) params.put("tagId", String.valueOf(cate.id));
             if (!TextUtils.isEmpty(cate.title)) params.put("tagName", cate.title);
 
-            String body = httpGet(buildUrl(HOST, API_TAG_LIST, params));
+            String body = httpGet(buildUrl(host(), API_TAG_LIST, params));
             List<Channel> list = parseChannels(body);
 
             int added = 0;
@@ -816,10 +837,10 @@ public final class NowTvSourceApi {
     }
 
     private static String buildUrl(String api, Map<String, String> params) {
-        return buildUrl(HOST, api, params);
+        return buildUrl(host(), api, params);
     }
 
-    /** 指定 host 构建 URL（分类表走 {@link #HOST_USER}，其余走 {@link #HOST}） */
+    /** 指定 host 构建 URL（分类表走 {@link #hostUser()}，其余走 {@link #host()}） */
     private static String buildUrl(String host, String api, Map<String, String> params) {
         StringBuilder sb = new StringBuilder(host).append(api).append('?');
         boolean first = true;

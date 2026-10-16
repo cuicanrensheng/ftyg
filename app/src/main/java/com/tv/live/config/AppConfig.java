@@ -147,16 +147,33 @@ public class AppConfig {
         public final String name;
         public final String vodId;
         public final int episodeOrdinal;
+        public final long timestamp;
+        public final long positionMs;
 
         public OttHistory(String name, String vodId, int episodeOrdinal) {
+            this(name, vodId, episodeOrdinal, System.currentTimeMillis(), 0);
+        }
+
+        public OttHistory(String name, String vodId, int episodeOrdinal, long timestamp) {
+            this(name, vodId, episodeOrdinal, timestamp, 0);
+        }
+
+        public OttHistory(String name, String vodId, int episodeOrdinal, long timestamp, long positionMs) {
             this.name = name == null ? "" : name;
             this.vodId = vodId == null ? "" : vodId;
             this.episodeOrdinal = episodeOrdinal;
+            this.timestamp = timestamp;
+            this.positionMs = positionMs;
         }
 
-        /** 展示文案：源7 显示「频道名 · 第N集」，其它源只显示频道名 */
+        /** 展示文案：频道名 · 第N集 · 进度mm:ss */
         public String displayText() {
-            return episodeOrdinal > 0 ? (name + " · 第" + episodeOrdinal + "集") : name;
+            String base = episodeOrdinal > 0 ? (name + " · 第" + episodeOrdinal + "集") : name;
+            if (positionMs > 60000) {
+                long sec = positionMs / 1000;
+                base += " · " + String.format("%02d:%02d", sec / 60, sec % 60);
+            }
+            return base;
         }
     }
 
@@ -177,7 +194,15 @@ public class AppConfig {
                 ord = Integer.parseInt(f[2].trim());
             } catch (Exception ignored) {
             }
-            out.add(new OttHistory(f[0], f[1], ord));
+            long ts = 0;
+            if (f.length >= 4) {
+                try { ts = Long.parseLong(f[3].trim()); } catch (Exception ignored) {}
+            }
+            long pos = 0;
+            if (f.length >= 5) {
+                try { pos = Long.parseLong(f[4].trim()); } catch (Exception ignored) {}
+            }
+            out.add(new OttHistory(f[0], f[1], ord, ts, pos));
         }
         return out;
     }
@@ -198,9 +223,44 @@ public class AppConfig {
             OttHistory h = list.get(i);
             if (i > 0) sb.append(HISTORY_LINE);
             sb.append(h.name).append(HISTORY_FIELD).append(h.vodId)
-                    .append(HISTORY_FIELD).append(h.episodeOrdinal);
+                    .append(HISTORY_FIELD).append(h.episodeOrdinal)
+                    .append(HISTORY_FIELD).append(h.timestamp)
+                    .append(HISTORY_FIELD).append(h.positionMs);
         }
         appSp.edit().putString(KEY_OTT_HISTORY, sb.toString()).apply();
+    }
+
+    /** 更新某频道历史记录的播放进度（毫秒） */
+    public void updateOttHistoryPosition(String channelName, long positionMs) {
+        if (channelName == null || channelName.isEmpty()) return;
+        List<OttHistory> list = getOttHistory();
+        for (int i = 0; i < list.size(); i++) {
+            OttHistory h = list.get(i);
+            if (channelName.equals(h.name)) {
+                list.set(i, new OttHistory(h.name, h.vodId, h.episodeOrdinal, h.timestamp, positionMs));
+                // 写回
+                StringBuilder sb = new StringBuilder();
+                for (int j = 0; j < list.size(); j++) {
+                    OttHistory hh = list.get(j);
+                    if (j > 0) sb.append(HISTORY_LINE);
+                    sb.append(hh.name).append(HISTORY_FIELD).append(hh.vodId)
+                            .append(HISTORY_FIELD).append(hh.episodeOrdinal)
+                            .append(HISTORY_FIELD).append(hh.timestamp)
+                            .append(HISTORY_FIELD).append(hh.positionMs);
+                }
+                appSp.edit().putString(KEY_OTT_HISTORY, sb.toString()).apply();
+                return;
+            }
+        }
+    }
+
+    /** 取某频道历史记录的播放进度（毫秒）；无记录返回 0 */
+    public long getOttHistoryPosition(String channelName) {
+        if (channelName == null || channelName.isEmpty()) return 0;
+        for (OttHistory h : getOttHistory()) {
+            if (channelName.equals(h.name)) return h.positionMs;
+        }
+        return 0;
     }
 
     /** 取某频道在历史里记录的集数（1 基）；无记录返回 0 */

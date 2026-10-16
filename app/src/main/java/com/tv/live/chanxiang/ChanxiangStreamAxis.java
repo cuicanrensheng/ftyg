@@ -3,6 +3,7 @@ package com.tv.live.chanxiang;
 import android.text.TextUtils;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -228,7 +229,7 @@ public final class ChanxiangStreamAxis {
             return "直链";
         }
         if (TextUtils.isEmpty(host)) return "直链";
-        String[] labels = host.toLowerCase().split("\\.");
+        String[] labels = host.toLowerCase(Locale.ROOT).split("\\.");
         for (String label : labels) {
             String node = nodeIdOf(label);
             if (node != null) return "节点" + node;

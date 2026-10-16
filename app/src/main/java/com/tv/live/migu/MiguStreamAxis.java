@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import com.tv.live.migu.source.NowTvSourceApi;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -190,7 +191,7 @@ public final class MiguStreamAxis {
     public static String lineNameOf(String source) {
         if (TextUtils.isEmpty(source)) return "未知";
         String s = source.trim();
-        String lower = s.toLowerCase();
+        String lower = s.toLowerCase(Locale.ROOT);
         if (lower.startsWith("migu")) return "咪咕";
         if (lower.startsWith("ysp")) return "央视频";
         if (lower.startsWith("cctvh5")) return "央视H5";
@@ -229,7 +230,7 @@ public final class MiguStreamAxis {
             }
         }
         if (q > 0) return q;
-        String lower = source == null ? "" : source.toLowerCase();
+        String lower = source == null ? "" : source.toLowerCase(Locale.ROOT);
         if (lower.startsWith("miguhd")) return 720;
         if (lower.startsWith("migu")) return 480;
         if (lower.contains("://fhd") || lower.contains("//fhd")) return 1080;

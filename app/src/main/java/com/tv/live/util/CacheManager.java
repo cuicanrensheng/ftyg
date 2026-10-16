@@ -1,9 +1,9 @@
 package com.tv.live.util;
 
 import android.content.Context;
+import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import android.os.Build;
-import android.os.Environment;
 import android.provider.Settings;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
@@ -338,7 +338,7 @@ public class CacheManager {
 
     private static void performCleanup(Context ctx) {
         long start = System.currentTimeMillis();
-        List<File> candidates = collectHuyaCandidateDirs(ctx);
+        List<File> candidates = collectCandidateDirs(ctx);
 
         long beforeBytes = 0L;
         List<FileEntry> all = new ArrayList<>();
@@ -393,13 +393,17 @@ public class CacheManager {
                 + "  节省 " + human(beforeBytes - after) + "  耗时 " + cost + "ms");
     }
 
-    private static List<File> collectHuyaCandidateDirs(Context ctx) {
+    /**
+     * 【2026-10-15 清理】原方法名 {@code collectHuyaCandidateDirs}。
+     * 虎牙 SDK 时代的两处残留已删除：① 内部 {@code getDir("huya_sdk")}；
+     * ② 外部存储上的一批遗留目录（huya_sdk / HuyaBerry / Huya / Duowan / NLog / QQBrowser 等）。
+     * 现只收集应用自身的目录，方法更名。
+     */
+    private static List<File> collectCandidateDirs(Context ctx) {
         List<File> result = new ArrayList<>();
-        String pkg = ctx.getPackageName();
 
         addDirIfExists(result, ctx.getFilesDir());
         addDirIfExists(result, ctx.getCacheDir());
-        addDirIfExists(result, ctx.getDir("huya_sdk", Context.MODE_PRIVATE));
         File databases = new File(ctx.getApplicationInfo().dataDir, "databases");
         addDirIfExists(result, databases);
         File sharedPrefs = new File(ctx.getApplicationInfo().dataDir, "shared_prefs");
@@ -419,27 +423,11 @@ public class CacheManager {
             }
         } catch (Throwable ignored) {}
 
-        try {
-            if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
-                File sd = Environment.getExternalStorageDirectory();
-                for (String legacy : new String[]{
-                        "Android/data/" + pkg + "/files/huya_sdk",
-                        "Android/data/" + pkg + "/files/HuyaBerry",
-                        "Android/data/" + pkg + "/files/tencent/MobileQQ",
-                        "HuyaBerry",
-                        "Huya",
-                        "huya_sdk",
-                        "Duowan",
-                        "NLog",
-                        "QQBrowser/.tmp/huya_sdk",
-                }) {
-                    if (legacy.contains("MobileQQ")) continue;
-                    addDirIfExists(result, new File(sd, legacy));
-                }
-            }
-        } catch (Throwable ignored) {}
-
-        addDirIfExists(result, new File(ctx.getCacheDir(), "huya_sdk"));
+        // 【2026-10-15 清理】原此处遍历外部存储上的虎牙遗留目录并纳入清理范围：
+        //   Android/data/<pkg>/files/huya_sdk、files/HuyaBerry、files/tencent/MobileQQ、
+        //   HuyaBerry、Huya、huya_sdk、Duowan、NLog、QQBrowser/.tmp/huya_sdk
+        // 这些目录由已拆除的虎牙 Berry SDK 产生，来源 App 早已不存在，删除该清理逻辑。
+        // 同时删除：addDirIfExists(result, new File(ctx.getCacheDir(), "huya_sdk"));
 
         return result;
     }
@@ -1003,6 +991,7 @@ public class CacheManager {
     }
     }
 
+@SuppressLint("StaticFieldLeak")
     public static class SecureDataStore {
 
     private static final String TAG = "SecureDataStore";
@@ -1208,10 +1197,7 @@ public class CacheManager {
         byte[] iv = new byte[GCM_IV_LENGTH];
         new SecureRandom().nextBytes(iv);
 
-        Cipher cipher = Cipher.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES + "/" +
-            KeyProperties.BLOCK_MODE_GCM + "/" +
-            KeyProperties.ENCRYPTION_PADDING_NONE);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
 
         GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.ENCRYPT_MODE, mSecretKey, gcmSpec);
@@ -1234,10 +1220,7 @@ public class CacheManager {
         System.arraycopy(combined, 0, iv, 0, iv.length);
         System.arraycopy(combined, iv.length, encryptedBytes, 0, encryptedBytes.length);
 
-        Cipher cipher = Cipher.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES + "/" +
-            KeyProperties.BLOCK_MODE_GCM + "/" +
-            KeyProperties.ENCRYPTION_PADDING_NONE);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
 
         GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.DECRYPT_MODE, mSecretKey, gcmSpec);
@@ -1267,6 +1250,7 @@ public class CacheManager {
     }
     }
 
+    @SuppressLint("StaticFieldLeak")
     public static class EncryptedStorage {
 
     private static final String TAG = "EncryptedStorage";

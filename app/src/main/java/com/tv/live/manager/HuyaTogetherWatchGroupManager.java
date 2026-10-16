@@ -24,6 +24,7 @@ import java.net.URL;
 
 import java.lang.reflect.Field;
 import java.util.ArrayDeque;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -60,7 +61,7 @@ public class HuyaTogetherWatchGroupManager {
             mCachedLiveListByPages.clear();
             mCachedLiveListTsByPages.clear();
         }
-        LogBridge.i(TAG, "【自研线路·共享列表】缓存已清空，下次强制重新拉取");
+        LogBridge.d(TAG, "【自研线路·共享列表】缓存已清空，下次强制重新拉取");
     }
 
     /**
@@ -142,7 +143,7 @@ public class HuyaTogetherWatchGroupManager {
     private static final int CATEGORY_ID_TOGETHER_WATCH = 2135;
 
     // 【2026-10-04 提速】词库预编译：原先 assignGroupByKeywords 在**每个房间**上都执行
-    //   `row[1].split(",")`（每次分配新数组）+ `kw.trim()` + `k.toLowerCase()`，
+    //   `row[1].split(",")`（每次分配新数组）+ `kw.trim()` + `k.toLowerCase(Locale.ROOT)`，
     //   全量 1200 房间 × 各组词库 ≈ 每轮 1200 次 split、数万次 toLowerCase。
     //   （分类跑两遍：fetchRecommendGroupedBlocking 一次 + 每个 tag 的 filterByGroup 一次 → 翻倍）
     //   现改为类初始化时一次性预拆分成小写数组，运行时只做 contains。
@@ -154,7 +155,7 @@ public class HuyaTogetherWatchGroupManager {
             String[] parts = GROUP_KEYWORDS[i][1].split(",");
             List<String> keep = new ArrayList<>(parts.length);
             for (String kw : parts) {
-                String k = kw.trim().toLowerCase();
+                String k = kw.trim().toLowerCase(Locale.ROOT);
                 // 单字词（影/剧/魔…）误伤率极高，直接跳过（与旧逻辑一致）
                 if (k.length() <= 1) continue;
                 keep.add(k);
@@ -322,7 +323,7 @@ public class HuyaTogetherWatchGroupManager {
                         saveGroupsToDisk(result);
                         int total = 0;
                         for (Group g : result) { if (g != null) total += g.channels.size(); }
-                        LogBridge.i(TAG, "⏱️【链路-自研线路】端到端总耗时 " + (System.currentTimeMillis() - t0)
+                        LogBridge.d(TAG, "⏱️【链路-自研线路】端到端总耗时 " + (System.currentTimeMillis() - t0)
                                 + "ms（TagList+推荐列表+各Tag翻页+SDK解析），分组=" + result.size() + " 频道=" + total);
                         postOnSuccess(listener, result);
                     } else {
@@ -370,11 +371,11 @@ public class HuyaTogetherWatchGroupManager {
         long tTag = System.currentTimeMillis();
         Map<String, List<TagSpec>> byGroup = resolveSDKTagSpecsGrouped();
         if (byGroup == null) return null;
-        LogBridge.i(TAG, "⏱️【链路-自研线路】getTagList+解析Tag 阶段耗时 " + (System.currentTimeMillis() - tTag) + "ms");
+        LogBridge.d(TAG, "⏱️【链路-自研线路】getTagList+解析Tag 阶段耗时 " + (System.currentTimeMillis() - tTag) + "ms");
 
         long tRec = System.currentTimeMillis();
         Map<String, List<Channel>> recommend = fetchRecommendGroupedBlocking();
-        LogBridge.i(TAG, "⏱️【链路-自研线路】推荐列表(getLiveList) 阶段耗时 " + (System.currentTimeMillis() - tRec) + "ms");
+        LogBridge.d(TAG, "⏱️【链路-自研线路】推荐列表(getLiveList) 阶段耗时 " + (System.currentTimeMillis() - tRec) + "ms");
 
         ExecutorService groupPool = Executors.newFixedThreadPool(GROUP_NAMES.length);
         try {
@@ -602,7 +603,7 @@ public class HuyaTogetherWatchGroupManager {
         Long ts = mCachedLiveListTsByPages.get(wantPages);
         long age = now - (ts == null ? 0L : ts);
         if (cached != null && !cached.isEmpty() && age < LIVE_LIST_CACHE_MS) {
-            LogBridge.i(TAG, "【自研线路·共享列表】命中缓存(" + wantPages + "页档)，房间=" + cached.size()
+            LogBridge.d(TAG, "【自研线路·共享列表】命中缓存(" + wantPages + "页档)，房间=" + cached.size()
                     + "，年龄=" + age + "ms（省去重复翻页）");
             return cached;
         }
@@ -641,7 +642,7 @@ public class HuyaTogetherWatchGroupManager {
             if (!all.isEmpty()) {
                 mCachedLiveListByPages.put(wantPages, all);
                 mCachedLiveListTsByPages.put(wantPages, System.currentTimeMillis());
-                LogBridge.i(TAG, "【自研线路·共享列表】拉取完成（翻 " + wantPages + " 页，1-based），房间=" + all.size()
+                LogBridge.d(TAG, "【自研线路·共享列表】拉取完成（翻 " + wantPages + " 页，1-based），房间=" + all.size()
                         + "（原始 " + rawCount + " 条）"
                         + "，耗时=" + cost + "ms（后续同页数分组直接复用）");
             } else {
@@ -667,7 +668,7 @@ public class HuyaTogetherWatchGroupManager {
             }
         }
         if (allList.isEmpty()) return null;
-        LogBridge.i(TAG, "【推荐列表】原始频道数=" + allList.size());
+        LogBridge.d(TAG, "【推荐列表】原始频道数=" + allList.size());
 
         Map<String, List<Channel>> grouped = new LinkedHashMap<>();
         for (String g : GROUP_NAMES) grouped.put(g, new ArrayList<Channel>());
@@ -692,7 +693,7 @@ public class HuyaTogetherWatchGroupManager {
         }
         int total = 0;
         for (List<Channel> v : grouped.values()) total += v.size();
-        LogBridge.i(TAG, "【推荐列表】分类后频道数=" + total);
+        LogBridge.d(TAG, "【推荐列表】分类后频道数=" + total);
         if (total == 0) return null;
         return grouped;
     }
@@ -707,7 +708,7 @@ public class HuyaTogetherWatchGroupManager {
      */
     private static String assignGroupByKeywords(String title, String nick) {
         String t = safeStr(title);
-        String low = (t + " " + safeStr(nick)).toLowerCase();
+        String low = (t + " " + safeStr(nick)).toLowerCase(Locale.ROOT);
 
         // 标题是纯噪声（无作品信息）→ 直接兜底，避免被昵称里的泛词误伤
         String tl = t.trim();
@@ -795,11 +796,11 @@ public class HuyaTogetherWatchGroupManager {
         List<com.tv.live.huya.HuyaLiveItem> allList = fetchAllLiveListShared(pages);
         if (allList != null && !allList.isEmpty()) {
             List<com.tv.live.huya.HuyaLiveItem> filtered = filterByGroup(allList, tag.groupName);
-            LogBridge.i(TAG, "【tag=" + tag.tagName + "】自研 HTTP 原始列表=" + allList.size()
+            LogBridge.d(TAG, "【tag=" + tag.tagName + "】自研 HTTP 原始列表=" + allList.size()
                     + "，本组过滤后=" + filtered.size());
             if (!filtered.isEmpty()) {
                 List<Channel> r = buildChannels(tag, filtered);
-                LogBridge.i(TAG, "⏱️【链路-自研线路】tag[" + tag.tagName + "] 拉取+解析 耗时 "
+                LogBridge.d(TAG, "⏱️【链路-自研线路】tag[" + tag.tagName + "] 拉取+解析 耗时 "
                         + (System.currentTimeMillis() - tTagStart) + "ms，频道=" + (r == null ? 0 : r.size()));
                 return r;
             }
@@ -811,7 +812,7 @@ public class HuyaTogetherWatchGroupManager {
         // 在 5 个组里重复出现，用户上下切换分组会看到大量重复频道。
         // 正确做法：本组过滤为空就返回 null，UI 侧显示「本组暂无频道」。
         LogBridge.w(TAG, "【tag=" + tag.tagName + "】自研 HTTP 未过滤出本组房间（返回空，不做全量回填）");
-        LogBridge.i(TAG, "⏱️【链路-自研线路】tag[" + tag.tagName + "] 拉取+解析 耗时 "
+        LogBridge.d(TAG, "⏱️【链路-自研线路】tag[" + tag.tagName + "] 拉取+解析 耗时 "
                 + (System.currentTimeMillis() - tTagStart) + "ms，频道=0");
         return null;
     }
@@ -869,7 +870,7 @@ public class HuyaTogetherWatchGroupManager {
 
             }
         }
-        LogBridge.i(TAG, "【tag=" + tag.tagName + "(" + tag.tagId + ")】解析频道数=" + result.size());
+        LogBridge.d(TAG, "【tag=" + tag.tagName + "(" + tag.tagId + ")】解析频道数=" + result.size());
         logLogoCoverage(tag.tagName, result);
         return result;
     }
@@ -904,14 +905,14 @@ public class HuyaTogetherWatchGroupManager {
             String groupName = GROUP_NAMES[i];
             result.add(new TagSpec(groupName, groupName, groupName));
         }
-        LogBridge.i(TAG, "【自研线路】分组规格数=" + result.size());
+        LogBridge.d(TAG, "【自研线路】分组规格数=" + result.size());
         return result;
     }
 
     private static String matchGroupName(String tagName) {
         if (TextUtils.isEmpty(tagName)) return null;
         String n = tagName.trim();
-        String low = n.toLowerCase();
+        String low = n.toLowerCase(Locale.ROOT);
 
         // 【2026-10-03 重新分组】tagName 已是 GROUP_NAMES 里的正式分组名，直接命中
         for (String g : GROUP_NAMES) {
@@ -925,65 +926,6 @@ public class HuyaTogetherWatchGroupManager {
         return assignGroupByKeywords(n, "");
     }
 
-    private static Pair extractTagIdAndName(Object tagObj) {
-        try {
-            Class<?> c = tagObj.getClass();
-            Field[] fields = c.getFields();
-            String bestId = null;
-            String bestName = null;
-            for (Field f : fields) {
-                try {
-                    f.setAccessible(true);
-                    String fname = f.getName();
-                    Object val = f.get(tagObj);
-                    if (val == null) continue;
-                    String lower = fname.toLowerCase();
-                    if (bestId == null) {
-                        if ("id".equals(lower) || "tagid".equals(lower) || "categoryid".equals(lower)) {
-                            bestId = String.valueOf(val);
-                            continue;
-                        }
-                        if (val instanceof String) {
-                            String sval = (String) val;
-                            if (!sval.isEmpty() && isNumericString(sval)) {
-                                if (fname.contains("id") || fname.contains("Id") || fname.length() <= 4) {
-                                    bestId = sval;
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                    if (bestName == null && val instanceof String) {
-                        String sval = (String) val;
-                        if (!sval.isEmpty()) {
-                            if ("name".equals(lower) || "tagname".equals(lower) || "cname".equals(lower)
-                                    || "title".equals(lower) || "displayname".equals(lower) || "categoryname".equals(lower)) {
-                                bestName = sval;
-                            }
-                        }
-                    }
-                } catch (Throwable ignored) { }
-            }
-            if (bestName == null) {
-                for (Field f : fields) {
-                    try {
-                        f.setAccessible(true);
-                        Object v = f.get(tagObj);
-                        if (v instanceof String && !TextUtils.isEmpty((String) v)
-                                && !isNumericString((String) v) && ((String) v).length() >= 2) {
-                            bestName = (String) v;
-                            break;
-                        }
-                    } catch (Throwable ignored) { }
-                }
-            }
-            if (bestId == null || bestName == null) return null;
-            return new Pair(bestId, bestName);
-        } catch (Throwable t) {
-            LogBridge.w(TAG, "反射Tag失败(" + tagObj.getClass().getSimpleName() + "): " + t.getMessage());
-            return null;
-        }
-    }
 
     private static boolean isValidGroupName(String name) {
         if (TextUtils.isEmpty(name)) return false;
@@ -1004,7 +946,7 @@ public class HuyaTogetherWatchGroupManager {
         for (Channel c : list) {
             if (c != null && !TextUtils.isEmpty(c.getLogoUrl())) withLogo++;
         }
-        LogBridge.i(TAG, "【台标覆盖】" + where + " 频道=" + list.size() + " 有台标=" + withLogo);
+        LogBridge.d(TAG, "【台标覆盖】" + where + " 频道=" + list.size() + " 有台标=" + withLogo);
     }
 
     private static boolean isNumericString(String s) {
@@ -1093,7 +1035,7 @@ public class HuyaTogetherWatchGroupManager {
                     LogBridge.d(TAG, "【缓存】分组[" + g.name + "]频道数=" + g.channels.size());
                 }
             }
-            LogBridge.i(TAG, "【缓存】已写入永久缓存，分组数=" + groups.size() + "，频道数=" + total + "，字节=" + data.length);
+            LogBridge.d(TAG, "【缓存】已写入永久缓存，分组数=" + groups.size() + "，频道数=" + total + "，字节=" + data.length);
         } catch (Throwable t) {
             LogBridge.w(TAG, "【缓存】写入失败：" + t.getMessage());
         }
@@ -1138,7 +1080,7 @@ public class HuyaTogetherWatchGroupManager {
             if (groups.isEmpty()) return null;
             int total = 0;
             for (Group g : groups) total += g.channels.size();
-            LogBridge.i(TAG, "【缓存】已加载永久缓存，分组数=" + groups.size() + "，频道数=" + total);
+            LogBridge.d(TAG, "【缓存】已加载永久缓存，分组数=" + groups.size() + "，频道数=" + total);
             return groups;
         } catch (Throwable t) {
             LogBridge.w(TAG, "【缓存】读取失败：" + t.getMessage());

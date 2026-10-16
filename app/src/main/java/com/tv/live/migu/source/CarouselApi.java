@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.tv.live.security.SecurityCore;
 import okhttp3.Response;
 
 /**
@@ -96,14 +97,43 @@ public final class CarouselApi {
      * 而原版 smali 常量 {@code user_service = http://nowtv.xiaoyouzb.cn} 实测返回
      * 垃圾文本（{@code hello aaaa}）—— 故此处用实测可用的 {@code user.xiaoyouzb.cn}。
      */
-    public static final String HOST_USER = "http://user.xiaoyouzb.cn";
+    // 【2026-10-15 密文化】host 原为 public static final String —— 编译期常量会被**内联到
+    // 每个使用点**，dex 里处处可见。改为惰性 getter，明文只存在于 SO（cpp/secstore.cpp）。
+    // ⚠️ 惰性解密铁律：不可写进 static final / <clinit>（SecurityCore.init() 需 loadLibrary，会卡线程）。
+    private static volatile String sHostUser, sHostUserNet, sHostNowtv;
+
+    private static String soApi(int id) {
+        String d = SecurityCore.secureString(id);
+        return d == null ? "" : d;
+    }
+
+    /** 回看接口 host（原常量 HOST_USER）。解密失败返回空串 → 上层得到一次失败请求并降级。 */
+    public static String hostUser() {
+        String v = sHostUser;
+        if (v == null) v = sHostUser = soApi(SecurityCore.C_API_USER_CN);
+        return v;
+    }
+
+    /** 回看（look-back）端点 host（原常量 HOST_USER_NET，lunbo.js 线路） */
+    public static String hostUserNet() {
+        String v = sHostUserNet;
+        if (v == null) v = sHostUserNet = soApi(SecurityCore.C_API_USER_NET);
+        return v;
+    }
+
+    /** 原版多天节目单接口 host（原常量 HOST_NOWTV，program_v3.php 用） */
+    private static String hostNowtv() {
+        String v = sHostNowtv;
+        if (v == null) v = sHostNowtv = soApi(SecurityCore.C_API_NOWTV);
+        return v;
+    }
 
     /**
      * 回看（look-back）端点 host —— {@code lunbo.js} 里<b>硬编码</b>的是
      * {@code http://user.xiaoyouzb.net}（见其 {@code yuntuLbParsePlay}），与 Java 侧
      * 使用的 {@code .cn} 是两套域名，实测两者都能通（200）。
+     * <p>【2026-10-15 密文化】原为 public static final 明文常量，现改为 {@link #hostUserNet()}。
      */
-    public static final String HOST_USER_NET = "http://user.xiaoyouzb.net";
 
     /** 解析结果：真实播放地址 + 起播定位 */
     public static final class Resolution {
@@ -427,8 +457,8 @@ public final class CarouselApi {
         return "";
     }
 
-    /** 原版多天节目单接口（2026-10-07 抓包定性：nowtv.xiaoyouzb.cn/program_v3.php） */
-    private static final String HOST_NOWTV = "http://nowtv.xiaoyouzb.cn";
+    /** 原版多天节目单接口（2026-10-07 抓包定性：nowtv.xiaoyouzb.cn/program_v3.php）。
+     *  <p>【2026-10-15 密文化】原为 public static final 明文常量，现改为 {@link #hostNowtv()}。 */
 
     /** program_v3 每频道每天至多尝试 1 次（进程级去重） */
     private static final java.util.Set<String> sV3FetchedToday =
@@ -452,7 +482,7 @@ public final class CarouselApi {
         if (sV3FetchedToday.contains(tvId)) return -1;         // 今天已试过，不重复
         String date = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
                 .format(new java.util.Date());
-        String body = httpGet(HOST_NOWTV + "/program_v3.php?date=" + date + "&tv_id=" + tvId);
+        String body = httpGet(hostNowtv() + "/program_v3.php?date=" + date + "&tv_id=" + tvId);
         sV3FetchedToday.add(tvId);
         if (TextUtils.isEmpty(body)) {
             LogBridge.w(TAG, "program_v3 无响应 tvId=" + tvId);
@@ -531,7 +561,7 @@ public final class CarouselApi {
         List<Program> cached = sDayScheduleCache.get(key);
         if (cached != null) return cached;
         if (!sV3FetchedKeys.add(key)) return null;   // 该频道该天已试过，不重复发请求
-        String body = httpGet(HOST_NOWTV + "/program_v3.php?date=" + dateYmd + "&tv_id=" + tvId);
+        String body = httpGet(hostNowtv() + "/program_v3.php?date=" + dateYmd + "&tv_id=" + tvId);
         if (TextUtils.isEmpty(body)) {
             LogBridge.w(TAG, "program_v3 无响应 tvId=" + tvId + " date=" + dateYmd);
             return null;
@@ -873,7 +903,7 @@ public final class CarouselApi {
             }
             long startSec = parseTs(between(rawUrl, "?start=", "&"));
             long endSec = parseTs(between(rawUrl, "&end=", "&"));
-            String req = HOST_USER_NET + "/p/get_carousel_video_for_lb"
+            String req = hostUserNet() + "/p/get_carousel_video_for_lb"
                     + "?tvId=" + tvId + "&offsert=" + offsert
                     + "&start=" + formatDateTime(startSec)
                     + "&end=" + formatDateTime(endSec);
@@ -904,7 +934,7 @@ public final class CarouselApi {
      */
     public static Resolution getCarouselVideo(String pid, String label) {
         if (TextUtils.isEmpty(pid)) return null;
-        String body = httpGet(HOST_USER + "/p/get_carousel_video?pid=" + pid);
+        String body = httpGet(hostUser() + "/p/get_carousel_video?pid=" + pid);
         if (TextUtils.isEmpty(body)) {
             LogBridge.w(TAG, "get_carousel_video 无响应 pid=" + pid);
             return null;
@@ -951,7 +981,7 @@ public final class CarouselApi {
      */
     public static Resolution getLookBackVideo(String tvId, long startTs, long endTs) {
         if (TextUtils.isEmpty(tvId) || startTs <= 0L || endTs <= 0L) return null;
-        String req = HOST_USER_NET + "/p/get_carousel_video_for_lb"
+        String req = hostUserNet() + "/p/get_carousel_video_for_lb"
                 + "?tvId=" + tvId + "&offsert=1"
                 + "&start=" + formatDateTime(startTs)
                 + "&end=" + formatDateTime(endTs);

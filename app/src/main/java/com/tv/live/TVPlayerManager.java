@@ -4450,9 +4450,14 @@ public class TVPlayerManager {
                 }
             }
             if (webServer != null && webServer.isRunning()) {
-                String proxyUrl = webServer.getAdStripProxyUrl(url);
+                String originalUrl = url;
+                String proxyUrl = webServer.getAdStripProxyUrl(url, currentChannelName);
                 LogBridge.i(TAG, "【广告剥离】代理重定向: " + url.substring(0, Math.min(60, url.length())) + " -> " + proxyUrl.substring(0, Math.min(80, proxyUrl.length())));
                 url = proxyUrl;
+                // 【优化3】异步预加载：后台提前下载+剥离并存入缓存，重复切换秒开
+                try {
+                    webServer.preload(originalUrl);
+                } catch (Exception ignored) {}
             } else {
                 LogBridge.w(TAG, "【广告剥离】代理不可用，直连原始地址");
             }

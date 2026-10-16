@@ -51,7 +51,7 @@ public class BootStartForegroundService extends Service {
     //   已在前台则完全不动作，不会重建 OTT 首页。
     //   只在"开机窗口"内启用（uptime < 120s），避免用户平时手动开 App 后被误补拉。
     // ------------------------------------------------------------------
-    private static final long BOOT_WINDOW_MS = 120_000L;
+    private static final long BOOT_WINDOW_MS = 180_000L;
 
     private static final java.util.concurrent.atomic.AtomicBoolean sRecoveryScheduled =
             new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -143,6 +143,17 @@ public class BootStartForegroundService extends Service {
     }
 
     private boolean startMainActivity() {
+        // 【2026-10-14 黑屏修复】sticky 服务只在开机窗口内（前 120 秒）才尝试拉起前台，
+        //   平时服务被系统重启时只是保活，绝不再拉起 Activity（否则重建 OTT 界面 → 黑屏）。
+        long uptime = android.os.SystemClock.elapsedRealtime();
+        if (uptime > BOOT_WINDOW_MS) {
+            LogBridge.i(TAG, "sticky前台服务：非开机窗口（uptime=" + uptime + "ms > "
+                    + BOOT_WINDOW_MS + "ms），仅保活不拉起前台");
+            BootStartManager.noteLaunchSource(this, "sticky前台服务",
+                    "非开机窗口，仅保活不拉起");
+            return false;
+        }
+
         // 【2026-10-13 单飞闸门】sticky 服务被反复重启 / 被 Alarm+Job 同时触发时，
         // 不再重复拉起前台 —— 否则每次都会重建整条 OTT 界面。
         // 【2026-10-13 第二轮】必须按「服务来源」过闸门：App 已在前台时（例如用户在设置里

@@ -1,6 +1,7 @@
 package com.tv.live;
 
 import android.app.AlarmManager;
+import android.annotation.SuppressLint;
 import android.app.PendingIntent;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
@@ -34,21 +35,10 @@ public class BootReceiver extends BroadcastReceiver {
     private static final String ACTION_MY_PACKAGE_REPLACED = Intent.ACTION_MY_PACKAGE_REPLACED;
     private static final String ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON";
     private static final String ACTION_QUICKBOOT_POWERON_HTC = "com.htc.intent.action.QUICKBOOT_POWERON";
-    private static final String ACTION_POWER_CONNECTED = Intent.ACTION_POWER_CONNECTED;
 
     private static final String ACTION_SCREEN_ON = Intent.ACTION_SCREEN_ON;
 
     private static final String ACTION_USER_PRESENT = Intent.ACTION_USER_PRESENT;
-
-    private static final String ACTION_MEDIA_MOUNTED = "android.intent.action.MEDIA_MOUNTED";
-
-    private static final String ACTION_MEDIA_EJECT = "android.intent.action.MEDIA_EJECT";
-
-    private static final String ACTION_TIME_SET = "android.intent.action.TIME_SET";
-
-    private static final String ACTION_TIMEZONE_CHANGED = "android.intent.action.TIMEZONE_CHANGED";
-
-    private static final String ACTION_CONNECTIVITY_CHANGE = "android.net.conn.CONNECTIVITY_CHANGE";
 
     /**
      * 【2026-10-13 开机提速】原为 3000ms。
@@ -62,21 +52,46 @@ public class BootReceiver extends BroadcastReceiver {
 
     private static final long SCREEN_ON_DELAY_MS = 1500;
 
-    private static final long MIN_START_INTERVAL_MS = 5 * 60 * 1000;
+    private static final long MIN_START_INTERVAL_MS = 30 * 60 * 1000;
     private static final String SP_KEY_LAST_BOOT_START = "last_boot_start_time";
+
+    /**
+     * 【2026-10-14 黑屏修复】供 BootStartManager 在放行拉起时同步更新防重复时间戳。
+     *
+     * <p>背景：sticky 前台服务放行后，BOOT_COMPLETED 会在 ~200ms 后到达。
+     * 若不同步更新，BOOT_COMPLETED 的 elapsed 仍为负数（跨重启），
+     * 被判定为"跨重启"并放行，又设置 AlarmManager 延迟 1200ms
+     * → 第二次启动 → Activity 重建 → 黑屏。
+     */
+    public static void updateLastBootStart(Context context) {
+        if (context == null) return;
+        try {
+            SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
+            sp.edit().putLong(SP_KEY_LAST_BOOT_START, SystemClock.elapsedRealtime()).apply();
+        } catch (Throwable ignored) {
+        }
+    }
 
     private static final int BOOT_JOB_ID = 1001;
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        // 【2026-10-14 详细日志】记录每次收到广播的完整信息
+        long uptime = android.os.SystemClock.elapsedRealtime();
+        String brand = android.os.Build.BRAND;
+        String model = android.os.Build.MODEL;
+
         if (context == null || intent == null) {
-            writeBootLog(context, "onReceive: context 或 intent 为 null");
+            writeBootLog(context, "onReceive: context 或 intent 为 null | uptime=" + uptime + "ms");
             return;
         }
 
         String action = intent.getAction();
-        LogBridge.d(TAG, "收到广播：" + action);
-        writeBootLog(context, "收到广播 action=" + action);
+        String pkg = intent.getPackage();
+        LogBridge.i(TAG, "【广播入口】action=" + action + " | pkg=" + pkg
+                + " | uptime=" + uptime + "ms | device=" + brand + "/" + model);
+        writeBootLog(context, "【广播入口】action=" + action + " | pkg=" + pkg
+                + " | uptime=" + uptime + "ms | device=" + brand + "/" + model);
 
         if (!isBootRelatedAction(action)) {
             LogBridge.d(TAG, "非开机相关广播，忽略：" + action);
@@ -117,51 +132,44 @@ public class BootReceiver extends BroadcastReceiver {
 
     private boolean isBootRelatedAction(String action) {
         if (action == null) return false;
+        // 【2026-10-14 精简广播】只保留真正的开机广播 + 创维电视兜底广播
+        //   （SCREEN_ON/USER_PRESENT 是创维电视 BOOT_COMPLETED 被拦截后的兜底启动广播，
+        //    必须保留；但已加入 30 分钟防重复，不会导致黑屏）
+        //   （POWER_CONNECTED/MEDIA_MOUNTED/TIME_SET/CONNECTIVITY_CHANGE 这些多余广播已去掉）
         return action.equals(ACTION_BOOT_COMPLETED)
                 || action.equals(ACTION_LOCKED_BOOT_COMPLETED)
-                || action.equals(ACTION_MY_PACKAGE_REPLACED)
                 || action.equals(ACTION_QUICKBOOT_POWERON)
                 || action.equals(ACTION_QUICKBOOT_POWERON_HTC)
-                || action.equals(ACTION_POWER_CONNECTED)
+                || action.equals(ACTION_MY_PACKAGE_REPLACED)
                 || action.equals(ACTION_SCREEN_ON)
-                || action.equals(ACTION_USER_PRESENT)
-                || action.equals(ACTION_MEDIA_MOUNTED)
-                || action.equals(ACTION_MEDIA_EJECT)
-                || action.equals(ACTION_TIME_SET)
-                || action.equals(ACTION_TIMEZONE_CHANGED)
-                || action.equals(ACTION_CONNECTIVITY_CHANGE);
+                || action.equals(ACTION_USER_PRESENT);
     }
 
     private boolean isRepeatableAction(String action) {
-        return ACTION_SCREEN_ON.equals(action)
-                || ACTION_USER_PRESENT.equals(action)
-                || ACTION_POWER_CONNECTED.equals(action)
-                || ACTION_MEDIA_MOUNTED.equals(action)
-                || ACTION_MEDIA_EJECT.equals(action)
-                || ACTION_TIME_SET.equals(action)
-                || ACTION_TIMEZONE_CHANGED.equals(action)
-                || ACTION_CONNECTIVITY_CHANGE.equals(action);
+        // 【2026-10-14 修复开机自启后重启】把所有开机相关广播都加入防重复列表，
+        // 避免 BOOT_COMPLETED + LOCKED_BOOT_COMPLETED + QUICKBOOT_POWERON 同时触发多次启动
+        return ACTION_BOOT_COMPLETED.equals(action)
+                || ACTION_LOCKED_BOOT_COMPLETED.equals(action)
+                || ACTION_QUICKBOOT_POWERON.equals(action)
+                || ACTION_QUICKBOOT_POWERON_HTC.equals(action)
+                || ACTION_MY_PACKAGE_REPLACED.equals(action)
+                || ACTION_SCREEN_ON.equals(action)
+                || ACTION_USER_PRESENT.equals(action);
     }
 
     private long getDelayByAction(String action) {
         if (action == null) return START_DELAY_MS;
         if (ACTION_MY_PACKAGE_REPLACED.equals(action)) return SHORT_DELAY_MS;
         if (ACTION_SCREEN_ON.equals(action) || ACTION_USER_PRESENT.equals(action)) return SCREEN_ON_DELAY_MS;
-
-        if (ACTION_CONNECTIVITY_CHANGE.equals(action)
-                || ACTION_MEDIA_MOUNTED.equals(action)
-                || ACTION_MEDIA_EJECT.equals(action)
-                || ACTION_TIME_SET.equals(action)
-                || ACTION_TIMEZONE_CHANGED.equals(action)) {
-            return START_DELAY_MS;
-        }
         return START_DELAY_MS;
     }
 
     private void scheduleDelayedStart(Context context, long delayMs, SharedPreferences sp) {
 
         sp.edit().putLong(SP_KEY_LAST_BOOT_START, SystemClock.elapsedRealtime()).apply();
-        writeBootLog(context, "scheduleDelayedStart: 已记录防重复时间戳");
+        writeBootLog(context, "scheduleDelayedStart: 已记录防重复时间戳 | delay=" + delayMs + "ms");
+        LogBridge.i(TAG, "【启动计划】delay=" + delayMs + "ms | uptime="
+                + android.os.SystemClock.elapsedRealtime() + "ms");
 
         boolean alarmScheduled = false;
 
@@ -213,6 +221,7 @@ public class BootReceiver extends BroadcastReceiver {
         }
     }
 
+    @SuppressLint("ObsoleteSdkInt")
     private void scheduleBootJob(Context context, long delayMs) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
 
@@ -277,20 +286,16 @@ public class BootReceiver extends BroadcastReceiver {
             filter.addAction(Intent.ACTION_BOOT_COMPLETED);
             filter.addAction("android.intent.action.LOCKED_BOOT_COMPLETED");
             filter.addAction(Intent.ACTION_MY_PACKAGE_REPLACED);
-            filter.addAction(Intent.ACTION_POWER_CONNECTED);
-            filter.addAction("android.intent.action.TIME_SET");
-            filter.addAction("android.intent.action.TIMEZONE_CHANGED");
-            filter.addAction("android.net.conn.CONNECTIVITY_CHANGE");
-            context.registerReceiver(receiver, filter);
-
-            IntentFilter mediaFilter = new IntentFilter();
-            mediaFilter.addAction("android.intent.action.MEDIA_MOUNTED");
-            mediaFilter.addAction("android.intent.action.MEDIA_EJECT");
-            mediaFilter.addDataScheme("file");
-            context.registerReceiver(receiver, mediaFilter);
+            // 【修复】Android 13+ 需要显式指定导出标志
+            // 这个接收器只监听系统广播，不需要外部应用发送，用 NOT_EXPORTED
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                context.registerReceiver(receiver, filter);
+            }
 
             LogBridge.d(TAG, "动态开机兜底监听已注册（覆盖快速开机/SCREEN_ON 场景）");
-            writeBootLog(context, "动态开机监听注册成功（SCREEN_ON/USER_PRESENT/POWER_CONNECTED/MEDIA_MOUNTED 等）");
+            writeBootLog(context, "动态开机监听注册成功（SCREEN_ON/USER_PRESENT/BOOT_COMPLETED）");
         } catch (Exception e) {
             LogBridge.e(TAG, "动态注册开机监听失败", e);
             writeBootLog(context, "动态开机监听注册失败: " + e);

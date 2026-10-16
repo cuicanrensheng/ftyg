@@ -57,6 +57,37 @@ OBF_DEF(K_LIVE_HOST, "110.42.52.180",                                         0x
 /** id=8 · 源5 点播加密密钥（AES-128，32 位 hex）—— 原为 Java public 明文常量 */
 OBF_DEF(K_VOD_KEY,   "7dbe4c69aa5b98ad90ba3468e21c6fd2",                     0xe7);
 
+// ------------------------------------------------------------------
+// 【2026-10-15 第三批】上游 API 端点密文化。
+// 这批原是 Java 的 public static final String —— 编译期常量会被**内联到每个使用点**，
+// dex 里到处可见；改成「SO 存明文 + Java 惰性 getter」后才真正消失。
+// 注意：本次只做地址密文化，**未**把这些端点迁移到 HTTPS（服务端是否支持 TLS 未验证），
+//       故明文一律保留 http:// 原样。
+// ------------------------------------------------------------------
+/** id=9  · 主直播 host（nowtv-new.xiaoyouzb.cn）—— 畅享/咪咕主用 */
+OBF_DEF(K_API_NOWTV_NEW, "http://nowtv-new.xiaoyouzb.cn",                     0x2a);
+/** id=10 · 旧版直播 host（nowtv.xiaoyouzb.cn）—— 回看节目单 program_v3 用 */
+OBF_DEF(K_API_NOWTV,     "http://nowtv.xiaoyouzb.cn",                         0x4b);
+/** id=11 · 用户服务 host（user.xiaoyouzb.cn）—— 分类表 / 回看 */
+OBF_DEF(K_API_USER_CN,   "http://user.xiaoyouzb.cn",                          0x6d);
+/** id=12 · 探测 host（probe.xiaoyouzb.cn） */
+OBF_DEF(K_API_PROBE,     "http://probe.xiaoyouzb.cn",                         0x8e);
+/** id=13 · A8 游戏接口 host（game.api.a8sport.com） */
+OBF_DEF(K_API_A8,        "http://game.api.a8sport.com",                       0xaf);
+/** id=14 · 用户服务 host（.net，轮播 for_lb 线路） */
+OBF_DEF(K_API_USER_NET,  "http://user.xiaoyouzb.net",                         0xcd);
+/** id=15 · JS 插件热更元数据接口（.net；热更默认关闭，仅开关打开时访问） */
+OBF_DEF(K_API_NOWTV_NET,
+        "http://nowtv.xiaoyouzb.net/list_android_js_meta_v2.php?version=",    0xc9);
+/** id=16 · GITV 点播鉴权端点前缀 */
+OBF_DEF(K_API_GITV_AUTH,
+        "http://hecmcc-gvp-zy-vod.playauth.gitv.tv/gitv_vod_auth/",           0xe9);
+/** id=17 · GITV 鉴权固定 key（128 字符，服务端校验；**值不可改**，仅改为密文存放） */
+OBF_DEF(K_API_GITV_KEY,
+        "fUw8mWqp0ih8KRPzmgHnoL4fx0X0N78o4Od6D4lFTV32S7uVa2mYSZjRofquHHU16gkpjvInD07bKwb05S0hlJYfYMmUyQprvoEqM2I8Dfe2oX0MTAJEg8DYDul6lJqg",
+        0xf3);
+
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id) {
     char buf[320];
@@ -69,6 +100,15 @@ Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id)
         case 5:  obf::decode_to(K_LIVE_PHP, buf, sizeof(buf)); break;
         case 7:  obf::decode_to(K_LIVE_HOST, buf, sizeof(buf)); break;
         case 8:  obf::decode_to(K_VOD_KEY,   buf, sizeof(buf)); break;
+        case 9:  obf::decode_to(K_API_NOWTV_NEW, buf, sizeof(buf)); break;
+        case 10: obf::decode_to(K_API_NOWTV,     buf, sizeof(buf)); break;
+        case 11: obf::decode_to(K_API_USER_CN,   buf, sizeof(buf)); break;
+        case 12: obf::decode_to(K_API_PROBE,     buf, sizeof(buf)); break;
+        case 13: obf::decode_to(K_API_A8,        buf, sizeof(buf)); break;
+        case 14: obf::decode_to(K_API_USER_NET,  buf, sizeof(buf)); break;
+        case 15: obf::decode_to(K_API_NOWTV_NET, buf, sizeof(buf)); break;
+        case 16: obf::decode_to(K_API_GITV_AUTH, buf, sizeof(buf)); break;
+        case 17: obf::decode_to(K_API_GITV_KEY,  buf, sizeof(buf)); break;
         default: return nullptr;
     }
     jstring s = env->NewStringUTF(buf);

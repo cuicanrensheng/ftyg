@@ -23,6 +23,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -475,7 +476,7 @@ public class HuyaTogetherWatchManager {
                 LogBridge.w(TAG, "网络请求异常，开始兜底：" + e.getMessage());
             }
 
-            LogBridge.i(TAG, "⏱️【链路-HTTP线路】HTTP下载+JSON解析+分类 阶段耗时 "
+            LogBridge.d(TAG, "⏱️【链路-HTTP线路】HTTP下载+JSON解析+分类 阶段耗时 "
                     + (System.currentTimeMillis() - tFetchStart) + "ms，房间=" + rooms.size());
 
             int animeCount = 0, varietyCount = 0;
@@ -517,7 +518,7 @@ public class HuyaTogetherWatchManager {
             if (rooms.isEmpty() || rooms.size() < 10) {
                 List<TogetherWatchRoom> diskFb = loadFallbackFromDisk();
                 if (diskFb != null && !diskFb.isEmpty()) {
-                    LogBridge.i(TAG, "【兜底】启用本地永久兜底 " + FALLBACK_FILE + "，房间数=" + diskFb.size());
+                    LogBridge.d(TAG, "【兜底】启用本地永久兜底 " + FALLBACK_FILE + "，房间数=" + diskFb.size());
                     rooms = diskFb;
                 } else {
                     LogBridge.w(TAG, "【兜底】本地永久兜底无数据，启用静态内置兜底");
@@ -611,7 +612,7 @@ public class HuyaTogetherWatchManager {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        LogBridge.i(TAG, "⏱️【子分类埋点】" + categoryName + " 完成：子分类数=" + tmpIds.length
+        LogBridge.d(TAG, "⏱️【子分类埋点】" + categoryName + " 完成：子分类数=" + tmpIds.length
                 + "，总耗时=" + (System.currentTimeMillis() - tCatStart) + "ms"
                 + "，房间=" + merged.size()
                 + "，最慢子分类 tmpId=" + catSlowestId.get() + "(" + catSlowestMs.get() + "ms)"
@@ -655,9 +656,9 @@ public class HuyaTogetherWatchManager {
 
     private boolean isAnimeRelatedRoom(String roomName, String nickName) {
         if (TextUtils.isEmpty(roomName) && TextUtils.isEmpty(nickName)) return false;
-        String text = (roomName + " " + nickName).toLowerCase();
+        String text = (roomName + " " + nickName).toLowerCase(Locale.ROOT);
         for (String kw : ANIME_RELATED_KEYWORDS) {
-            if (!TextUtils.isEmpty(kw) && text.contains(kw.toLowerCase())) {
+            if (!TextUtils.isEmpty(kw) && text.contains(kw.toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }
@@ -695,18 +696,18 @@ public class HuyaTogetherWatchManager {
 
     private boolean isVarietyRelatedRoom(String roomName, String nickName) {
         if (TextUtils.isEmpty(roomName) && TextUtils.isEmpty(nickName)) return false;
-        String text = (roomName + " " + nickName).toLowerCase();
+        String text = (roomName + " " + nickName).toLowerCase(Locale.ROOT);
 
         if (isAnimeRelatedRoom(roomName, nickName)) return false;
 
         for (String kw : VARIETY_EXCLUDE_KEYWORDS) {
-            if (!TextUtils.isEmpty(kw) && text.contains(kw.toLowerCase())) {
+            if (!TextUtils.isEmpty(kw) && text.contains(kw.toLowerCase(Locale.ROOT))) {
                 return false;
             }
         }
 
         for (String kw : VARIETY_RELATED_KEYWORDS) {
-            if (!TextUtils.isEmpty(kw) && text.contains(kw.toLowerCase())) {
+            if (!TextUtils.isEmpty(kw) && text.contains(kw.toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }
@@ -854,7 +855,7 @@ public class HuyaTogetherWatchManager {
         List<TogetherWatchRoom> cached = mCachedListRooms;
         long age = System.currentTimeMillis() - mCachedListTs;
         if (cached != null && !cached.isEmpty() && age < CACHE_LIST_TTL_MS) {
-            LogBridge.i(TAG, "【cache列表·共享】命中本类缓存，房间=" + cached.size() + "，年龄=" + age + "ms");
+            LogBridge.d(TAG, "【cache列表·共享】命中本类缓存，房间=" + cached.size() + "，年龄=" + age + "ms");
             return cached;
         }
         synchronized (mCacheListLock) {
@@ -869,7 +870,7 @@ public class HuyaTogetherWatchManager {
             if (fromLine2 != null && !fromLine2.isEmpty()) {
                 mCachedListRooms = fromLine2;
                 mCachedListTs = System.currentTimeMillis();
-                LogBridge.i(TAG, "【cache列表·共享】命中第二路已有共享列表（非阻塞 peek），房间="
+                LogBridge.d(TAG, "【cache列表·共享】命中第二路已有共享列表（非阻塞 peek），房间="
                         + fromLine2.size() + "，本轮无需自拉");
                 return fromLine2;
             }
@@ -882,7 +883,7 @@ public class HuyaTogetherWatchManager {
             if (all != null && !all.isEmpty()) {
                 mCachedListRooms = all;
                 mCachedListTs = System.currentTimeMillis();
-                LogBridge.i(TAG, "【cache列表·共享】自己并发拉取完成，房间=" + all.size()
+                LogBridge.d(TAG, "【cache列表·共享】自己并发拉取完成，房间=" + all.size()
                         + "，页数≤" + pages + "，耗时=" + cost + "ms");
             } else {
                 LogBridge.w(TAG, "【cache列表·共享】自己并发拉取为空，耗时=" + cost + "ms（不写缓存）");
@@ -1148,7 +1149,7 @@ public class HuyaTogetherWatchManager {
         List<String> defaultRoomNames = new ArrayList<>();
 
         for (TogetherWatchRoom room : sourceRooms) {
-            String searchText = (room.roomName + " " + room.nickName).toLowerCase();
+            String searchText = (room.roomName + " " + room.nickName).toLowerCase(Locale.ROOT);
             String matchedCategory = defaultCategory;
 
             for (String[] ck : categoryKeywords) {
@@ -1158,7 +1159,7 @@ public class HuyaTogetherWatchManager {
 
                 String[] keywordArr = keywords.split("\\|");
                 for (String kw : keywordArr) {
-                    if (!TextUtils.isEmpty(kw) && searchText.contains(kw.toLowerCase())) {
+                    if (!TextUtils.isEmpty(kw) && searchText.contains(kw.toLowerCase(Locale.ROOT))) {
                         matchedCategory = categoryName;
                         break;
                     }
@@ -1203,12 +1204,12 @@ public class HuyaTogetherWatchManager {
         final long tWarm = System.currentTimeMillis();
         java.util.concurrent.Future<List<TogetherWatchRoom>> f = mLongTailExecutor.submit(() -> {
             List<TogetherWatchRoom> rooms = fetchBySubCategoryDirect(tmpId, "剧集");
-            LogBridge.i(TAG, "⏱️【长尾预热】tmpId=" + tmpId + " 抢先完成：房间=" + rooms.size()
+            LogBridge.d(TAG, "⏱️【长尾预热】tmpId=" + tmpId + " 抢先完成：房间=" + rooms.size()
                     + "，耗时=" + (System.currentTimeMillis() - tWarm) + "ms（已与其他子分类重叠）");
             return rooms;
         });
         mLongTailFutures.put(tmpId, f);
-        LogBridge.i(TAG, "⏱️【长尾预热】tmpId=" + tmpId + " 已抢先起跑（专属线程，不等 8 线程池排波）");
+        LogBridge.d(TAG, "⏱️【长尾预热】tmpId=" + tmpId + " 已抢先起跑（专属线程，不等 8 线程池排波）");
     }
 
     private List<TogetherWatchRoom> fetchBySubCategory(int subCategoryId, String categoryName) throws IOException {
@@ -1217,7 +1218,7 @@ public class HuyaTogetherWatchManager {
         if (warm != null) {
             try {
                 List<TogetherWatchRoom> r = warm.get();
-                LogBridge.i(TAG, "⏱️【长尾预热】tmpId=" + subCategoryId + " 复用预热结果：房间="
+                LogBridge.d(TAG, "⏱️【长尾预热】tmpId=" + subCategoryId + " 复用预热结果：房间="
                         + (r == null ? 0 : r.size()) + "（省去重复请求）");
                 return r != null ? r : new ArrayList<>();
             } catch (Exception e) {
@@ -1252,14 +1253,14 @@ public class HuyaTogetherWatchManager {
                 List<TogetherWatchRoom> pageRooms = parseRoomList(resStr, categoryName);
                 if (pageRooms.isEmpty()) {
                     // 【2026-10-03 埋点】子分类页数分布（page=1 即 break 说明单页；否则真在翻页）
-                    LogBridge.i(TAG, "⏱️【子分类埋点】tmpId=" + subCategoryId + "（" + categoryName
+                    LogBridge.d(TAG, "⏱️【子分类埋点】tmpId=" + subCategoryId + "（" + categoryName
                             + "）翻页结束于 page=" + page + "，共 " + pagesFetched + " 页，房间=" + allRooms.size());
                     break;
                 }
                 allRooms.addAll(pageRooms);
 
                 if (vList == null || vList.length() < pageSize) {
-                    LogBridge.i(TAG, "⏱️【子分类埋点】tmpId=" + subCategoryId + "（" + categoryName
+                    LogBridge.d(TAG, "⏱️【子分类埋点】tmpId=" + subCategoryId + "（" + categoryName
                             + "）翻页结束于 page=" + page + "，共 " + pagesFetched + " 页，房间=" + allRooms.size()
                             + "（vList=" + (vList == null ? "null" : vList.length()) + " < " + pageSize + " 视为末页）");
                     break;
@@ -1358,7 +1359,7 @@ public class HuyaTogetherWatchManager {
                 for (TogetherWatchRoom room : rooms) {
                     channels.add(room.toChannel());
                 }
-                LogBridge.i(TAG, "⏱️【链路-HTTP线路】增量批次 " + channels.size()
+                LogBridge.d(TAG, "⏱️【链路-HTTP线路】增量批次 " + channels.size()
                         + " 频道，已用 " + (System.currentTimeMillis() - t0) + "ms");
                 listener.onPartial(channels);
             }
@@ -1370,9 +1371,9 @@ public class HuyaTogetherWatchManager {
                 for (TogetherWatchRoom room : rooms) {
                     channels.add(room.toChannel());
                 }
-                LogBridge.i(TAG, "⏱️【链路-HTTP线路】解析(toChannel) " + (System.currentTimeMillis() - tParseStart)
+                LogBridge.d(TAG, "⏱️【链路-HTTP线路】解析(toChannel) " + (System.currentTimeMillis() - tParseStart)
                         + "ms，房间=" + rooms.size() + " → 频道=" + channels.size());
-                LogBridge.i(TAG, "⏱️【链路-HTTP线路】端到端总耗时 " + (System.currentTimeMillis() - t0)
+                LogBridge.d(TAG, "⏱️【链路-HTTP线路】端到端总耗时 " + (System.currentTimeMillis() - t0)
                         + "ms（HTTP下载+JSON解析+关键词分类+toChannel）");
                 listener.onSuccess(channels);
             }
@@ -1462,7 +1463,7 @@ public class HuyaTogetherWatchManager {
         try {
             List<TogetherWatchRoom> existing = loadFallbackFromDisk();
             if (existing != null && existing.size() > rooms.size()) {
-                LogBridge.i(TAG, "【兜底】新数据(" + rooms.size() + ")少于现有兜底("
+                LogBridge.d(TAG, "【兜底】新数据(" + rooms.size() + ")少于现有兜底("
                         + existing.size() + ")，保留现有兜底不覆盖");
                 return;
             }
@@ -1488,7 +1489,7 @@ public class HuyaTogetherWatchManager {
             byte[] data = arr.toString().getBytes("UTF-8");
             FileOutputStream fos = new FileOutputStream(file);
             try { fos.write(data); fos.flush(); } finally { fos.close(); }
-            LogBridge.i(TAG, "【兜底】已写入永久兜底，房间数=" + rooms.size() + "，字节=" + data.length);
+            LogBridge.d(TAG, "【兜底】已写入永久兜底，房间数=" + rooms.size() + "，字节=" + data.length);
         } catch (Throwable t) {
             LogBridge.e(TAG, "【兜底】写入失败：" + t.getMessage());
         }

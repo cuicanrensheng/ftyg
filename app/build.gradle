@@ -127,19 +127,28 @@ android {
     }
     lint {
         baseline = file("lint-baseline.xml")
-        abortOnError false
-        checkReleaseBuilds false
+        // 【2026-10-15 审计修复 #7】原 abortOnError=false + checkReleaseBuilds=false 等于把质量闸门
+        // 整个关掉：release 不再因任何 Lint 问题失败，新引入的问题会被静默吞掉。
+        // 现恢复：
+        //   · checkReleaseBuilds=true  → assembleRelease 会跑 lintVitalRelease（仅 Fatal 级，低噪声）
+        //   · abortOnError=true        → 显式跑 :app:lint 时，Error 级问题会真正让构建失败
+        // 历史遗留项由 lint-baseline.xml 吸收；有意保留的规则（明文 HTTP / 用户 CA / JS Bridge 等
+        // 业务决定）已在 app/lint.xml 里逐条 ignore。
+        abortOnError true
+        checkReleaseBuilds true
     }
 }
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
-    implementation 'com.google.zxing:core:3.5.1'
+    implementation 'com.google.zxing:core:3.5.2'
     implementation "androidx.media3:media3-exoplayer:1.7.1"
     implementation "androidx.media3:media3-ui:1.7.1"
     implementation "androidx.media3:media3-exoplayer-hls:1.7.1"
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.google.code.gson:gson:2.10.1'
+    // 【2026-10-16】腾讯 Bugly 崩溃上报 SDK
+    implementation 'com.tencent.bugly:crashreport:4.1.9.3'
     // 【2026-10-08 去SDK化】原 fileTree(dir: 'libs') 的虎牙 Berry SDK AAR/JAR 已全部移除，
     // libs 目录已清空删除；播放地址解析一律走自研 HuyaParser（纯 HTTP）。
     // ⚠️ 必须使用 full 版脱糖库, 不可换 minimal 版:
@@ -177,15 +186,85 @@ androidComponents {
 //   NSDT/HuyaAuthCore <clinit>、OptionalNativeLoadClassVisitorFactory 重定向第三方
 //   System.loadLibrary、JCE 反射采集说明）已随虎牙 SDK 移除——没有第三方库再需要这些防御。
 
-// 2026-09-10 体积优化: 在 mergeReleaseAssets 后删除 cacert.pem
-//   （原来自 hyhal AAR；去SDK后该资产不再出现，此任务保留为无害兜底）
+// ============================================================
+// 【2026-10-15 体积优化】release 包剔除不使用的 JS 插件
+//
+//   策略：**源文件保留在仓库**（app/src/main/assets/js/），只在 mergeReleaseAssets
+//   之后从**合并产物**里删除 —— APK 不含这些文件，但仓库里随时能找到源文件。
+//   恢复方式：把文件名从下面的 UNUSED_JS_ASSETS 列表里删掉（一行），重新出包即可，
+//             不需要重建任何文件。
+//
+//   判定依据（详见 .workbuddy/memory/2026-10-15.md 的插件盘点）：
+//     · 保留：native_layer.js / yt_source_root.js            —— JS 引擎基础设施 + 路由表
+//             other_live.js / ysp_live.js / migu_sport.js     —— 自有源实际在用（有运行日志实证：
+//                 `路由：migu://… → other_live.js::miguLiveParsePlay`）
+//             letv_vod.js                                     —— 网页类源兜底典型
+//                 （TVPlayerManager 注释明确：webPageSource 典型 http://www.le.com → .le.com → letv_vod.js）
+//             js_meta_baseline.json                           —— JS 热更基线清单（JsPluginStore 读取）
+//     · 剔除 block.js —— 全仓库零引用（原版 App 给「搜索/列表/收藏/热门/历史/预约」页做内容
+//                        过滤用，本工程没有这些 JS 页面）
+//     · 剔除其余 16 个插件 —— root 路由表里有，但只有上游 sourceLabels 下发**对应网页 URL**
+//                        才会命中；本工程没有搜片/网页解析入口，实际不可达
+//     · 剔除 web_parse_filter.json —— 全仓库零引用
+//
+//   ⚠️ 副作用：若日后上游开始下发匹配的网页 URL，JS 解析会失败（getPlugin 返回空串）。
+//      届时把对应文件名从列表删掉、重新出包即可恢复（源文件一直在仓库里）。
+//
+//   2026-09-10 体积优化: 在 mergeReleaseAssets 后删除 cacert.pem
+//     （原来自 hyhal AAR；去SDK后该资产不再出现，此任务保留为无害兜底）
+// ============================================================
 project.afterEvaluate {
     tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach {
         doLast {
-            def cacert = file("$buildDir/intermediates/assets/release/mergeReleaseAssets/cacert.pem")
+            def mergedAssets = file("$buildDir/intermediates/assets/release/mergeReleaseAssets")
+
+            def cacert = new File(mergedAssets, "cacert.pem")
             if (cacert.exists()) {
                 cacert.delete()
                 println "[体积优化] 已删除 mergeReleaseAssets/cacert.pem (222KB)"
+            }
+
+            // —— 2026-10-15：release 专用剔除清单（源文件保留在 app/src/main/assets/js/） ——
+            def UNUSED_JS_ASSETS = [
+                    // 零引用
+                    'js/block.js',
+                    'js/web_parse_filter.json',
+                    // 仅「网页类源兜底」可达（本工程无搜片 / 网页解析入口）
+                    'js/gw_live.js', 'js/tv_live.js', 'js/qq_vod.js', 'js/other_vod.js',
+                    'js/replay.js', 'js/fun_vod.js', 'js/mgtv_vod.js', 'js/bili_vod.js',
+                    'js/sohu_vod.js', 'js/pptv_vod.js', 'js/iyf_live.js', 'js/iqy_live.js',
+                    'js/weibo_vod.js', 'js/lunbo.js', 'js/fymb_live.js', 'js/tvpass_live.js',
+            ]
+            long freed = 0L
+            int removed = 0
+            UNUSED_JS_ASSETS.each { rel ->
+                def f = new File(mergedAssets, rel)
+                if (f.exists()) {
+                    freed += f.length()
+                    if (f.delete()) removed++
+                }
+            }
+            println "[体积优化] release 已剔除未使用的 JS 资产 ${removed} 个（未压缩 ${freed / 1024}KB）；" +
+                    "源文件保留于 app/src/main/assets/js/（恢复：删掉 build.gradle 里对应一行）"
+
+            // —— 防呆闸门：误放进 assets 的备份/临时文件一律不许进包 ——
+            //   背景（2026-10-15 事故）：曾把 `yt_source_root.js.bak-routefix-20261015` 直接建在
+            //   app/src/main/assets/js/ 下 —— 那是**会被打包**的 assets 源目录，结果 11KB 的旧版
+            //   备份进了 APK。此闸门兜底：命中即删除并打印警告。
+            //   正确做法：assets 的备份请放到仓库根 `_bak/<用途>-<日期>/` 下。
+            int strayRemoved = 0
+            mergedAssets.eachFileRecurse { f ->
+                if (f.isFile()) {
+                    String n = f.name.toLowerCase(Locale.ROOT)
+                    if (n.endsWith('~') || n.contains('.bak') || n.endsWith('.orig') || n.endsWith('.tmp')) {
+                        println "[体积优化] ⚠️ assets 中的非正式文件已阻止进包：${f} —— " +
+                                "请把备份移到仓库根 _bak/ 下（assets 是打包源目录）"
+                        if (f.delete()) strayRemoved++
+                    }
+                }
+            }
+            if (strayRemoved > 0) {
+                println "[体积优化] 已从 release 合并产物清除 ${strayRemoved} 个误入 assets 的备份/临时文件"
             }
         }
     }

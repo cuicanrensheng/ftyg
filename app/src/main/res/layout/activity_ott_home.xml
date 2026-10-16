@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/app_name"
                 android:textColor="#FFFFFFFF"
-                android:textSize="24sp"
+                android:textSize="28sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -45,7 +45,7 @@
                 android:layout_marginStart="8dp"
                 android:text="@string/ott_home_subtitle"
                 android:textColor="#993AA0FF"
-                android:textSize="13sp" />
+                android:textSize="18sp" />
 
             <HorizontalScrollView
                 android:layout_width="0dp"
@@ -77,7 +77,7 @@
                 android:paddingEnd="18dp"
                 android:text="@string/ott_fullscreen"
                 android:textColor="#FFFFFFFF"
-                android:textSize="14sp" />
+                android:textSize="18sp" />
 
             <TextView
                 android:id="@+id/btn_ott_menu"
@@ -91,7 +91,7 @@
                 android:paddingEnd="18dp"
                 android:text="@string/ott_menu"
                 android:textColor="#FFFFFFFF"
-                android:textSize="14sp" />
+                android:textSize="18sp" />
         </LinearLayout>
 
         <!-- ============ 主体：左侧播放预览 + 右侧频道网格 ============ -->
@@ -129,6 +129,15 @@
                         app:surface_type="surface_view"
                         app:use_controller="false" />
 
+                    <!-- 【2026-10-14 顶部广告条遮罩】盖住视频流里的贴片广告（约15%高度） -->
+                    <View
+                        android:id="@+id/v_ott_top_ad_mask"
+                        android:layout_width="match_parent"
+                        android:layout_height="100dp"
+                        android:layout_gravity="top"
+                        android:background="#FF000000"
+                        android:visibility="gone" />
+
                     <!-- 虎牙 SDK 原生播放器容器（TVPlayerManager.attachPlayerView 会按此 id 查找） -->
                     <FrameLayout
                         android:id="@+id/sdk_player_container"
@@ -142,7 +151,7 @@
                         android:layout_gravity="center"
                         android:text="@string/ott_preview_loading"
                         android:textColor="#99FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="18sp" />
 
                     <!-- 焦点提示：仅播放器获焦时显示 -->
                     <TextView
@@ -159,7 +168,7 @@
                         android:paddingBottom="4dp"
                         android:text="@string/ott_preview_focus_hint"
                         android:textColor="#FFFFFFFF"
-                        android:textSize="13sp"
+                        android:textSize="18sp"
                         android:visibility="gone" />
 
                     <!-- 焦点环：必须是最后一个子视图，才能绘制在 PlayerView 之上 -->
@@ -184,15 +193,38 @@
                     android:textSize="18sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/tv_ott_now_program"
+                <LinearLayout
+                    android:id="@+id/ll_ott_now_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:ellipsize="end"
-                    android:maxLines="2"
-                    android:textColor="#B3FFFFFF"
-                    android:textSize="13sp" />
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/tv_ott_now_program"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/tv_ott_history_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="16dp"
+                        android:gravity="start"
+                        android:paddingStart="8dp"
+                        android:paddingTop="6dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="6dp"
+                        android:text="@string/ott_history_title"
+                        android:textColor="#993AA0FF"
+                        android:textSize="17sp" />
+                </LinearLayout>
 
                 <!-- 【2026-09-29 方案 A 电信 IPTV 风格】当前节目 + 接下来 2 条 + 元数据 -->
                 <LinearLayout
@@ -234,15 +266,6 @@
                             android:layout_weight="1"
                             android:orientation="vertical">
 
-                            <TextView
-                                android:id="@+id/tv_ott_history_title"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:paddingBottom="4dp"
-                                android:text="@string/ott_history_title"
-                                android:textColor="#993AA0FF"
-                                android:textSize="12sp" />
-
                             <ScrollView
                                 android:id="@+id/sv_ott_history"
                                 android:layout_width="match_parent"
@@ -268,7 +291,7 @@
                         android:ellipsize="end"
                         android:singleLine="true"
                         android:textColor="#80FFFFFF"
-                        android:textSize="11sp" />
+                        android:textSize="18sp" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -289,7 +312,7 @@
                     android:ellipsize="end"
                     android:singleLine="true"
                     android:textColor="#993AA0FF"
-                    android:textSize="13sp"
+                    android:textSize="18sp"
                     android:visibility="gone" />
 
                 <FrameLayout
@@ -348,7 +371,7 @@
                         android:layout_gravity="center"
                         android:text="@string/ott_channel_loading"
                         android:textColor="#99FFFFFF"
-                        android:textSize="15sp"
+                        android:textSize="18sp"
                         android:visibility="gone" />
                 </FrameLayout>
             </LinearLayout>
@@ -370,7 +393,7 @@
         android:paddingBottom="8dp"
         android:text="@string/ott_fullscreen_hint"
         android:textColor="#FFFFFFFF"
-        android:textSize="16sp"
+        android:textSize="18sp"
         android:visibility="gone" />
 
     <!-- 【2026-09-29 频道号 OSD】口径同直播模式（全局编号 = allChannels 下标 + 1），3s 自动隐藏。
@@ -387,4 +410,5 @@
         android:textColor="#FFFFFFFF"
         android:textSize="50sp"
         android:visibility="gone" />
+
 </FrameLayout>

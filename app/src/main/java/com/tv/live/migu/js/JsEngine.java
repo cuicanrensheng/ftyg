@@ -1,6 +1,7 @@
 package com.tv.live.migu.js;
 
 import android.content.Context;
+import android.annotation.SuppressLint;
 import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
@@ -41,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * {@link #isAvailable()} 返回 false，调用方应回退到纯 Java 实现
  * （{@link com.tv.live.migu.MiguUrlResolver}）。
  */
+@SuppressLint("StaticFieldLeak")
 public final class JsEngine {
 
     private static final String TAG = "MiguJsEngine";

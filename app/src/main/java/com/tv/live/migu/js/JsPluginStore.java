@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.tv.live.security.SecurityCore;
 import okhttp3.Response;
 
 /**
@@ -48,9 +49,21 @@ public final class JsPluginStore {
     /** 应用私有目录下的插件目录名 */
     private static final String LOCAL_DIR = "js";
 
-    /** 热更元数据接口（仅在 {@link #sUpdateEnabled} 为 true 时才会访问） */
-    private static final String UPDATE_META_URL =
-            "http://nowtv.xiaoyouzb.net/list_android_js_meta_v2.php?version=";
+    /**
+     * 热更元数据接口（仅在 {@link #sUpdateEnabled} 为 true 时才会访问）。
+     * <p>【2026-10-15 密文化】原为 private static final 明文常量，现改为惰性 getter，
+     * 明文只存在于 SO（cpp/secstore.cpp）。⚠️ 不可写回 static final（惰性解密铁律）。
+     */
+    private static volatile String sUpdateMetaUrl;
+
+    private static String updateMetaUrl() {
+        String v = sUpdateMetaUrl;
+        if (v == null) {
+            String d = SecurityCore.secureString(SecurityCore.C_API_NOWTV_NET);
+            v = sUpdateMetaUrl = (d == null ? "" : d);
+        }
+        return v;
+    }
     /** 客户端版本号，用于向服务端声明自身版本 */
     private static final String CLIENT_JS_VERSION = "4.1.6";
 
@@ -269,7 +282,7 @@ public final class JsPluginStore {
      * <p>下载后会校验密文 md5，不符直接丢弃（不落盘、不执行）。
      */
     private static void updateInternal(Context ctx) {
-        String meta = httpGet(UPDATE_META_URL + CLIENT_JS_VERSION);
+        String meta = httpGet(updateMetaUrl() + CLIENT_JS_VERSION);
         if (TextUtils.isEmpty(meta)) return;
 
         JSONObject root;

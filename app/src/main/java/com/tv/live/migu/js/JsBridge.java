@@ -1,6 +1,7 @@
 package com.tv.live.migu.js;
 
 import android.content.Context;
+import android.annotation.SuppressLint;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.text.TextUtils;
@@ -223,6 +224,7 @@ public final class JsBridge {
     }
 
     @JavascriptInterface
+    @SuppressLint("WifiManagerPotentialLeak")
     public String getIPAddress() {
         try {
             WifiManager wm = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);
@@ -236,6 +238,7 @@ public final class JsBridge {
     }
 
     @JavascriptInterface
+    @SuppressLint("WifiManagerPotentialLeak")
     public boolean getWifiStatus() {
         try {
             WifiManager wm = (WifiManager) appContext.getSystemService(Context.WIFI_SERVICE);

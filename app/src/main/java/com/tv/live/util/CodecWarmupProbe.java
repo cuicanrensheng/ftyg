@@ -1,6 +1,7 @@
 package com.tv.live.util;
 
 import android.content.Context;
+import java.util.Locale;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -215,9 +216,9 @@ public final class CodecWarmupProbe {
 
     private static boolean isSoftware(String name) {
         if (name == null) return true;
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);
         for (String p : SOFTWARE_PREFIX) {
-            if (lower.startsWith(p.toLowerCase())) {
+            if (lower.startsWith(p.toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }
@@ -226,7 +227,7 @@ public final class CodecWarmupProbe {
 
     private static boolean isVendorPreferred(String name) {
         if (name == null) return false;
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);
         return lower.contains("mtk") || lower.contains("mediatek")
                 || lower.contains("qcom") || lower.contains("hisilicon")
                 || lower.contains("amlogic") || lower.contains("rockchip");

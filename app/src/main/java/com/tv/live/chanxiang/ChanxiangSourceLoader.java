@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import com.tv.live.security.SecurityCore;
 import okhttp3.Response;
 
 /**
@@ -398,11 +399,52 @@ public final class ChanxiangSourceLoader {
      */
     public static final class ChanxiangConfig {
 
-        public static final String NOWTV_NEW = "http://nowtv-new.xiaoyouzb.cn";
-        public static final String NOWTV = "http://nowtv.xiaoyouzb.cn";
-        public static final String USER = "http://user.xiaoyouzb.cn";
-        public static final String PROBE = "http://probe.xiaoyouzb.cn";
-        public static final String A8 = "http://game.api.a8sport.com";
+        // 【2026-10-15 密文化】下列 host 原为 public static final String。编译期常量会被
+        // **内联到每个使用点**，dex 里处处可见；改为惰性 getter 后，明文只存在于 SO
+        // （app/src/main/cpp/secstore.cpp），Java 按 id 取。
+        // ⚠️ 惰性解密铁律：绝不可写回 static final / <clinit> —— SecurityCore.init() 要
+        //    loadLibrary（可达数秒），放进类初始化会卡住首访线程（可能是主线程）。
+        private static volatile String sNowtvNew, sNowtv, sUser, sProbe, sA8;
+
+        private static String so(int id) {
+            String d = SecurityCore.secureString(id);
+            return d == null ? "" : d;
+        }
+
+        /** 主直播 host（原 NOWTV_NEW）。解密失败返回空串，调用方会得到一次失败请求而非 NPE。 */
+        public static String nowtvNew() {
+            String v = sNowtvNew;
+            if (v == null) v = sNowtvNew = so(SecurityCore.C_API_NOWTV_NEW);
+            return v;
+        }
+
+        /** 旧版直播 host（原 NOWTV，已废弃；保留以便日后兼容） */
+        public static String nowtv() {
+            String v = sNowtv;
+            if (v == null) v = sNowtv = so(SecurityCore.C_API_NOWTV);
+            return v;
+        }
+
+        /** 用户服务 host（原 USER） */
+        public static String user() {
+            String v = sUser;
+            if (v == null) v = sUser = so(SecurityCore.C_API_USER_CN);
+            return v;
+        }
+
+        /** 探测 host（原 PROBE） */
+        public static String probe() {
+            String v = sProbe;
+            if (v == null) v = sProbe = so(SecurityCore.C_API_PROBE);
+            return v;
+        }
+
+        /** A8 游戏接口 host（原 A8） */
+        public static String a8() {
+            String v = sA8;
+            if (v == null) v = sA8 = so(SecurityCore.C_API_A8);
+            return v;
+        }
 
         public static final String USER_AGENT = "yuntutv/5.0.4 (Android 11)";
         public static final String APP_PN = "com.fungo.fungobox";
@@ -585,7 +627,7 @@ public final class ChanxiangSourceLoader {
             Map<String, String> q = new LinkedHashMap<>();
             q.put("tagId", String.valueOf(tagId));
             q.put("tagName", tagName == null ? "" : tagName);
-            String body = get(url(ChanxiangConfig.NOWTV_NEW, "/channel/get_tag_list", q));
+            String body = get(url(ChanxiangConfig.nowtvNew(), "/channel/get_tag_list", q));
             return ChanxiangDecode.dataField(body);
         }
 
@@ -595,7 +637,7 @@ public final class ChanxiangSourceLoader {
             q.put("tvId", String.valueOf(tvId));
             q.put("uid", "");
             q.put("s_ver", ChanxiangConfig.VERSION);
-            String body = get(url(ChanxiangConfig.NOWTV_NEW, "/channel/get_channel_source", q));
+            String body = get(url(ChanxiangConfig.nowtvNew(), "/channel/get_channel_source", q));
             return ChanxiangDecode.dataField(body);
         }
 
@@ -603,7 +645,7 @@ public final class ChanxiangSourceLoader {
         public static String getChannelIdByName(String name) throws IOException {
             Map<String, String> q = new LinkedHashMap<>();
             q.put("name", name);
-            String body = get(url(ChanxiangConfig.NOWTV_NEW, "/channel/get_channel_id_by_name", q));
+            String body = get(url(ChanxiangConfig.nowtvNew(), "/channel/get_channel_id_by_name", q));
             return ChanxiangDecode.dataField(body);
         }
     }

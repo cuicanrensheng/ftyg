@@ -13,6 +13,7 @@ import okhttp3.Response;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -275,7 +276,7 @@ public final class RenYiBoSourceLoader {
      */
     public static boolean isPendingResolveUrl(String url) {
         if (url == null) return false;
-        String lower = url.toLowerCase();
+        String lower = url.toLowerCase(Locale.ROOT);
         String h = host();
         if (h.isEmpty() || !lower.contains(h)) return false;
         int q = lower.indexOf('?');

@@ -390,16 +390,16 @@ static const uint8_t KEY_PART_B[16] = {
     0x18, 0xfa, 0x82, 0x59, 0xa0, 0x21, 0x6c, 0xd7
 };
 
-static uint8_t g_runtime_token[16] = {0};
+// 【2026-10-14】token 不再从 Java 侧传入，直接编译期硬编码（与旧 FIXED_TOKEN 同值）。
+    // Java 侧不再有 "TVLiveSec!2026Se" 字符串。
+    static uint8_t g_runtime_token[16] = {
+        'T','V','L','i','v','e','S','e','c','!','2','0','2','6','S','e'
+    };
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_tv_live_security_SecurityCore_nativeSetToken(JNIEnv* env, jclass, jbyteArray token) {
-    if (!token) return;
-    jsize len = env->GetArrayLength(token);
-    if (len > 16) len = 16;
-    env->GetByteArrayRegion(token, 0, len, (jbyte*)g_runtime_token);
-
-    for (int i = len; i < 16; ++i) g_runtime_token[i] = 0;
+    // 【2026-10-14】token 已编译期硬编码，此 JNI 入口保留为空操作。
+    (void)env; (void)token;
 }
 
 static void build_aes_key(uint8_t out[32]) {

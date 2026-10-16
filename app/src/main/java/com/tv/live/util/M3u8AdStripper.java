@@ -425,10 +425,29 @@ public class M3u8AdStripper {
             int curUrlLen = blockUrls.get(0).length();
             int lastUrlLen = lastUrl.length();
 
+            // 【2026-10-16 优化】排除0时长或≤1分片的块（m3u8头部，样本7开头就是3分片广告不能排除）
+            boolean isHeaderBlock = (blockDurations[i] == null || blockDurations[i].intValue() == 0) && blockSegCounts[i] <= 1;
+            if (isHeaderBlock) {
+                if (blockDurations[i] != null) {
+                    cumulativeDuration = cumulativeDuration.add(blockDurations[i]);
+                }
+                lastUrl = blockUrls.get(0);
+                for (String url : blockUrls) {
+                    int d = levenshteinDistance(url, lastUrl);
+                    if (d > maxEditDistance) maxEditDistance = d;
+                    keepUrls.add(url);
+                    lastUrl = url;
+                }
+                keepBlocks.add(block);
+                totalSegments += blockUrls.size();
+                continue;
+            }
+
             // 【2026-10-16 优化】多维度综合评分判定广告块
-            // 维度1: 块内分片数异常（广告块通常1-3个分片）
+            // 维度1: 块内分片数异常（26样本统计：广告块固定3个分片，正片5-10个）
             boolean segCountAnomaly = blockSegCounts[i] > 0 && blockSegCounts[i] <= 3 &&
                     blockSegCounts[i] < avgSegCount / 2;
+            boolean exactlyThreeSeg = blockSegCounts[i] == 3 && blockSegCounts[i] < avgSegCount / 2;
             // 维度2: 时长异常（广告块时长偏短）
             boolean durationAnomaly = blockDurations[i] != null &&
                     blockDurations[i].compareTo(avgDuration.divide(new BigDecimal(2), 2, RoundingMode.HALF_UP)) < 0 &&
@@ -440,16 +459,44 @@ public class M3u8AdStripper {
             // 维度5: URL长度突变
             boolean urlLenAnomaly = lastUrl.length() > 0 && lastUrlLen != curUrlLen &&
                     lastUrlLen == nextUrlLen && nextUrlLen > 0;
+            // 维度6: 相邻小块联合判定（连续两个<=3分片的小块，通常是广告）
+            boolean adjacentSmallBlock = false;
+            if (blockSegCounts[i] > 0 && blockSegCounts[i] <= 3) {
+                boolean prevSmall = (i > 0 && blockSegCounts[i - 1] > 0 && blockSegCounts[i - 1] <= 3);
+                boolean nextSmall = (i + 1 < blocks.length && blockSegCounts[i + 1] > 0 && blockSegCounts[i + 1] <= 3);
+                adjacentSmallBlock = prevSmall || nextSmall;
+            }
+            // 维度7: 文件名哈希长度检测（广告块文件名多为32位MD5哈希，正片多为数字递增）
+            boolean filenameHashAnomaly = false;
+            if (blockUrls.size() > 0) {
+                String firstName = blockUrls.get(0);
+                int slashIdx = firstName.lastIndexOf("/");
+                String fname = slashIdx >= 0 ? firstName.substring(slashIdx + 1) : firstName;
+                int qIdx = fname.indexOf("?");
+                if (qIdx > 0) fname = fname.substring(0, qIdx);
+                fname = fname.replace(".ts", "").replace(".m4s", "");
+                // 32位哈希且非纯数字
+                if (fname.length() == 32 && !fname.matches("\\d+")) {
+                    filenameHashAnomaly = true;
+                }
+            }
 
             // 综合评分：满足2个以上维度判定为广告块
             int adScore = 0;
             if (segCountAnomaly) adScore++;
+            if (exactlyThreeSeg) adScore += 2;  // 26样本统计：广告块几乎都是恰好3分片
             if (durationAnomaly) adScore++;
             if (filenameDiscontinuous) adScore++;
             if (originAnomaly) adScore++;
             if (urlLenAnomaly) adScore++;
+            if (adjacentSmallBlock) adScore += 2;
+            if (filenameHashAnomaly) adScore++;
 
-            boolean isAdBlock = (lastUrl.length() > 0) && adScore >= 2;
+            // 【2026-10-16 修复】广告块上限阈值：避免大块正片误判
+            // 广告块不可能超过60秒或超过20个分片（26样本统计：广告块9-26秒/3-9分片）
+            boolean tooLargeForAd = (blockDurations[i] != null && blockDurations[i].intValue() > 60) ||
+                    blockSegCounts[i] > 20;
+            boolean isAdBlock = (lastUrl.length() > 0) && adScore >= 2 && !tooLargeForAd;
             if (isAdBlock) {
                 int startSec = cumulativeDuration.intValue();
                 int min = startSec / 60;
@@ -538,10 +585,10 @@ public class M3u8AdStripper {
             return content;
         }
 
-        // 输出日志
-        for (String url : finalAdUrls) {
-            LogBridge.d(TAG, "过滤广告分片: " + url);
-        }
+        // 输出日志（已注释详细URL，避免刷屏；汇总统计见下方"广告剥离完成"）
+        // for (String url : finalAdUrls) {
+        //     LogBridge.d(TAG, "过滤广告分片: " + url);
+        // }
 
         if (finalAdCount > 0) {
             LogBridge.i(TAG, "广告剥离完成：剔除 " + finalAdCount + " 个分片");
@@ -549,6 +596,20 @@ public class M3u8AdStripper {
 
         // 拼接结果
         String result = TextUtils.join("#EXT-X-DISCONTINUITY", finalBlocks);
+
+        // 【修复】确保结果包含 #EXTM3U 头（第一个块可能被当作广告剔除）
+        if (!result.contains("#EXTM3U")) {
+            StringBuilder header = new StringBuilder("#EXTM3U\n");
+            for (String hline : content.split("\n")) {
+                String th = hline.trim();
+                if (th.startsWith("#EXT-X-VERSION") || th.startsWith("#EXT-X-TARGETDURATION") ||
+                    th.startsWith("#EXT-X-MEDIA-SEQUENCE") || th.startsWith("#EXT-X-KEY") ||
+                    th.startsWith("#EXT-X-MAP") || th.startsWith("#EXT-X-PLAYLIST-TYPE")) {
+                    header.append(hline).append("\n");
+                }
+            }
+            result = header.toString() + result;
+        }
 
         // 确保以 ENDLIST 结尾
         if (!finalBlocks.isEmpty() && finalBlocks.getLast().contains("#EXT-X-ENDLIST")) {
@@ -1160,8 +1221,8 @@ public class M3u8AdStripper {
                 for (String keyword : AD_URL_KEYWORDS) {
                     if (urlLine.toLowerCase().contains(keyword.toLowerCase())) {
                         isAd = true;
-                        LogBridge.d(TAG, "【算法③】按关键词过滤广告分片: " + keyword + " -> " +
-                                urlLine.substring(0, Math.min(60, urlLine.length())));
+                        // LogBridge.d(TAG, "【算法③】按关键词过滤广告分片: " + keyword + " -> " +
+                        //         urlLine.substring(0, Math.min(60, urlLine.length())));
                         break;
                     }
                 }

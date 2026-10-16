@@ -8,6 +8,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -24,6 +25,9 @@ import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Future;
+import java.util.concurrent.Callable;
+import java.util.LinkedHashMap;
 
 import com.tv.live.util.M3u8AdStripper;
 import com.tv.live.util.LogBridge;
@@ -50,6 +54,22 @@ public class WebServerManager {
 
     private long lastSubmitTime = 0;
 
+    // ========== 广告剥离m3u8缓存（5分钟过期，LRU 100条） ==========
+    private static final int M3U8_CACHE_MAX_SIZE = 100;
+    private static final long M3U8_CACHE_TTL_MS = 5 * 60 * 1000L;
+    private static final long STRIP_TIMEOUT_MS = 500L;
+
+    // 内存LRU缓存：key=原始URL, value=[剥离后内容, 时间戳]
+    private final LinkedHashMap<String, Object[]> m3u8Cache = new LinkedHashMap<String, Object[]>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Object[]> eldest) {
+            return size() > M3U8_CACHE_MAX_SIZE;
+        }
+    };
+
+    // 剥离线程池（用于超时控制和异步预热）
+    private ExecutorService stripExecutor;
+
     public WebServerManager(Context context, int port) {
         this.context = context.getApplicationContext();
         this.port = port;
@@ -73,6 +93,11 @@ public class WebServerManager {
         });
         requestExecutor = Executors.newFixedThreadPool(4, r -> {
             Thread t = new Thread(r, "WebServer-Conn");
+            t.setDaemon(true);
+            return t;
+        });
+        stripExecutor = Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "AdStrip-Worker");
             t.setDaemon(true);
             return t;
         });
@@ -219,12 +244,14 @@ public class WebServerManager {
             if ("GET".equals(method) && "/m3u8".equals(purePath)) {
                 // 广告剥离代理接口：/m3u8?url=原始m3u8地址
                 String targetUrl = "";
+                String channelName = "";
                 if (path.contains("?")) {
                     String query = path.substring(path.indexOf("?") + 1);
                     for (String pair : query.split("&")) {
                         if (pair.startsWith("url=")) {
                             targetUrl = URLDecoder.decode(pair.substring(4), "UTF-8");
-                            break;
+                        } else if (pair.startsWith("ch=")) {
+                            channelName = URLDecoder.decode(pair.substring(3), "UTF-8");
                         }
                     }
                 }
@@ -233,8 +260,17 @@ public class WebServerManager {
                     return;
                 }
                 LogBridge.i("WebServer", "========== 广告剥离代理请求开始 ==========");
+                if (!channelName.isEmpty()) {
+                    LogBridge.i("WebServer", "频道: " + channelName);
+                }
                 LogBridge.i("WebServer", "目标URL: " + targetUrl.substring(0, Math.min(100, targetUrl.length())));
                 long stripStartTime = System.currentTimeMillis();
+                String cached = getM3u8Cache(targetUrl);
+                if (cached != null) {
+                    LogBridge.i("WebServer", "缓存命中，直接返回，耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
+                    sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", cached);
+                    return;
+                }
                 String m3u8Content = downloadM3u8(targetUrl);
                 if (m3u8Content.isEmpty()) {
                     sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to download m3u8");
@@ -257,7 +293,14 @@ public class WebServerManager {
 
                 int beforeSegments = countSegmentsInM3u8(finalContent);
                 LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
-                String stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                String stripped;
+                try {
+                    stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                } catch (Exception stripEx) {
+                    LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
+                    stripEx.printStackTrace();
+                    stripped = finalContent;
+                }
                 int afterSegments = countSegmentsInM3u8(stripped);
                 LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个, 总耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
                 LogBridge.i("WebServer", "========== 广告剥离代理请求结束 ==========");
@@ -322,9 +365,12 @@ public class WebServerManager {
 
         } catch (Exception e) {
             e.printStackTrace();
+            LogBridge.e("WebServer", "请求处理异常: " + e.getMessage());
             try {
-                socket.close();
-            } catch (Exception ignored) {}
+                sendResponse(socket, "500 Internal Server Error", "text/plain", "Server Error");
+            } catch (Exception ignored) {
+                try { socket.close(); } catch (Exception ignored2) {}
+            }
         }
     }
 
@@ -338,6 +384,18 @@ public class WebServerManager {
         OutputStream out = socket.getOutputStream();
         out.write(header.getBytes("UTF-8"));
         out.write(bodyBytes);
+        out.flush();
+        socket.close();
+    }
+
+    private void sendRedirect(Socket socket, String location) throws Exception {
+        String header = "HTTP/1.1 302 Found\r\n" +
+                "Location: " + location + "\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+        OutputStream out = socket.getOutputStream();
+        out.write(header.getBytes("UTF-8"));
         out.flush();
         socket.close();
     }
@@ -521,6 +579,103 @@ public class WebServerManager {
     }
 
     /**
+     * 从缓存获取剥离后的m3u8内容（5分钟TTL）
+     */
+    private String getM3u8Cache(String url) {
+        synchronized (m3u8Cache) {
+            Object[] entry = m3u8Cache.get(url);
+            if (entry != null) {
+                long timestamp = (Long) entry[1];
+                if (System.currentTimeMillis() - timestamp < M3U8_CACHE_TTL_MS) {
+                    LogBridge.i("WebServer", "[缓存命中] " + url.substring(0, Math.min(60, url.length())));
+                    return (String) entry[0];
+                } else {
+                    m3u8Cache.remove(url);
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * 存入缓存
+     */
+    private void putM3u8Cache(String url, String content) {
+        synchronized (m3u8Cache) {
+            m3u8Cache.put(url, new Object[]{content, System.currentTimeMillis()});
+        }
+    }
+
+    /**
+     * 预加载：异步下载并剥离m3u8，存入缓存（用于下一集秒开）
+     */
+    public void preload(final String url) {
+        if (stripExecutor == null || TextUtils.isEmpty(url)) return;
+        if (getM3u8Cache(url) != null) return; // 已有缓存
+        stripExecutor.execute(() -> {
+            try {
+                LogBridge.i("WebServer", "[预加载] 开始: " + url.substring(0, Math.min(60, url.length())));
+                String m3u8Content = downloadM3u8(url);
+                if (TextUtils.isEmpty(m3u8Content)) return;
+                String finalContent = m3u8Content;
+                String finalBaseUrl = url;
+                if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
+                    String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, url);
+                    if (variantUrl != null && !variantUrl.isEmpty()) {
+                        String variantContent = downloadM3u8(variantUrl);
+                        if (!TextUtils.isEmpty(variantContent)) {
+                            finalContent = variantContent;
+                            finalBaseUrl = variantUrl;
+                        }
+                    }
+                }
+                String stripped;
+                try {
+                    stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                } catch (Exception stripEx) {
+                    LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
+                    stripEx.printStackTrace();
+                    stripped = finalContent;
+                }
+                putM3u8Cache(url, stripped);
+                LogBridge.i("WebServer", "[预加载] 完成，存入缓存");
+            } catch (Exception e) {
+                LogBridge.e("WebServer", "[预加载] 失败: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * 带超时的广告剥离：超过500ms返回原文，后台继续剥离存缓存
+     */
+    private String stripWithTimeout(final String content, final String baseUrl, final String cacheKey) {
+        if (stripExecutor == null) {
+            return M3u8AdStripper.stripAds(content, baseUrl);
+        }
+        Future<String> future = stripExecutor.submit(new Callable<String>() {
+            @Override
+            public String call() {
+                return M3u8AdStripper.stripAds(content, baseUrl);
+            }
+        });
+        try {
+            String result = future.get(STRIP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            putM3u8Cache(cacheKey, result);
+            return result;
+        } catch (Exception e) {
+            LogBridge.w("WebServer", "[超时降级] 剥离超过" + STRIP_TIMEOUT_MS + "ms，返回原文，后台继续剥离");
+            // 后台继续剥离并存缓存
+            stripExecutor.execute(() -> {
+                try {
+                    String stripped = M3u8AdStripper.stripAds(content, baseUrl);
+                    putM3u8Cache(cacheKey, stripped);
+                    LogBridge.i("WebServer", "[超时降级] 后台剥离完成，已存入缓存");
+                } catch (Exception ignored) {}
+            });
+            return content; // 返回原文
+        }
+    }
+    /**
      * 下载原始 m3u8 内容
      */
     private String downloadM3u8(String urlStr) {
@@ -529,10 +684,11 @@ public class WebServerManager {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(15000);
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(8000);
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36");
             conn.setRequestProperty("Accept", "*/*");
+            conn.setRequestProperty("Connection", "keep-alive");
 
             int responseCode = conn.getResponseCode();
             if (responseCode != 200) {
@@ -553,7 +709,7 @@ public class WebServerManager {
             LogBridge.e("WebServer", "m3u8下载异常: " + e.getMessage());
             return "";
         } finally {
-            if (conn != null) conn.disconnect();
+            // 不调用disconnect，保持连接复用；输入流已关闭，连接会自动返回到连接池
         }
     }
 
@@ -561,9 +717,17 @@ public class WebServerManager {
      * 获取广告剥离代理地址
      */
     public String getAdStripProxyUrl(String originalUrl) {
+        return getAdStripProxyUrl(originalUrl, "");
+    }
+
+    public String getAdStripProxyUrl(String originalUrl, String channelName) {
         try {
             String encoded = java.net.URLEncoder.encode(originalUrl, "UTF-8");
-            return "http://127.0.0.1:" + port + "/m3u8?url=" + encoded;
+            String url = "http://127.0.0.1:" + port + "/m3u8?url=" + encoded;
+            if (channelName != null && !channelName.isEmpty()) {
+                url += "&ch=" + java.net.URLEncoder.encode(channelName, "UTF-8");
+            }
+            return url;
         } catch (Exception e) {
             return originalUrl;
         }

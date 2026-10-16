@@ -8,7 +8,6 @@ import com.tv.live.util.LogBridge;
 import org.json.JSONArray;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -205,42 +204,9 @@ public final class UrlSourceParser {
         return s.length() <= 120 ? s : s.substring(0, 120) + "...";
     }
 
-    /** 供调试：列出协议会路由到哪个插件（不执行解析） */
-    public static List<String> describeRoute(Context ctx, String url) {
-        List<String> out = new ArrayList<>();
-        String rootJs = JsPluginStore.getPlugin(ctx, ROOT_PLUGIN);
-        if (TextUtils.isEmpty(rootJs)) return out;
-        List<String> route = parseSyncRoute(ctx, rootJs, url);
-        return route == null ? out : route;
-    }
-
-    private static List<String> parseSyncRoute(Context ctx, String rootJs, String url) {
-        final CountDownLatch latch = new CountDownLatch(1);
-        final List<String> holder = new ArrayList<>(Arrays.asList("", ""));
-        JsEngine.get().init(ctx);
-        JsEngine.get().evaluate(rootJs + ";getParser('" + escapeJs(url) + "');",
-                new JsEngine.ResultCallback() {
-                    @Override
-                    public void onResult(String value) {
-                        List<String> r = parseStringArray(value);
-                        if (r.size() >= 2) {
-                            holder.set(0, r.get(0));
-                            holder.set(1, r.get(1));
-                        }
-                        latch.countDown();
-                    }
-
-                    @Override
-                    public void onError(String message) {
-                        latch.countDown();
-                    }
-                });
-        try {
-            if (!latch.await(20_000L, TimeUnit.MILLISECONDS)) return null;
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            return null;
-        }
-        return holder;
-    }
+    // 【2026-10-15 清理】原此处为两个调试方法：
+    //   · describeRoute(Context, String) —— 「列出协议会路由到哪个插件（不执行解析）」，全仓库零调用者；
+    //   · parseSyncRoute(Context, String, String) —— 只被前者调用。
+    //   二者均为死代码，已删除。如需排查路由，UrlSourceParser.parse() 里已有现成日志：
+    //   `LogBridge.i(TAG, "路由：" + url + " → " + pluginName + "::" + fnName)`。
 }

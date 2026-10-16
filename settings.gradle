@@ -10,6 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // 【2026-10-16】腾讯 Bugly 仓库
+        maven { url 'https://mirrors.tencent.com/nexus/repository/maven-public/' }
     }
 }
 rootProject.name = "AH"

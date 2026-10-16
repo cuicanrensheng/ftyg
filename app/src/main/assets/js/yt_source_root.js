@@ -111,9 +111,11 @@ function RootFunction(url) {
   } else if (-1 < url.indexOf("zzvod://")) {
     arr.push("qq_vod.js");
     arr.push("parseZzvod");
-  } else if (- 1 != url.indexOf('cntvlbk://')) {
-    arr.push("other_live.js");
-    arr.push("cntvLbkParsePlay");
+  // 【2026-10-15 修复】原此处为 `cntvlbk:// → other_live.js::cntvLbkParsePlay`，
+  //   但全部 5 个 JS 插件里都没有 cntvLbkParsePlay（Java 侧也无对应），
+  //   命中时会抛「未定义函数」。本工程未移植 CNTV 回看解析 → 删除该分支，
+  //   root 将返回空路由，由 UrlSourceParser 报 ERR_NO_PARSER 干净失败。
+  //   若日后补上实现，请一并恢复本分支。
   } else if (- 1 != url.indexOf('hntv://') || - 1 != url.indexOf('mgpchtml://')) {
     arr.push("other_live.js");
     arr.push("hntvLiveParsePlay");
@@ -130,30 +132,24 @@ function RootFunction(url) {
     arr.push("other_vod.js");
     arr.push("krVideoPlay");
   } else if (- 1 != url.indexOf('weibo.com')) {
-    if (- 1 != url.indexOf('live.weibo.com')) {
-      arr.push('weibo_live.js');
-      arr.push('weiboLivePlay');
-    } else if (- 1 != url.indexOf('video.weibo.com')) {
-      arr.push("weibo_vod.js");
-      arr.push("WeiboVodParsePlay");
-    } else {
-      arr.push('weibo_vod.js');
-      arr.push("weiboPageVidParse");
-    }
+    // 【2026-10-15 修复】原 3 个子分支里有 2 个引用了不存在的东西：
+    //   live.weibo.com → weibo_live.js（文件不存在）+ weiboLivePlay（函数无实现）
+    //   其它 weibo.com → weiboPageVidParse（函数无实现）
+    // 本工程只移植了 weibo_vod.js::WeiboVodParsePlay —— 唯一的微博实现，
+    // 其内部已含 video.sina.cn / weibo.com/tv / miaopai 三路兜底。
+    // 现统一路由到它，避免命中时报「plugin not found / 函数未定义」。
+    arr.push("weibo_vod.js");
+    arr.push("WeiboVodParsePlay");
 
   } else if (-1 != url.indexOf('miaopai.com')) {
     // 避开　http://gslb.miaopai.com
     if (-1 == url.indexOf('gslb.miaopai.com')) {
       // 秒拍分享页面解析!
+      // 【2026-10-15 修复】原内层按 URL 细分到 miaopaiMediaVidPlay / miaopaiShowVidPlay，
+      //   但两者在全部 5 个 JS 中均无实现；WeiboVodParsePlay 内部已含 miaopai 处理
+      //   （http://www.miaopai.com/show/ 与 gslb 兜底重写），故统一走它。
       arr.push("weibo_vod.js");
-      if (-1 != url.indexOf('n.miaopai.com/media')) {
-        arr.push("miaopaiMediaVidPlay");
-      } else if (-1 != url.indexOf('www.miaopai.com/show')) {
-        arr.push("miaopaiShowVidPlay");
-      } else {
-        // for legacy supporting
-        arr.push("WeiboVodParsePlay");
-      }
+      arr.push("WeiboVodParsePlay");
     }
   } else if (-1 != url.indexOf('cctv.com')) {
     if (-1 != url.indexOf('news.cctv.com')) {

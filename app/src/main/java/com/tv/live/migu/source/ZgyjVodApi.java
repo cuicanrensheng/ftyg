@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import com.tv.live.security.SecurityCore;
 import java.util.Locale;
 import java.util.Random;
 
@@ -43,7 +44,7 @@ import java.util.Random;
  *
  * <p><b>playAuthToken 算法</b>（1:1 移植，已用抓包逐字节验证）：
  * <pre>
- *   key  = 下方 {@link #KEY}（128 字符固定串，原版 JS 内硬编码）
+ *   key  = 下方 {@code gitvKey()}（128 字符固定串，原版 JS 内硬编码）
  *   len  = floor(timestamp % (key.length - 19))        // 128-19 = 109
  *   str  = key.substring(len, len + 20)
  *   token= SHA256(str + "86400").toLowerCase() + "_" + timestamp + "_86400"
@@ -70,13 +71,37 @@ public final class ZgyjVodApi {
     /** 路径锚点（用于从任意形态里取出 base64 段） */
     private static final String PATH_ANCHOR = "zgyj_vod/";
 
-    /** GITV 鉴权端点前缀（原版 JS 内硬编码） */
-    private static final String AUTH_ENDPOINT =
-            "http://hecmcc-gvp-zy-vod.playauth.gitv.tv/gitv_vod_auth/";
+    /**
+     * GITV 鉴权端点前缀（原版 JS 内硬编码）。
+     * <p>【2026-10-15 密文化】原为 private static final 明文常量 —— 编译期常量会被内联到
+     * 使用点，dex 里可见；改为惰性 getter 后明文只存在于 SO（cpp/secstore.cpp）。
+     * ⚠️ 惰性解密铁律：不可写回 static final / {@code <clinit>}。
+     */
+    private static volatile String sAuthEndpoint;
 
-    /** 原版 JS 内硬编码的 128 字符 key（勿改） */
-    private static final String KEY =
-            "fUw8mWqp0ih8KRPzmgHnoL4fx0X0N78o4Od6D4lFTV32S7uVa2mYSZjRofquHHU16gkpjvInD07bKwb05S0hlJYfYMmUyQprvoEqM2I8Dfe2oX0MTAJEg8DYDul6lJqg";
+    private static String authEndpoint() {
+        String v = sAuthEndpoint;
+        if (v == null) {
+            String d = SecurityCore.secureString(SecurityCore.C_API_GITV_AUTH);
+            v = sAuthEndpoint = (d == null ? "" : d);
+        }
+        return v;
+    }
+
+    /**
+     * 原版 JS 内硬编码的 128 字符 key（<b>值不可改</b>，服务端会校验）。
+     * <p>【2026-10-15 密文化】原为 private static final 明文常量，现改为惰性 getter。
+     */
+    private static volatile String sGitvKey;
+
+    private static String gitvKey() {
+        String v = sGitvKey;
+        if (v == null) {
+            String d = SecurityCore.secureString(SecurityCore.C_API_GITV_KEY);
+            v = sGitvKey = (d == null ? "" : d);
+        }
+        return v;
+    }
 
     /** 原版 JS 固定 UA（服务端校验用，勿改） */
     private static final String UA = "okhttp/3.8.1";
@@ -137,7 +162,7 @@ public final class ZgyjVodApi {
         String token = playAuthToken(ts);
         String mac = randomMac();
 
-        String req = AUTH_ENDPOINT + payload
+        String req = authEndpoint() + payload
                 + "?playAuthToken=" + token
                 + "&gAreaId=CHN&gAppChannel=DEFAULT&gSoftTermId=SMART_SPEAKER"
                 + "&gManufacturer=vivo&gModel=V2185A&gMac=" + mac
@@ -194,9 +219,11 @@ public final class ZgyjVodApi {
      * @param tsSec 当前 Unix 秒
      */
     static String playAuthToken(long tsSec) {
-        int span = KEY.length() - 19;                 // 109
+        final String key = gitvKey();
+        if (key.length() < 20) return "";             // SO 不可用 → 交上层降级，不抛异常
+        int span = key.length() - 19;                 // 109
         int start = (int) (tsSec % span);
-        String str = KEY.substring(start, start + 20);
+        String str = key.substring(start, start + 20);
         return sha256Hex(str + "86400") + "_" + tsSec + "_86400";
     }
 

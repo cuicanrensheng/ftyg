@@ -532,13 +532,12 @@ public final class RenYiBoVodSourceLoader {
             for (String[] h : RenYiBoVodCatalog.DART_HEADERS) {
                 rb.header(h[0], h[1]);
             }
-            LogBridge.i(TAG, "源5点播：POST VOD（授权实测）body_len=" + cipherBody.length()
-                    + " body=" + trunc(cipherBody, 120));
+            LogBridge.i(TAG, "源5点播：POST VOD（授权实测）body_len=" + cipherBody.length());
             try (Response resp = NetUtil.getInstance().getClient().newCall(rb.build()).execute()) {
                 int code = resp.code();
                 String body = (resp.body() == null) ? "" : resp.body().string();
                 LogBridge.i(TAG, "源5点播：POST VOD resp code=" + code
-                        + " body=" + trunc(body, 200));
+                        + " body_len=" + body.length());
                 if (!resp.isSuccessful() || body.isEmpty()) return null;
                 return body;
             }
@@ -614,8 +613,8 @@ public final class RenYiBoVodSourceLoader {
             LogBridge.i(TAG, "源5点播：video_detail 解析命中 play=" + u);
             return u;
         }
-        LogBridge.i(TAG, "源5点播：video_detail 可解析但无直链 play，data="
-                + trunc(obj.toString(), 220));
+        LogBridge.i(TAG, "源5点播：video_detail 可解析但无直链 play，data_len="
+                + obj.toString().length());
         return null;
     }
 
@@ -930,20 +929,41 @@ public final class RenYiBoVodSourceLoader {
         String best = null;
         List<String[]> lines = sVodLineCache.get(vodId);
         if (lines != null && !lines.isEmpty()) {
-            best = lines.get(clampVodLineIndex(vodId, lines.size()))[4];
+            // 【2026-10-14 固定线路】优先找"畅享(白天用)"线路，禁止自动切换
+            String fixedLine = null;
+            for (String[] ln : lines) {
+                if (ln[0] != null && ln[0].contains("畅享") && ln[0].contains("白天")) {
+                    fixedLine = ln[4];
+                    LogBridge.i(TAG, "源5点播：固定主线路 → " + ln[0]);
+                    break;
+                }
+            }
+            if (fixedLine != null) {
+                best = fixedLine;
+            } else {
+                // 找不到就用用户之前选的线路
+                best = lines.get(clampVodLineIndex(vodId, lines.size()))[4];
+            }
         } else {
-            // 【2026-10-13 水印规避】无线路表时的兜底选线：优先「直链分段数最多」的
-            //   <b>干净</b>线路，带烧录水印的线路仅作兜底（全部干净线路不可用时才用）。
+            // 【2026-10-14 固定线路】无线路表时，优先找"畅享(白天用)"线路
             int bestSegs = -1;
             String wmBest = null;
             int wmBestSegs = -1;
+            String preferBest = null;
             JSONArray pl = vi.optJSONArray("vod_url_with_player");
             if (pl != null) {
                 for (int i = 0; i < pl.length(); i++) {
                     JSONObject e = pl.optJSONObject(i);
                     if (e == null) continue;
                     String u = e.optString("url", "");
+                    String name = e.optString("name", e.optString("type_name", ""));
                     int segs = httpSegCount(u);
+                    // 优先找"畅享(白天用)"线路
+                    if (name != null && name.contains("畅享") && name.contains("白天")) {
+                        preferBest = u;
+                        LogBridge.i(TAG, "源5点播：无线路表时固定主线路 → " + name);
+                        break;
+                    }
                     if (isWatermarkHost(firstHttpM3u8(u))) {
                         if (segs > wmBestSegs) { wmBestSegs = segs; wmBest = u; }
                         continue;
@@ -954,7 +974,9 @@ public final class RenYiBoVodSourceLoader {
                     }
                 }
             }
-            if (best == null) best = wmBest;
+            if (preferBest != null) {
+                best = preferBest;
+            } else if (best == null) best = wmBest;
         }
         if (best == null) {
             // 兜底：单条直链（play_url 等常见字段）

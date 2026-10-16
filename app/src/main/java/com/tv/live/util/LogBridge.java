@@ -129,6 +129,20 @@ public final class LogBridge {
         private final List<LogListener> listeners;
         private final List<DeviceInfoProvider> deviceInfoProviders;
 
+        // ===== 网络请求统计（供 /api/perf 返回）=====
+        private long netRequestCount = 0;
+        private long netSuccessCount = 0;
+        private long netErrorCount = 0;
+        private long netLatencySumMs = 0;
+        private long netMaxLatencyMs = 0;
+        // ===== 播放性能统计（供 /api/perf 返回）=====
+        private long playCount = 0;
+        private long stallCount = 0;
+        private long stallSumMs = 0;
+        private long maxStallMs = 0;
+        private long decodeErrCount = 0;
+
+
         public static final String DIVIDER_TOKEN = "###DIVIDER###";
 
         public static final String TYPE_INFO = "info";
@@ -209,6 +223,29 @@ public final class LogBridge {
                 }
             }
             return sInstance;
+        }
+
+        // 获取网络请求统计
+        public java.util.Map<String, Object> getNetStats() {
+            java.util.Map<String, Object> stats = new java.util.HashMap<>();
+            stats.put("requestCount", netRequestCount);
+            stats.put("successCount", netSuccessCount);
+            stats.put("errorCount", netErrorCount);
+            stats.put("avgLatencyMs", netRequestCount > 0 ? (netLatencySumMs / netRequestCount) : 0);
+            stats.put("maxLatencyMs", netMaxLatencyMs);
+            stats.put("successRate", netRequestCount > 0 ? (netSuccessCount * 100.0 / netRequestCount) : 0);
+            return stats;
+        }
+
+        // 获取播放性能统计
+        public java.util.Map<String, Object> getPlayStats() {
+            java.util.Map<String, Object> stats = new java.util.HashMap<>();
+            stats.put("playCount", playCount);
+            stats.put("stallCount", stallCount);
+            stats.put("avgStallMs", stallCount > 0 ? (stallSumMs / stallCount) : 0);
+            stats.put("maxStallMs", maxStallMs);
+            stats.put("decodeErrCount", decodeErrCount);
+            return stats;
         }
 
         public void registerDeviceInfoProvider(DeviceInfoProvider provider) {
@@ -332,6 +369,58 @@ public final class LogBridge {
             }
             notifyListeners(entry);
 
+            // ===== 网络请求统计 =====
+            if (TYPE_NETWORK.equals(type)) {
+                netRequestCount++;
+                String lowerMsg = msg != null ? msg.toLowerCase() : "";
+                // 判断成功/失败
+                boolean isError = lowerMsg.contains("失败") || lowerMsg.contains("error")
+                        || lowerMsg.contains("超时") || lowerMsg.contains("timeout")
+                        || lowerMsg.contains("404") || lowerMsg.contains("500")
+                        || lowerMsg.contains("502") || lowerMsg.contains("503");
+                if (isError) {
+                    netErrorCount++;
+                } else {
+                    netSuccessCount++;
+                }
+                // 尝试提取延迟（匹配 "xxxms" 或 "耗时=xxx" 等格式）
+                try {
+                    java.util.regex.Matcher latencyMatcher = java.util.regex.Pattern
+                            .compile("(?:耗时|延迟|time|latency)[^\\d]*(\\d+)\\s*ms", java.util.regex.Pattern.CASE_INSENSITIVE)
+                            .matcher(msg != null ? msg : "");
+                    if (latencyMatcher.find()) {
+                        long latency = Long.parseLong(latencyMatcher.group(1));
+                        netLatencySumMs += latency;
+                        if (latency > netMaxLatencyMs) netMaxLatencyMs = latency;
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // ===== 播放性能统计 =====
+            if (TYPE_PLAYBACK.equals(type)) {
+                playCount++;
+                String lowerMsg = msg != null ? msg.toLowerCase() : "";
+                // 卡顿统计
+                if (lowerMsg.contains("卡顿") || lowerMsg.contains("stall") || lowerMsg.contains("buffering")) {
+                    stallCount++;
+                    // 尝试提取卡顿时长
+                    try {
+                        java.util.regex.Matcher stallMatcher = java.util.regex.Pattern
+                                .compile("(?:卡顿|stall|buffering)[^\\d]*(\\d+)\\s*ms", java.util.regex.Pattern.CASE_INSENSITIVE)
+                                .matcher(msg != null ? msg : "");
+                        if (stallMatcher.find()) {
+                            long stallMs = Long.parseLong(stallMatcher.group(1));
+                            stallSumMs += stallMs;
+                            if (stallMs > maxStallMs) maxStallMs = stallMs;
+                        }
+                    } catch (Exception ignored) {}
+                }
+                // 解码错误统计
+                if (lowerMsg.contains("解码错误") || lowerMsg.contains("decode error") || lowerMsg.contains("codec error")) {
+                    decodeErrCount++;
+                }
+            }
+
             if (autoReport && (TYPE_ERROR.equals(type) || TYPE_CRASH.equals(type))) {
                 // 【2026-10-13 脱敏】去重判定与上报都用原文，避免脱敏干扰服务端诊断
                 final String rMsg = rawMsg != null ? rawMsg : msg;
@@ -396,58 +485,14 @@ public final class LogBridge {
         public void warn(String tag, String msg) { addLog(tag, msg, TYPE_WARN); }
         public void error(String tag, String msg) { addLog(tag, msg, TYPE_ERROR); }
 
-        /**
-         * 2026-09-16 方案 B（JCE 反射动态白名单）采集打点。
-         *
-         * <p>由 _jarstub/JceJarPatcher.java 在构建前注入到 JCE 框架字节码里调用：
-         * {@code com.duowan.jce.wup.BasicClassTypeUtil} 的 uni2JavaType/java2UniType/
-         * createClassByName/getTypeList 方法入口，以及 {@code com.duowan.taf.jce.JceInputStream}
-         * 里每次 {@code Class.forName(String)} 调用点 —— 用于收集"运行时真正被反射加载的
-         * DTO 类名"，固化成 -keep 白名单以替代全局硬 keep。
-         *
-         * <p>⚠️ 不能改用 {@code android.util.Log.i}：本工程 proguard 有
-         * {@code -assumenosideeffects class android.util.Log { v/d/i/w/e/println; }}，
-         * 注入的调用会被 R8 在编译期直接删掉（实测 tag 字符串完全不进 dex）。
-         */
-        /**
-         * JCE 反射采集开关：默认关闭。
-         *
-         * <p>白名单采集已完成（{@code app/proguard-rules.pro} 中的 JCE 动态白名单已固化），
-         * 但注入点仍在每次 JCE 编解码时调用本方法 —— 实测一轮 SDK 取流会产生 1000+ 条
-         * "JCE_TRACE" 日志（占 LogCollector 2000 条上限的一半以上），后果有两个：
-         * <ol>
-         *   <li>把冷启动/频道面板的关键日志挤出环形缓冲，9527 拉到的永远是噪声；</li>
-         *   <li>每条都要拼字符串、进 CopyOnWrite 列表并向 WebSocket 广播 JSON，
-         *       在取流高峰期是无谓的主线程/线程池开销。</li>
-         * </ol>
-         * 需要重新采集白名单时调用 {@link #setTraceEnabled(boolean)} 打开即可。
-         */
-        private static volatile boolean sTraceEnabled = false;
+        // 【2026-10-15 审计修复 · 清理反射残留】原此处为「JCE 反射动态白名单」采集打点：
+        //   sTraceEnabled / setTraceEnabled / isTraceEnabled / trace(String) / traceObj(Object)。
+        // 该机制的调用方是构建期 ASM 注入（_jarstub/JceJarPatcher.java），注入目标为
+        // com.duowan.jce.wup.BasicClassTypeUtil 与 com.duowan.taf.jce.JceInputStream —— 都是
+        // **虎牙 SDK 的 JCE 类**，而虎牙 SDK 已于 2026-10-08 整体拆除。
+        // 实测：四个成员在 java / assets / cpp / xml 中**零调用者**，proguard 里也已无任何
+        // JCE/duowan 相关 -keep 规则（原注释所称「白名单已固化」已过时）→ 纯死代码，删除。
 
-        public static void setTraceEnabled(boolean enabled) { sTraceEnabled = enabled; }
-
-        public static boolean isTraceEnabled() { return sTraceEnabled; }
-
-        public static void trace(String name) {
-            if (!sTraceEnabled) return;
-            try {
-                if (name != null && !name.isEmpty()) {
-                    getInstance().info("JCE_TRACE", name);
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-
-        /** 同上，但接收对象并记录其运行时类名（用于记录「正在解码的 DTO 类型」） */
-        public static void traceObj(Object o) {
-            if (!sTraceEnabled) return;
-            try {
-                if (o != null) {
-                    trace(o.getClass().getName());
-                }
-            } catch (Throwable ignored) {
-            }
-        }
         public void error(String tag, String msg, Throwable throwable) {
             addLog(tag, msg + (throwable != null ? ": " + throwable.getMessage() : ""), TYPE_ERROR);
             if (throwable != null) {
@@ -566,10 +611,10 @@ public final class LogBridge {
         private static boolean shouldReportError(String msg) {
             if (msg == null || msg.isEmpty()) return false;
 
-            String lowerMsg = msg.toLowerCase();
+            String lowerMsg = msg.toLowerCase(Locale.ROOT);
 
             for (String keyword : NON_REPORTABLE_KEYWORDS) {
-                if (lowerMsg.contains(keyword.toLowerCase())) {
+                if (lowerMsg.contains(keyword.toLowerCase(Locale.ROOT))) {
 
                     if (keyword.equals("success")) {
                         if (lowerMsg.contains("error") || lowerMsg.contains("fail") ||
@@ -831,7 +876,14 @@ public final class LogBridge {
                     clientSocket.close();
                 }
             } catch (Exception e) {
-                LogBridge.e(TAG, "Error handling client", e);
+                // 【修复日志刷屏】Broken pipe / Connection reset 是轮询断开连接时的正常现象，
+                // 改成 debug 级避免形成死循环（请求→断开→报错→记录→下次请求又拉到）
+                String errMsg = e.getMessage() == null ? "" : e.getMessage();
+                if (errMsg.contains("Broken pipe") || errMsg.contains("Connection reset")) {
+                    LogBridge.d(TAG, "Error handling client: " + errMsg);
+                } else {
+                    LogBridge.e(TAG, "Error handling client", e);
+                }
                 try {
                     clientSocket.close();
                 } catch (Exception ignored) {}
@@ -1086,6 +1138,34 @@ public final class LogBridge {
                 }
             } catch (Exception ignored) {}
             m.put("uptimeMs", android.os.SystemClock.elapsedRealtime());
+            // 流量统计：TrafficStats API（单应用粒度，模拟器也支持）
+            try {
+                int uid = android.os.Process.myUid();
+                long rx = android.net.TrafficStats.getUidRxBytes(uid);
+                long tx = android.net.TrafficStats.getUidTxBytes(uid);
+                if (rx > 0) m.put("rxBytes", rx);
+                if (tx > 0) m.put("txBytes", tx);
+                m.put("trafficSource", "traffic_stats");
+            } catch (Exception ignored) {}
+            // 网络请求统计
+            try {
+                java.util.Map<String, Object> netStats = LogCollector.getInstance().getNetStats();
+                m.put("netRequestCount", netStats.get("requestCount"));
+                m.put("netSuccessCount", netStats.get("successCount"));
+                m.put("netErrorCount", netStats.get("errorCount"));
+                m.put("netAvgLatencyMs", netStats.get("avgLatencyMs"));
+                m.put("netMaxLatencyMs", netStats.get("maxLatencyMs"));
+                m.put("netSuccessRate", netStats.get("successRate"));
+            // 播放性能统计
+            try {
+                java.util.Map<String, Object> playStats = LogCollector.getInstance().getPlayStats();
+                m.put("playCount", playStats.get("playCount"));
+                m.put("stallCount", playStats.get("stallCount"));
+                m.put("avgStallMs", playStats.get("avgStallMs"));
+                m.put("maxStallMs", playStats.get("maxStallMs"));
+                m.put("decodeErrCount", playStats.get("decodeErrCount"));
+            } catch (Exception ignored) {}
+            } catch (Exception ignored) {}
             return m;
         }
 
@@ -1510,7 +1590,7 @@ public final class LogBridge {
             try {
                 String[] lines = request.split("\r\n");
                 for (String line : lines) {
-                    if (line.toLowerCase().startsWith(headerName.toLowerCase() + ":")) {
+                    if (line.toLowerCase(Locale.ROOT).startsWith(headerName.toLowerCase(Locale.ROOT) + ":")) {
                         return line.substring(headerName.length() + 1).trim();
                     }
                 }
@@ -1752,6 +1832,7 @@ public final class LogBridge {
         }
     }
 
+@SuppressLint("StaticFieldLeak")
     public static class CrashHandler implements Thread.UncaughtExceptionHandler {
 
         private static final String TAG = "CrashHandler";

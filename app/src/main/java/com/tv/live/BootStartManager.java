@@ -38,7 +38,7 @@ public class BootStartManager {
     /** 触发来源：sticky 前台服务 —— 职责只是保活，"App 已在前台"时绝不该再拉 */
     public static final int SRC_SERVICE = 1;
 
-    private static final long START_SINGLEFLIGHT_WINDOW_MS = 30_000L;
+    private static final long START_SINGLEFLIGHT_WINDOW_MS = 60_000L;
     private static final AtomicLong sLastForegroundStartAtMs = new AtomicLong(0L);
 
     /** 【自启兜底】每次拉起后最多补拉次数，防无限重试 */
@@ -94,6 +94,11 @@ public class BootStartManager {
 
         sLastForegroundStartAtMs.set(now);
         sRecoveryCount.set(0);      // 新一轮拉起，补拉额度重置
+        // 【2026-10-14 黑屏修复】同步更新 BootReceiver 的防重复时间戳。
+        //   sticky 前台服务放行后，BOOT_COMPLETED 会在 ~200ms 后到达。若不同步更新，
+        //   BOOT_COMPLETED 的 elapsed 仍为负数（跨重启），被判定为"跨重启"并放行，
+        //   又设置 AlarmManager 延迟 1200ms → 第二次启动 → Activity 重建 → 黑屏。
+        BootReceiver.updateLastBootStart(context);
         LogBridge.i(TAG, "【单飞闸门】放行本次拉起（来源=" + sourceName(source) + "）");
         return true;
     }

@@ -131,7 +131,7 @@ public class ChannelListManager {
                 holder.tvChannel.setTextSize(16);
 
                 boolean isSelected = (position == selectedPosition);
-                LogBridge.d("ChannelList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
+                // LogBridge.d("ChannelList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
                 if (isSelected) {
                     holder.tvChannel.setTextColor(COLOR_BLUE);
@@ -201,7 +201,7 @@ public class ChannelListManager {
                 holder.tvChannel.setTextSize(16);
 
                 boolean isSelected = (position == selectedPosition);
-                LogBridge.d("ChannelList", "getView(byGroup) pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
+                // LogBridge.d("ChannelList", "getView(byGroup) pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
                 if (isSelected) {
                     holder.tvChannel.setTextColor(COLOR_BLUE);
@@ -314,7 +314,7 @@ public class ChannelListManager {
                 holder.tvChannel.setTextSize(16);
 
                 boolean isSelected = (position == selectedPosition);
-                LogBridge.d("ChannelList", "getView(byGroup) pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
+                // LogBridge.d("ChannelList", "getView(byGroup) pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
                 if (isSelected) {
                     holder.tvChannel.setTextColor(COLOR_BLUE);

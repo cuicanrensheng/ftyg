@@ -1989,7 +1989,7 @@ public class EpgManager {
                     tv.setGravity(android.view.Gravity.CENTER);
 
                     boolean isSelected = (position == selectedPosition);
-                    LogBridge.d("DateList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
+                    // LogBridge.d("DateList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
                     if (isSelected) {
                         tv.setTextColor(COLOR_BLUE);

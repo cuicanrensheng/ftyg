@@ -292,7 +292,7 @@ public class GroupListManager {
                 tv.setPadding(20, 15, 20, 15);
 
                 boolean isSelected = (position == selectedPosition);
-                LogBridge.d("GroupList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
+                // LogBridge.d("GroupList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
                 if (isSelected) {
                     tv.setTextColor(COLOR_BLUE_TEXT);

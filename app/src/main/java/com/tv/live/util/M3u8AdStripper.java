@@ -58,7 +58,7 @@ public class M3u8AdStripper {
             Pattern.compile("URI=\"(.+?)\"");
 
     // 熔断阈值：拟剔除分片超过此数则放弃剥离
-    private static final int MAX_STRIP_SEGMENTS = 100;
+    private static final int MAX_STRIP_SEGMENTS = 500; // 【2026-10-16】从100提高到500：长视频中插广告可能占50%以上，原阈值过低导致熔断
 
     // 编辑距离阈值：超过此值认为不同源
     private static final int EDIT_DISTANCE_THRESHOLD = 3;
@@ -373,6 +373,7 @@ public class M3u8AdStripper {
         LinkedList<String> adBlocks = new LinkedList<>();    // 广告块
         ArrayList<String> keepUrls = new ArrayList<>();      // 正片分片URL
         ArrayList<String> adUrls = new ArrayList<>();        // 广告分片URL
+        ArrayList<Integer> adBlockIndices = new ArrayList<>(); // 【2026-10-16】广告块索引，用于位置分布分析
 
         String firstUrl = "";
         String lastUrl = "";
@@ -380,6 +381,36 @@ public class M3u8AdStripper {
         int adSegments = 0;
         int maxEditDistance = 0;
         BigDecimal cumulativeDuration = BigDecimal.ZERO; // 累计时长，用于计算广告块位置
+
+        // 【2026-10-16】全局统计哈希文件名比例：如果大部分块都是哈希文件名，说明该源命名方式就是哈希，
+        // 维度7（文件名哈希检测）不应加分，否则会把所有正片都误判为广告
+        int hashFilenameCount = 0;
+        int totalNonEmptyBlocks = 0;
+        for (int bi = 0; bi < blocks.length; bi++) {
+            String[] bLines = blocks[bi].split("\n");
+            String firstSegUrl = "";
+            for (String line : bLines) {
+                if (!line.startsWith("#") && !TextUtils.isEmpty(line)) {
+                    firstSegUrl = line;
+                    break;
+                }
+            }
+            if (!TextUtils.isEmpty(firstSegUrl)) {
+                totalNonEmptyBlocks++;
+                int sIdx = firstSegUrl.lastIndexOf("/");
+                String fname = sIdx >= 0 ? firstSegUrl.substring(sIdx + 1) : firstSegUrl;
+                int qIdx = fname.indexOf("?");
+                if (qIdx > 0) fname = fname.substring(0, qIdx);
+                fname = fname.replace(".ts", "").replace(".m4s", "");
+                if (fname.length() == 32 && !fname.matches("\\d+")) {
+                    hashFilenameCount++;
+                }
+            }
+        }
+        boolean hashFilenameDominant = totalNonEmptyBlocks > 0 && (hashFilenameCount * 2 > totalNonEmptyBlocks);
+        if (hashFilenameDominant) {
+            LogBridge.d(TAG, "全局统计：哈希文件名块=" + hashFilenameCount + "/" + totalNonEmptyBlocks + "，该源命名方式为哈希，禁用维度7");
+        }
 
         for (int i = 0; i < blocks.length; i++) {
             String block = blocks[i];
@@ -467,8 +498,9 @@ public class M3u8AdStripper {
                 adjacentSmallBlock = prevSmall || nextSmall;
             }
             // 维度7: 文件名哈希长度检测（广告块文件名多为32位MD5哈希，正片多为数字递增）
+            // 【2026-10-16】仅当该源不是哈希命名主导时才启用，否则所有正片都会被误判
             boolean filenameHashAnomaly = false;
-            if (blockUrls.size() > 0) {
+            if (!hashFilenameDominant && blockUrls.size() > 0) {
                 String firstName = blockUrls.get(0);
                 int slashIdx = firstName.lastIndexOf("/");
                 String fname = slashIdx >= 0 ? firstName.substring(slashIdx + 1) : firstName;
@@ -530,13 +562,42 @@ public class M3u8AdStripper {
                     adUrls.add(url);
                 }
                 adBlocks.add(block);
+                adBlockIndices.add(i); // 记录广告块索引
                 totalSegments += blockUrls.size();
             }
         }
 
-        // 多数决反转：如果广告分片 > 正片分片，说明识别反了
+        // 【2026-10-16 优化】智能多数决反转：结合广告块位置分布判断
+        // 原逻辑：广告分片 > 正片分片 → 取反。但当视频确实广告占大部分时（如盗版视频后10分钟全是广告），
+        // 会错误地把正片当成广告剔除。
+        // 新逻辑：只有当广告块分散分布在整个视频中（不集中在某一段），且广告分片 > 正片分片时，才取反。
+        // 如果广告块集中在某一段（如后半部分），即使占多数也不取反（因为确实是广告）。
         int keepSegments = totalSegments - adSegments;
-        boolean reversed = adSegments > keepSegments;
+        boolean reversed = false;
+        if (adSegments > keepSegments && adBlockIndices.size() > 0) {
+            // 分析广告块位置分布：前30%、中40%、后30%
+            int totalBlocks = blocks.length;
+            int frontCount = 0, middleCount = 0, endCount = 0;
+            for (int idx : adBlockIndices) {
+                double pos = (double) idx / totalBlocks;
+                if (pos < 0.3) frontCount++;
+                else if (pos < 0.7) middleCount++;
+                else endCount++;
+            }
+            int adBlockCount = adBlockIndices.size();
+            // 如果广告块集中在某一区域（>60%在同一区域），说明确实是广告集中段，不取反
+            boolean concentrated = (frontCount * 1.0 / adBlockCount > 0.6) ||
+                                   (middleCount * 1.0 / adBlockCount > 0.6) ||
+                                   (endCount * 1.0 / adBlockCount > 0.6);
+            if (!concentrated) {
+                reversed = true;
+                LogBridge.d(TAG, "智能多数决反转：广告分片(" + adSegments + ") > 正片分片(" + keepSegments +
+                        ")，且广告块分散分布(前=" + frontCount + " 中=" + middleCount + " 后=" + endCount + ")，取反");
+            } else {
+                LogBridge.d(TAG, "智能多数决反转：广告分片(" + adSegments + ") > 正片分片(" + keepSegments +
+                        ")，但广告块集中分布(前=" + frontCount + " 中=" + middleCount + " 后=" + endCount + ")，不取反");
+            }
+        }
 
         LinkedList<String> finalBlocks;
         ArrayList<String> finalAdUrls;

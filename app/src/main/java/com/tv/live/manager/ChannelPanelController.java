@@ -329,9 +329,10 @@ public class ChannelPanelController {
         channelListManager.setChannels(this.channelSourceList, currentPlayIndex);
         syncEpgList();
 
-        loadHuyaTogetherWatchChannels();
+        // 【2026-10-16】有缓存时延迟5秒刷新，移到 loadCachedHuyaChannelsAsync 回调中处理
+        // loadHuyaTogetherWatchChannels();
 
-        preloadSdkFixedGroups();
+        // preloadSdkFixedGroups();
         LogBridge.i("ChannelPanel", "⏱️【链路-面板】setChannels 主源落地+首次渲染 耗时 "
                 + (System.currentTimeMillis() - t0) + "ms，频道=" + this.channelSourceList.size());
     }
@@ -411,11 +412,23 @@ public class ChannelPanelController {
 
                         sdkCacheEmpty = incoming.isEmpty();
                         if (sdkCacheEmpty) {
-                            LogBridge.d("ChannelPanel", "虎牙缓存为空，跳过异步合并");
+                            LogBridge.d("ChannelPanel", "虎牙缓存为空，立即后台刷新");
+                            loadHuyaTogetherWatchChannels();
+                            preloadSdkFixedGroups();
                             return;
                         }
                         // 与两条 HTTP 线路同一增量通道：去重合并 + 分组计数刷新 + 去抖增量刷新
                         appendChannelsIncremental(incoming, "虎牙缓存(异步)");
+
+                            // 【2026-10-16】有缓存时延迟5秒后再后台刷新，避免与视频播放竞争带宽
+                            LogBridge.d("ChannelPanel", "虎牙缓存命中，延迟5秒后后台刷新");
+                            panelLayout.postDelayed(new Runnable() {
+                                @Override public void run() {
+                                    if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                                    loadHuyaTogetherWatchChannels();
+                                    preloadSdkFixedGroups();
+                                }
+                            }, 5000);
                     }
                 });
             }

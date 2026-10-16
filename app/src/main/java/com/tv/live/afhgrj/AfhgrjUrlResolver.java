@@ -219,6 +219,8 @@ public final class AfhgrjUrlResolver {
         // 下次解析重新取样（否则会一直沿用一条已恶化线路的旧速率）。
         String speedPrefix = vodId + "-";
         sSidSpeed.keySet().removeIf(k -> k.startsWith(speedPrefix));
+        // 【2026-10-16】播放失败时清除上次生效线路，让下次解析尝试下一条线路（只有源失效才自动切换）
+        sWorkingSid.remove(vodId);
         LogBridge.i(TAG, "源7(影视) 已失效落地缓存 vodId=" + vodId);
     }
 
@@ -698,8 +700,18 @@ public final class AfhgrjUrlResolver {
                 bestSid = cand;
                 bestKbps = 0;
                 break;
+
             }
 
+            // 【2026-10-16】禁用切换集数时的自动测速择优：如果是上次生效的线路，直接采用，不测速
+            Integer workingSid = sWorkingSid.get(vodId);
+            if (workingSid != null && workingSid == cand) {
+                bestM3u8 = m3u8;
+                bestSid = cand;
+                bestKbps = 0;
+                LogBridge.i(TAG, "源7(影视) 沿用上条线路 sid=" + cand + "（禁用测速择优）host=" + hostOf(m3u8));
+                break;
+            }
             // ⓪ 【2026-10-13 水印规避】该线路正片带博彩烧录水印（如 ly166 系）→
             //    不作为首选，仅记录为兜底；继续比较其它线路，避免整段正片画面带水印。
             if (isWatermarkHost(m3u8)) {
@@ -711,6 +723,16 @@ public final class AfhgrjUrlResolver {
                         + " host=" + hostOf(m3u8));
                 continue;
             }
+            // 【2026-10-16】取消测速机制：直接采用第一条可用的干净线路，不测速
+            bestM3u8 = m3u8;
+            bestSid = cand;
+            bestKbps = 0;
+            LogBridge.i(TAG, "源7(影视) 直接采用第一条干净线路 sid=" + cand
+                    + "（已取消测速）host=" + hostOf(m3u8));
+            break;
+
+            // 【2026-10-16】测速机制已禁用，以下代码保留但不会执行
+            /*
 
             // ① 白名单命中：固定主线路，禁止自动切换到其他线路
             if (isPreferredHost(m3u8)) {
@@ -755,6 +777,7 @@ public final class AfhgrjUrlResolver {
                 bestSid = cand;
             }
             if (kbps >= SPEED_ACCEPT_KBPS) break;
+            */
         }
 
         // 【2026-10-13 水印规避】没有任何干净线路可用 → 回退到带水印线路（保证仍有画面）

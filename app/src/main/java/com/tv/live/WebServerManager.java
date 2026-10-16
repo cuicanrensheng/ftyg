@@ -1,4 +1,5 @@
 package com.tv.live;
+import android.util.Log;
 
 import android.content.Context;
 import android.content.Intent;
@@ -22,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -69,6 +71,12 @@ public class WebServerManager {
 
     // 剥离线程池（用于超时控制和异步预热）
     private ExecutorService stripExecutor;
+    // 【2026-10-16】预加载串行化控制：避免与播放请求并发导致网络拥塞
+    private final AtomicBoolean preloadRunning = new AtomicBoolean(false);
+    private volatile Future<?> preloadFuture = null;
+
+    // 【2026-10-16】广告剥离请求去重：相同URL的并发请求共享同一个处理结果，避免重复下载+剥离
+    private final java.util.concurrent.ConcurrentHashMap<String, Future<String>> pendingStripRequests = new java.util.concurrent.ConcurrentHashMap<>();
 
     public WebServerManager(Context context, int port) {
         this.context = context.getApplicationContext();
@@ -271,40 +279,76 @@ public class WebServerManager {
                     sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", cached);
                     return;
                 }
-                String m3u8Content = downloadM3u8(targetUrl);
-                if (m3u8Content.isEmpty()) {
-                    sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to download m3u8");
-                    return;
-                }
-                // 处理 Master Playlist：如果是 master，先下载第一个子流再剥离
-                String finalContent = m3u8Content;
-                String finalBaseUrl = targetUrl;
-                if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
-                    LogBridge.i("WebServer", "检测到 Master Playlist，下载第一个子流");
-                    String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, targetUrl);
-                    if (variantUrl != null && !variantUrl.isEmpty()) {
-                        String variantContent = downloadM3u8(variantUrl);
-                        if (!variantContent.isEmpty()) {
-                            finalContent = variantContent;
-                            finalBaseUrl = variantUrl;
-                        }
+
+                // 【2026-10-16】请求去重：检查是否有相同URL正在处理
+                Future<String> existingFuture = pendingStripRequests.get(targetUrl);
+                if (existingFuture != null && !existingFuture.isDone()) {
+                    LogBridge.i("WebServer", "请求去重：等待相同URL的处理结果");
+                    try {
+                        String dedupResult = existingFuture.get(15, TimeUnit.SECONDS);
+                        LogBridge.i("WebServer", "请求去重：获取到共享结果，耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
+                        sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", dedupResult);
+                        return;
+                    } catch (Exception e) {
+                        LogBridge.w("WebServer", "请求去重等待失败，自行处理: " + e.getMessage());
                     }
                 }
 
-                int beforeSegments = countSegmentsInM3u8(finalContent);
-                LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
-                String stripped;
+                // 创建处理任务
+                final String finalTargetUrl = targetUrl;
+                Callable<String> stripTask = new Callable<String>() {
+                    @Override
+                    public String call() throws Exception {
+                        try {
+                            String m3u8Content = downloadM3u8(finalTargetUrl);
+                            if (m3u8Content.isEmpty()) return null;
+                            String finalContent = m3u8Content;
+                            String finalBaseUrl = finalTargetUrl;
+                            if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
+                                LogBridge.i("WebServer", "检测到 Master Playlist，下载第一个子流");
+                                String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, finalTargetUrl);
+                                if (variantUrl != null && !variantUrl.isEmpty()) {
+                                    String variantContent = downloadM3u8(variantUrl);
+                                    if (!variantContent.isEmpty()) {
+                                        finalContent = variantContent;
+                                        finalBaseUrl = variantUrl;
+                                    }
+                                }
+                            }
+                            int beforeSegments = countSegmentsInM3u8(finalContent);
+                            LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
+                            String stripped;
+                            try {
+                                stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                            } catch (Exception stripEx) {
+                                LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
+                                stripped = finalContent;
+                            }
+                            int afterSegments = countSegmentsInM3u8(stripped);
+                            LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个");
+                            putM3u8Cache(finalTargetUrl, stripped);
+                            return stripped;
+                        } finally {
+                            pendingStripRequests.remove(finalTargetUrl);
+                        }
+                    }
+                };
+
+                Future<String> future = stripExecutor.submit(stripTask);
+                pendingStripRequests.put(targetUrl, future);
+
                 try {
-                    stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
-                } catch (Exception stripEx) {
-                    LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
-                    stripEx.printStackTrace();
-                    stripped = finalContent;
+                    String result = future.get(15, TimeUnit.SECONDS);
+                    if (result == null) {
+                        sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to download m3u8");
+                        return;
+                    }
+                    LogBridge.i("WebServer", "========== 广告剥离代理请求结束，总耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms ==========");
+                    sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", result);
+                } catch (Exception e) {
+                    LogBridge.e("WebServer", "广告剥离超时或异常: " + e.getMessage());
+                    sendResponse(socket, "500 Internal Server Error", "text/plain", "Strip timeout");
                 }
-                int afterSegments = countSegmentsInM3u8(stripped);
-                LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个, 总耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
-                LogBridge.i("WebServer", "========== 广告剥离代理请求结束 ==========");
-                sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", stripped);
                 return;
             } else if ("GET".equals(method) && ("/".equals(purePath) || "/index.html".equals(purePath))) {
                 responseBody = buildConfigPage();
@@ -609,40 +653,119 @@ public class WebServerManager {
     /**
      * 预加载：异步下载并剥离m3u8，存入缓存（用于下一集秒开）
      */
+    /**
+     * 取消正在运行的预加载（切换源时调用，避免并发网络请求）
+     */
+    public void cancelPreload() {
+        if (preloadFuture != null && !preloadFuture.isDone()) {
+            preloadFuture.cancel(true);
+            LogBridge.i("WebServer", "[预加载] 已取消（切换源）");
+        }
+        preloadRunning.set(false);
+    }
+
+    /**
+     * 预加载：异步下载并剥离m3u8，存入缓存（用于下一集秒开）
+     * 串行化：同一时间只允许一个预加载任务，避免与播放请求并发
+     */
+    /**
+     * 预加载：异步下载并剥离m3u8，存入缓存（用于下一集秒开）
+     * 串行化：同一时间只允许一个预加载任务，避免与播放请求并发
+     */
     public void preload(final String url) {
         if (stripExecutor == null || TextUtils.isEmpty(url)) return;
         if (getM3u8Cache(url) != null) return; // 已有缓存
-        stripExecutor.execute(() -> {
-            try {
-                LogBridge.i("WebServer", "[预加载] 开始: " + url.substring(0, Math.min(60, url.length())));
-                String m3u8Content = downloadM3u8(url);
-                if (TextUtils.isEmpty(m3u8Content)) return;
-                String finalContent = m3u8Content;
-                String finalBaseUrl = url;
-                if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
-                    String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, url);
-                    if (variantUrl != null && !variantUrl.isEmpty()) {
-                        String variantContent = downloadM3u8(variantUrl);
-                        if (!TextUtils.isEmpty(variantContent)) {
-                            finalContent = variantContent;
-                            finalBaseUrl = variantUrl;
+        if (!preloadRunning.compareAndSet(false, true)) {
+            LogBridge.d("WebServer", "[预加载] 已有任务在运行，跳过");
+            return;
+        }
+        preloadFuture = stripExecutor.submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    LogBridge.i("WebServer", "[预加载] 开始: " + url.substring(0, Math.min(60, url.length())));
+                    String m3u8Content = downloadM3u8(url);
+                    if (TextUtils.isEmpty(m3u8Content)) return;
+                    String finalContent = m3u8Content;
+                    String finalBaseUrl = url;
+                    if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
+                        String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, url);
+                        if (variantUrl != null && !variantUrl.isEmpty()) {
+                            String variantContent = downloadM3u8(variantUrl);
+                            if (!TextUtils.isEmpty(variantContent)) {
+                                finalContent = variantContent;
+                                finalBaseUrl = variantUrl;
+                            }
                         }
                     }
+                    String stripped;
+                    try {
+                        stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                    } catch (Exception stripEx) {
+                        LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
+                        stripped = finalContent;
+                    }
+                    putM3u8Cache(url, stripped);
+                    LogBridge.i("WebServer", "[预加载] 完成，存入缓存");
+                } catch (Exception e) {
+                    LogBridge.e("WebServer", "[预加载] 失败: " + e.getMessage());
+                } finally {
+                    preloadRunning.set(false);
+                    preloadFuture = null;
                 }
-                String stripped;
-                try {
-                    stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
-                } catch (Exception stripEx) {
-                    LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
-                    stripEx.printStackTrace();
-                    stripped = finalContent;
-                }
-                putM3u8Cache(url, stripped);
-                LogBridge.i("WebServer", "[预加载] 完成，存入缓存");
-            } catch (Exception e) {
-                LogBridge.e("WebServer", "[预加载] 失败: " + e.getMessage());
             }
         });
+    }
+
+    /**
+     * 【2026-10-16】播放前预剥离：提前下载+剥离m3u8，播放器请求时缓存已命中
+     * 与代理请求共享 pendingStripRequests，避免重复下载
+     */
+    public Future<String> preStrip(String url) {
+        if (TextUtils.isEmpty(url)) return null;
+        if (getM3u8Cache(url) != null) return null;
+        Future<String> existing = pendingStripRequests.get(url);
+        if (existing != null && !existing.isDone()) return existing;
+
+        final String finalUrl = url;
+        Callable<String> task = new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+                try {
+                    LogBridge.i("WebServer", "[预剥离] 开始: " + finalUrl.substring(0, Math.min(60, finalUrl.length())));
+                    String m3u8Content = downloadM3u8(finalUrl);
+                    if (m3u8Content.isEmpty()) return null;
+                    String finalContent = m3u8Content;
+                    String finalBaseUrl = finalUrl;
+                    if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
+                        String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, finalUrl);
+                        if (variantUrl != null && !variantUrl.isEmpty()) {
+                            String variantContent = downloadM3u8(variantUrl);
+                            if (!variantContent.isEmpty()) {
+                                finalContent = variantContent;
+                                finalBaseUrl = variantUrl;
+                            }
+                        }
+                    }
+                    String stripped;
+                    try {
+                        stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                    } catch (Exception stripEx) {
+                        LogBridge.e("WebServer", "预剥离异常，返回原文: " + stripEx.getMessage());
+                        stripped = finalContent;
+                    }
+                    putM3u8Cache(finalUrl, stripped);
+                    LogBridge.i("WebServer", "[预剥离] 完成，存入缓存");
+                    return stripped;
+                } finally {
+                    pendingStripRequests.remove(finalUrl);
+                }
+            }
+        };
+
+        Future<String> future = stripExecutor.submit(task);
+        pendingStripRequests.put(url, future);
+        return future;
     }
 
     /**

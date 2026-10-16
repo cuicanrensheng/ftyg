@@ -393,7 +393,13 @@ public class TVPlayerManager {
 
         @Override
         public void onDownstreamFormatChanged(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
-                                              MediaLoadData mediaLoadData) {}
+                                              MediaLoadData mediaLoadData) {
+            if (mediaLoadData.trackType == C.TRACK_TYPE_AUDIO) {
+                LogBridge.i(TAG, "【音频格式变化】trackType=AUDIO, 可能是不连续点/广告剥离导致");
+            } else if (mediaLoadData.trackType == C.TRACK_TYPE_VIDEO) {
+                LogBridge.d(TAG, "【视频格式变化】trackType=VIDEO");
+            }
+        }
     };
 
     private FrameLayout mSdkPlayerContainer;
@@ -859,7 +865,8 @@ public class TVPlayerManager {
         DefaultRenderersFactory factory = new DefaultRenderersFactory(context)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector(createSmartSelector(preferSoftware))
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+                .forceEnableMediaCodecAsynchronousQueueing();  // 【2026-10-16】强制异步MediaCodec，加快解码器初始化
 
         dLog("【解码器】RenderersFactory = DefaultRenderersFactory"
                 + ", preferSoftware=" + preferSoftware
@@ -891,7 +898,7 @@ public class TVPlayerManager {
                 .setBufferDurationsMs(
                     12000,   // minBufferMs: 播放中水位（5000→12000，虎牙串行分片空窗下更抗耗）
                     60000,   // maxBufferMs（12000→60000，给足重建空间，参考原版默认 50s）
-                    1200,    // bufferForPlaybackMs: 起播门槛（保持 1200，首帧不变）
+                    800,     // bufferForPlaybackMs: 起播门槛（1200→800，加快首帧）
                     2000     // bufferForPlaybackAfterRebufferMs（5000→2000，卡后快速恢复，避免 5s+ 黑帧）
                 )
                 .build();
@@ -1147,8 +1154,9 @@ public class TVPlayerManager {
                             logWarn("严重卡顿结束，时长：" + stallDuration + "ms");
                             // 【2026-10-12 卡顿自动换线】只累计「严重」卡顿的时长（不含 <2s 抖动），
                             // 累计超阈值就换线。延后一会儿再执行：此刻正在回调里恢复播放，立刻重播会打架。
-                            severeStallTime += stallDuration;
-                            mHandler.postDelayed(() -> maybeAutoSwitchAfhgrjLine(), 800L);
+                            // 【2026-10-16】用户要求：取消卡顿自动换线，只在源失效时才切源
+                            // severeStallTime += stallDuration;
+                            // mHandler.postDelayed(() -> maybeAutoSwitchAfhgrjLine(), 800L);
                         } else {
                             // 【日志优化】短暂缓冲 <500ms 用 debug 级，>=500ms 才输出 info 级
                             if (stallDuration >= 500) {
@@ -1167,6 +1175,23 @@ public class TVPlayerManager {
             public void onVideoSizeChanged(VideoSize videoSize) {
                 logPlaybackDebug("视频分辨率变化：" + videoSize.width + "×" + videoSize.height);
                 notifyLiveInfoUpdate();
+            }
+
+            @Override
+            public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+                String reasonStr;
+                switch (reason) {
+                    case Player.DISCONTINUITY_REASON_AUTO_TRANSITION: reasonStr = "AUTO_TRANSITION(自动切换)"; break;
+                    case Player.DISCONTINUITY_REASON_SEEK: reasonStr = "SEEK(跳转)"; break;
+                    case Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT: reasonStr = "SEEK_ADJUSTMENT(跳转调整)"; break;
+                    case Player.DISCONTINUITY_REASON_SKIP: reasonStr = "SKIP(跳过)"; break;
+                    case Player.DISCONTINUITY_REASON_REMOVE: reasonStr = "REMOVE(移除)"; break;
+                    default: reasonStr = "UNKNOWN(" + reason + ")"; break;
+                }
+                long oldMs = oldPosition.positionMs;
+                long newMs = newPosition.positionMs;
+                long jumpMs = newMs - oldMs;
+                LogBridge.i(TAG, "【位置不连续】原因=" + reasonStr + ", 旧位置=" + (oldMs/1000) + "s, 新位置=" + (newMs/1000) + "s, 跳跃=" + (jumpMs/1000) + "s");
             }
         };
         player.addListener(playerListener);
@@ -3104,7 +3129,7 @@ public class TVPlayerManager {
             }
 
             if (mHandler != null) {
-                mHandler.postDelayed(() -> {
+                    mHandler.postDelayed(() -> {
                     try {
                         if (player == null || playerView == null) return;
 
@@ -3606,7 +3631,7 @@ public class TVPlayerManager {
                                     // 【2026-10-14 花屏修复】surface 刚创建就立即重绑会花屏，
                                     //   延迟 500ms 等 surface 完全准备好再重绑
                                     playerView.setPlayer(null);
-                                    mHandler.postDelayed(() -> {
+        mHandler.postDelayed(() -> {
                                         try {
                                             playerView.setPlayer(player);
                                             if (!player.isPlaying()) {
@@ -4453,11 +4478,26 @@ public class TVPlayerManager {
                 String originalUrl = url;
                 String proxyUrl = webServer.getAdStripProxyUrl(url, currentChannelName);
                 LogBridge.i(TAG, "【广告剥离】代理重定向: " + url.substring(0, Math.min(60, url.length())) + " -> " + proxyUrl.substring(0, Math.min(80, proxyUrl.length())));
+                // 【2026-10-16】播放前预剥离：提前下载+剥离m3u8，播放器请求时缓存已命中
+                // 与代理请求共享 pendingStripRequests，避免重复下载，减少起播延迟
+                try {
+                    webServer.preStrip(url);
+                } catch (Exception preStripEx) {
+                    LogBridge.w(TAG, "预剥离触发失败: " + preStripEx.getMessage());
+                }
                 url = proxyUrl;
                 // 【优化3】异步预加载：后台提前下载+剥离并存入缓存，重复切换秒开
-                try {
-                    webServer.preload(originalUrl);
-                } catch (Exception ignored) {}
+                // try {
+                    // 【2026-10-16】切换源时先取消旧预加载，避免并发网络拥塞
+                    // 【2026-10-16】用户要求：取消预加载，避免并发网络请求
+                    // try { webServer.cancelPreload(); } catch (Exception ignored) {}
+                    // 延迟5秒预加载：等播放稳定后再后台下载，避免与首帧请求竞争带宽
+                    // final String preloadUrl = originalUrl;
+                    // final WebServerManager preloadServer = webServer;
+                    // mHandler.postDelayed(() -> {
+                    //     try { preloadServer.preload(preloadUrl); } catch (Exception ignored) {}
+                    // }, 5000);
+                // } catch (Exception ignored) {}
             } else {
                 LogBridge.w(TAG, "【广告剥离】代理不可用，直连原始地址");
             }

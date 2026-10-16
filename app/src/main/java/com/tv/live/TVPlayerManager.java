@@ -27,6 +27,8 @@ import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
+import androidx.media3.datasource.HttpDataSource;
+import androidx.media3.datasource.DataSpec;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.exoplayer.DefaultLoadControl;
@@ -37,6 +39,9 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
 import androidx.media3.exoplayer.source.MediaSource;
+import androidx.media3.exoplayer.source.MediaSourceEventListener;
+import androidx.media3.exoplayer.source.LoadEventInfo;
+import androidx.media3.exoplayer.source.MediaLoadData;
 import androidx.media3.exoplayer.source.ProgressiveMediaSource;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.ui.AspectRatioFrameLayout;
@@ -161,6 +166,7 @@ public class TVPlayerManager {
     /** 播放器实例：由后台线程构建（冷启动优化），volatile 保证主线程可觑 */
     private volatile ExoPlayer player;
     private PlayerView playerView;
+
     private Player.Listener playerListener;
     private String currentUrl;
     private int currentChannelNumber = 0;
@@ -347,6 +353,48 @@ public class TVPlayerManager {
 
     private Handler mHandler;
     private Runnable hideChannelRunnable;
+
+    /**
+     * 媒体源事件监听器：监听 m3u8 加载、分片加载、加载完成等事件
+     * 用于广告剥离效果监控和调试
+     */
+    private final MediaSourceEventListener mMediaSourceListener = new MediaSourceEventListener() {
+        @Override
+        public void onLoadStarted(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                  LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData, int reason) {
+            if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
+                LogBridge.d(TAG, "开始加载 m3u8 清单: " + loadEventInfo.uri.toString().substring(0, Math.min(60, loadEventInfo.uri.toString().length())));
+            }
+        }
+
+        @Override
+        public void onLoadCompleted(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                    LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData) {
+            if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
+                LogBridge.d(TAG, "m3u8 清单加载完成: " + loadEventInfo.uri.toString().substring(0, Math.min(60, loadEventInfo.uri.toString().length()))
+                        + ", 大小=" + loadEventInfo.bytesLoaded + " bytes");
+            }
+        }
+
+        @Override
+        public void onLoadCanceled(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                   LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData) {}
+
+        @Override
+        public void onLoadError(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData,
+                                IOException error, boolean wasCanceled) {
+            LogBridge.w(TAG, "媒体加载错误: " + error.getMessage());
+        }
+
+        @Override
+        public void onUpstreamDiscarded(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                        MediaLoadData mediaLoadData) {}
+
+        @Override
+        public void onDownstreamFormatChanged(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
+                                              MediaLoadData mediaLoadData) {}
+    };
 
     private FrameLayout mSdkPlayerContainer;
     private Activity mActivity;
@@ -690,6 +738,12 @@ public class TVPlayerManager {
         com.tv.live.util.LogBridge.LogCollector.getInstance().playback(TAG, msg);
     }
 
+    // 【日志优化】debug 级播放日志：release 下不输出到 9527，但仍保留 playback 统计
+    private void logPlaybackDebug(String msg) {
+        LogBridge.d(TAG, "[PLAY] " + msg);
+        com.tv.live.util.LogBridge.LogCollector.getInstance().playback(TAG, msg);
+    }
+
     private void logError(String msg) {
         LogBridge.e(TAG, msg);
 
@@ -704,7 +758,7 @@ public class TVPlayerManager {
     private boolean shouldReportPlaybackError(String msg) {
         if (msg == null || msg.isEmpty()) return false;
 
-        String lowerMsg = msg.toLowerCase();
+        String lowerMsg = msg.toLowerCase(Locale.ROOT);
 
         String[] externalResourceErrors = {
             "404 not found",
@@ -907,7 +961,7 @@ public class TVPlayerManager {
      * 🎯【2026-09-08 卡顿诊断】把播放错误的完整 cause 链 + 当前 playUrl/频道
      * 拼成一段诊断字符串，便于打进 9527 日志精准定位
      * （是 403/404/超时/连接拒绝，还是 CDN 垮了）。
-     * 用反射提取 HttpDataSourceException 的 responseCode / uri，避免依赖具体 API（编译安全）。
+     * media3 1.7.1 直接 cast 提取 responseCode / uri（版本固定，不再用反射）。
      */
     private String buildErrorDiagnostic(PlaybackException error) {
         StringBuilder sb = new StringBuilder();
@@ -922,23 +976,19 @@ public class TVPlayerManager {
         int depth = 0;
         while (t != null && depth < 12) {
             sb.append(" {").append(t.getClass().getSimpleName()).append(": ").append(t.getMessage());
-            try {
-                java.lang.reflect.Field rf = t.getClass().getDeclaredField("responseCode");
-                rf.setAccessible(true);
-                Object rc = rf.get(t);
-                if (rc != null) sb.append(" responseCode=").append(rc);
-            } catch (Throwable ignored) {}
-            try {
-                java.lang.reflect.Field df = t.getClass().getDeclaredField("dataSpec");
-                df.setAccessible(true);
-                Object ds = df.get(t);
-                if (ds != null) {
-                    java.lang.reflect.Field uf = ds.getClass().getDeclaredField("uri");
-                    uf.setAccessible(true);
-                    Object uri = uf.get(ds);
-                    if (uri != null) sb.append(" uri=").append(uri);
+            // media3 1.7.1: 直接 cast，不再反射
+            if (t instanceof HttpDataSource.InvalidResponseCodeException) {
+                HttpDataSource.InvalidResponseCodeException ire = (HttpDataSource.InvalidResponseCodeException) t;
+                sb.append(" responseCode=").append(ire.responseCode);
+                if (ire.dataSpec != null && ire.dataSpec.uri != null) {
+                    sb.append(" uri=").append(ire.dataSpec.uri);
                 }
-            } catch (Throwable ignored) {}
+            } else if (t instanceof HttpDataSource.HttpDataSourceException) {
+                HttpDataSource.HttpDataSourceException hde = (HttpDataSource.HttpDataSourceException) t;
+                if (hde.dataSpec != null && hde.dataSpec.uri != null) {
+                    sb.append(" uri=").append(hde.dataSpec.uri);
+                }
+            }
             sb.append("}");
             t = t.getCause();
             depth++;
@@ -1025,7 +1075,7 @@ public class TVPlayerManager {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) {
-                    logPlayback("播放就绪 (STATE_READY)");
+                    logPlaybackDebug("播放就绪 (STATE_READY)");
                     updateWakeLock(true);
 
                     // 【P0-B】首帧已出，此刻再初始化虎牙 SDK，避免与首帧抢 CPU/IO
@@ -1058,7 +1108,7 @@ public class TVPlayerManager {
                         initialPlayStartTime = System.currentTimeMillis();
                     }
                 } else if (state == Player.STATE_BUFFERING) {
-                    logPlayback("缓冲中 (STATE_BUFFERING)");
+                    logPlaybackDebug("缓冲中 (STATE_BUFFERING)");
                     if (listener != null) listener.onBuffering();
                     lastPositionUpdateTime = System.currentTimeMillis();
                     bufferCount++;
@@ -1087,7 +1137,7 @@ public class TVPlayerManager {
             @Override
             public void onIsPlayingChanged(boolean isPlaying) {
                 if (isPlaying) {
-                    logPlayback("开始播放");
+                    logPlaybackDebug("开始播放");
                     lastPositionUpdateTime = System.currentTimeMillis();
                     if (isStalled) {
                         isStalled = false;
@@ -1100,17 +1150,22 @@ public class TVPlayerManager {
                             severeStallTime += stallDuration;
                             mHandler.postDelayed(() -> maybeAutoSwitchAfhgrjLine(), 800L);
                         } else {
-                            logPlayback("短暂缓冲恢复，时长：" + stallDuration + "ms");
+                            // 【日志优化】短暂缓冲 <500ms 用 debug 级，>=500ms 才输出 info 级
+                            if (stallDuration >= 500) {
+                                logPlayback("短暂缓冲恢复，时长：" + stallDuration + "ms");
+                            } else {
+                                logPlaybackDebug("短暂缓冲恢复，时长：" + stallDuration + "ms");
+                            }
                         }
                     }
                 } else {
-                    logPlayback("暂停播放");
+                    logPlaybackDebug("暂停播放");
                 }
             }
 
             @Override
             public void onVideoSizeChanged(VideoSize videoSize) {
-                logPlayback("视频分辨率变化：" + videoSize.width + "×" + videoSize.height);
+                logPlaybackDebug("视频分辨率变化：" + videoSize.width + "×" + videoSize.height);
                 notifyLiveInfoUpdate();
             }
         };
@@ -1708,7 +1763,7 @@ public class TVPlayerManager {
             //  在直播轮播全黑洞时逐条尝试（原版 UrlParser 直解，走旁路①/②）。
             for (com.tv.live.migu.source.NowTvSourceApi.SourceLabel bl : info.backSources) {
                 if (bl == null || TextUtils.isEmpty(bl.source)) continue;
-                if (bl.source.toLowerCase().contains("yuntulunbo")) continue;
+                if (bl.source.toLowerCase(Locale.ROOT).contains("yuntulunbo")) continue;
                 if (!backCand.contains(bl.source)) backCand.add(bl.source);
             }
             LogBridge.i(TAG, "【咪咕】源信息 tvId=" + tvId + " → " + info
@@ -2178,7 +2233,7 @@ public class TVPlayerManager {
         // ★【2026-10-07】已知黑洞主机：HEAD 探测也必然超时 4s，直接返回交上层快速失败
         if (com.tv.live.migu.source.CarouselApi.isKnownDeadHost(m3u8)) return m3u8;
         // 只有 HLS 才有「相对子列表基准」问题；mp4/flv 等整段流直接交播放器，省一次 HEAD
-        String lower = m3u8.toLowerCase();
+        String lower = m3u8.toLowerCase(Locale.ROOT);
         int q = lower.indexOf('?');
         String pathOnly = q > 0 ? lower.substring(0, q) : lower;
         if (!pathOnly.endsWith(".m3u8") && !pathOnly.endsWith(".m3u")) {
@@ -2622,7 +2677,7 @@ public class TVPlayerManager {
         }
         // 兜底：诊断串文本含 404/403（未混淆的 debug 包 / 其他来源）
         if (errDetail != null) {
-            String lower = errDetail.toLowerCase();
+            String lower = errDetail.toLowerCase(Locale.ROOT);
             if (lower.contains("404") || lower.contains("not found")
                     || lower.contains("403") || lower.contains("forbidden")) {
                 return true;
@@ -2648,7 +2703,7 @@ public class TVPlayerManager {
             return true;
         }
         if (errDetail != null) {
-            String lower = errDetail.toLowerCase();
+            String lower = errDetail.toLowerCase(Locale.ROOT);
             if (lower.contains("503") || lower.contains("service unavailable")
                     || lower.contains("504") || lower.contains("gateway timeout")) {
                 return true;
@@ -3548,8 +3603,20 @@ public class TVPlayerManager {
                                 //   == player，旧的「相等即跳过」判断导致永远不再重挂 → 永久黑屏。
                                 //   故此处无条件强制「先摘再挂」，让 ExoPlayer 重新走 setVideoSurface 流程。
                                 try {
+                                    // 【2026-10-14 花屏修复】surface 刚创建就立即重绑会花屏，
+                                    //   延迟 500ms 等 surface 完全准备好再重绑
                                     playerView.setPlayer(null);
-                                    playerView.setPlayer(player);
+                                    mHandler.postDelayed(() -> {
+                                        try {
+                                            playerView.setPlayer(player);
+                                            if (!player.isPlaying()) {
+                                                player.play();
+                                            }
+                                            LogBridge.i(TAG, "【花屏修复】延迟重绑 Surface 完成");
+                                        } catch (Exception e) {
+                                            LogBridge.w(TAG, "延迟重绑 Surface 失败: " + e.getMessage());
+                                        }
+                                    }, 500);
                                 } catch (Exception e) {
                                     LogBridge.w(TAG, "强制重绑 Surface 失败: " + e.getMessage());
                                 }
@@ -3668,6 +3735,7 @@ public class TVPlayerManager {
                     pendingBindPlayer = false;
                     LogBridge.d(TAG, "Surface创建成功，播放器已绑定视图并持续播放");
                 }
+
 
                 @Override
                 public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
@@ -4362,20 +4430,33 @@ public class TVPlayerManager {
         return false;
     }
 
-    /**
-     * 【2026-10-13 直播硬跳过】源5（爱其意）直播频道判定。
-     * <p>源5 直播 channelId 前缀为 {@code renyibo:<apiId>}（如 renyibo:zb-cctv1），
-     * 点播为 {@code renyibo-vod:<typeId>:<vodId>}。命中直播前缀即返回 true → 起播处
-     * 关闭广告剥离（直播无中插广告，且避免伪直播被误剥）。
-     * 其它内置源由 URL 特征 + ENDLIST 门控在剥离器内保护，不在此判定。
-     */
-    private static boolean isRenyiboLiveChannel(Channel ch) {
-        String cid = ch != null ? ch.getChannelId() : null;
-        return cid != null && cid.startsWith("renyibo:") && !cid.startsWith("renyibo-vod:");
-    }
-
     private void doPlayNormal(String url, long initialSeekPosition) {
         LogBridge.d(TAG, "【普通源】开始播放: " + url.substring(0, Math.min(80, url.length())));
+
+        // 【广告剥离】m3u8 点播走本地代理剥离广告
+        if (isHlsUrl(url) && url.contains(".m3u8")) {
+            WebServerManager webServer = WebServerManager.getRunningInstance();
+            if (webServer == null || !webServer.isRunning()) {
+                LogBridge.w(TAG, "广告剥离代理未运行，尝试启动...");
+                try {
+                    webServer = new WebServerManager(context, 10481);
+                    webServer.start();
+                    for (int i = 0; i < 20; i++) {
+                        if (webServer.isRunning()) break;
+                        Thread.sleep(100);
+                    }
+                } catch (Exception e) {
+                    LogBridge.e(TAG, "广告剥离代理启动失败: " + e.getMessage());
+                }
+            }
+            if (webServer != null && webServer.isRunning()) {
+                String proxyUrl = webServer.getAdStripProxyUrl(url);
+                LogBridge.i(TAG, "【广告剥离】代理重定向: " + url.substring(0, Math.min(60, url.length())) + " -> " + proxyUrl.substring(0, Math.min(80, proxyUrl.length())));
+                url = proxyUrl;
+            } else {
+                LogBridge.w(TAG, "【广告剥离】代理不可用，直连原始地址");
+            }
+        }
 
         // 【2026-10-10】畅享频道：仅当用户此前手选过线路/清晰度时，才异步构建轴并恢复
         // （命中偏好且与起播地址不同则自动切回）。未定制过的频道行为完全不变，不产生多余请求。
@@ -4392,23 +4473,17 @@ public class TVPlayerManager {
             synchronized (variantListLock) { variantList.clear(); }
         }
 
+        final String finalUrl = url;
+
         final String channelName = currentChannelName;
         final long __tPrep = System.currentTimeMillis();
-        // 【2026-10-13 重写】所有内置源统一启用中插广告剥离（哦了电视机制）：
-        //   ① URL 直播特征（/live/、live.php…）→ 剥离器内部硬跳过；
-        //   ② 源5 直播频道（channelId 前缀 renyibo: 而非 renyibo-vod:）→ 此处直接关闭；
-        //   ③ 剥离器以 #EXT-X-ENDLIST 门控，仅点播全集实际触发，直播/master 清单原样放行。
-        final boolean stripMidRollAds = !isRenyiboLiveChannel(currentChannel);
         new Thread(() -> {
             try {
-                LogBridge.i(TAG, "⏱️[起播准备] +" + (System.currentTimeMillis() - __tPrep) + "ms 线程体开始");
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
-                LogBridge.i(TAG, "⏱️[起播准备] +" + (System.currentTimeMillis() - __tPrep) + "ms SharedPreferences 读取完成");
 
                 RedirectLoggingHttpDataSource.Factory httpFactory = new RedirectLoggingHttpDataSource.Factory();
 
-                Headers globalHeaders = NetUtil.getInstance().createCommonHeaders(url);
-                LogBridge.i(TAG, "⏱️[起播准备] +" + (System.currentTimeMillis() - __tPrep) + "ms NetUtil.getInstance()+createCommonHeaders 完成");
+                Headers globalHeaders = NetUtil.getInstance().createCommonHeaders(finalUrl);
                 Map<String, String> localHeaders = new HashMap<>();
                 for (String name : globalHeaders.names()) {
                     localHeaders.put(name, globalHeaders.get(name));
@@ -4430,17 +4505,19 @@ public class TVPlayerManager {
                         .setConnectTimeoutMs(5000)
                         .setReadTimeoutMs(4000);
 
-                MediaItem mediaItem = MediaItem.fromUri(url);
+                MediaItem mediaItem = MediaItem.fromUri(finalUrl);
                 MediaSource mediaSource;
-                if (isHlsUrl(url)) {
+                if (isHlsUrl(finalUrl)) {
                     // 🎯 HLS 直播流优化：setAllowChunklessPreparation(true) 让 m3u8
                     //   解析完即发 prepare，不必等分片下载，节省 1-2s 起播延迟
                     // 链路：畅享EXTINF归一化 → HTTP
                     // （2026-09-15 去掉并行预取，切台后直接单连接播放）
                     HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(
-                            new ChanxiangM3u8DataSource.Factory(httpFactory, stripMidRollAds))
-                            .setAllowChunklessPreparation(true);
+                            new ChanxiangM3u8DataSource.Factory(httpFactory))
+                            .setAllowChunklessPreparation(true)
+                            .setPlaylistParserFactory(new AdAwareHlsPlaylistParserFactory());
                     mediaSource = hlsFactory.createMediaSource(mediaItem);
+                    mediaSource.addEventListener(mHandler, mMediaSourceListener);
                 } else {
                     mediaSource = new ProgressiveMediaSource.Factory(httpFactory, TvExtractorsFactory.getInstance()).createMediaSource(mediaItem);
                 }
@@ -4450,7 +4527,6 @@ public class TVPlayerManager {
                     reusableHeaderMap.putAll(localHeaders);
                 }
 
-                LogBridge.i(TAG, "⏱️[起播准备] +" + (System.currentTimeMillis() - __tPrep) + "ms MediaSource/Player 配置完成，即将 prepare");
                 mHandler.post(() -> {
                     try {
                         ensurePlayerBoundToView();
@@ -4597,8 +4673,10 @@ public class TVPlayerManager {
                     //（直播 m3u8 无 ENDLIST，即使开启也会被剥离器原样放行；此处显式 false 更清晰）
                     HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(
                             new ChanxiangM3u8DataSource.Factory(httpFactory, false))
-                            .setAllowChunklessPreparation(true);
+                            .setAllowChunklessPreparation(true)
+                            .setPlaylistParserFactory(new AdAwareHlsPlaylistParserFactory());
                     mediaSource = hlsFactory.createMediaSource(mediaItem);
+                    mediaSource.addEventListener(mHandler, mMediaSourceListener);
                 } else {
                     mediaItem = MediaItem.fromUri(url);
                     mediaSource = new ProgressiveMediaSource.Factory(httpFactory, TvExtractorsFactory.getInstance()).createMediaSource(mediaItem);
@@ -5352,7 +5430,7 @@ public class TVPlayerManager {
         if (id == null || !id.matches("\\d+")) return false;
         String url = ch.getMainPlayUrl();
         if (TextUtils.isEmpty(url)) return false;
-        String lower = url.toLowerCase();
+        String lower = url.toLowerCase(Locale.ROOT);
         if (!lower.startsWith("http")) return false;
         return lower.contains("ichuanghi.com") || (lower.contains("_et=") && lower.contains("_nt="));
     }
@@ -6315,6 +6393,7 @@ public class TVPlayerManager {
 
     public static class LiveInfo {
         public String resolution = "未知";
+        public String frameRate = "未知";
         public String bitrate = "0";
         public String audio = "未知";
         public String format = "未知";
@@ -6331,6 +6410,7 @@ public class TVPlayerManager {
                     info.format = friendlyMime(videoFormat.sampleMimeType);
                     if (videoFormat.bitrate > 0)
                         info.bitrate = String.format(Locale.getDefault(), "%.1f Mbps", videoFormat.bitrate / 1000000f);
+                    if (videoFormat.frameRate > 0) info.frameRate = String.format(Locale.getDefault(), "%.1f fps", videoFormat.frameRate);
                 }
                 Format audioFormat = player.getAudioFormat();
                 if (audioFormat != null) {
@@ -6370,7 +6450,8 @@ public class TVPlayerManager {
     }
 
     private void notifyLiveInfoUpdate() {
-        if (liveInfoUpdateListener != null) liveInfoUpdateListener.onLiveInfoUpdate(getLiveInfo());
+        LiveInfo info = getLiveInfo();
+        if (liveInfoUpdateListener != null) liveInfoUpdateListener.onLiveInfoUpdate(info);
     }
 
     public interface OnPlayStateListener {

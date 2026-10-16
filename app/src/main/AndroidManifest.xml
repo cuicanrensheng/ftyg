@@ -20,11 +20,17 @@
     <uses-permission android:name="android.permission.BIND_TV_INPUT"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- 【2026-10-15 审计修复 #5】原 allowBackup="true" + 全量 include（sharedpref/database path="."）
+         会把全部 SharedPreferences 送进云备份 / 设备迁移。实测 6 个 prefs 中
+         credentials / secure_data / security_guard / migu_direct_cache / play_config / app_settings
+         均含凭证或带 token 的 URL；逐个排除等于全排除。且加密数据用的是 AndroidKeyStore
+         设备绑定密钥，迁移到新设备后本就解不开。故直接关闭备份。
+         同时一并消除配置错误：原 android:fullBackupContent 指向的是 <data-extraction-rules> 结构，
+         而 fullBackupContent 要求 <full-backup-content>，导致 API ≤ 30 上规则解析失败。 -->
     <application
         android:name=".MyApplication"
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/data_extraction_rules"
+        android:allowBackup="false"
+        android:supportsRtl="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.TVLive.NoTitle"
@@ -72,23 +78,11 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
-                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
-
-                <action android:name="android.intent.action.TIME_SET" />
-                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
-
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SCREEN_ON" />
                 <action android:name="android.intent.action.USER_PRESENT" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.MEDIA_MOUNTED" />
-                <action android:name="android.intent.action.MEDIA_EJECT" />
-                <data android:scheme="file" />
             </intent-filter>
         </receiver>
 

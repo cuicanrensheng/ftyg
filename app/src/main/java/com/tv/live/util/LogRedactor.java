@@ -130,12 +130,8 @@ public final class LogRedactor {
      * @return 脱敏后的正文；入参为 null / 空串时原样返回
      */
     public static String redact(String msg) {
-        if (msg == null || msg.isEmpty()) {
-            return msg;
-        }
-        String s = codes(msg);
-        s = mask(s);
-        return s;
+        // 【2026-10-16 解除日志脱敏】直接返回原文，不做任何掩码/代号处理
+        return msg;
     }
 
     // ==================== 一、检测命中项 → 代号 ====================

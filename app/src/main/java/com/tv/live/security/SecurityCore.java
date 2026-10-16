@@ -1,6 +1,7 @@
 package com.tv.live.security;
 
 import android.content.Context;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
@@ -47,26 +48,20 @@ public final class SecurityCore {
     private static final String TAG = "SecurityCore";
 
     private static volatile boolean sLoaded = false;
-    private static volatile byte[] sToken = null;
 
     private SecurityCore() {}
-
-    private static final byte[] FIXED_TOKEN =
-            "TVLiveSec!2026Se".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
 
     public static synchronized void init() {
         if (sLoaded) return;
         try {
             System.loadLibrary("tvlive_security");
-            sToken = FIXED_TOKEN.clone();
-            nativeSetToken(sToken);
             sLoaded = true;
             LogBridge.i(TAG, "libtvlive_security.so 加载成功");
             LogBridge.i(TAG, "SECURITY_INIT: Native SO loaded OK");
         } catch (Throwable t) {
             sLoaded = false;
-            LogBridge.w(TAG, "libtvlive_security.so 加载失败: " + t.getMessage() + "，将使用 Java fallback 解密");
-            LogBridge.w(TAG, "SECURITY_INIT: Native SO FAILED, using Java fallback: " + t.getMessage());
+            LogBridge.w(TAG, "libtvlive_security.so 加载失败: " + t.getMessage());
+            LogBridge.w(TAG, "SECURITY_INIT: Native SO FAILED: " + t.getMessage());
         }
     }
 
@@ -211,29 +206,11 @@ public final class SecurityCore {
                     LogBridge.d(TAG, "DECRYPT: Native decrypted OK, len=" + s.length());
                     return s;
                 }
-                LogBridge.w(TAG, "DECRYPT: Native decrypt returned null, trying Java fallback");
             } catch (Throwable t) {
-                LogBridge.w(TAG, "Native 解密失败: " + t.getMessage() + "，尝试 Java fallback");
-                LogBridge.e(TAG, "DECRYPT: Native decrypt exception: " + t.getMessage());
+                LogBridge.w(TAG, "Native 解密失败: " + t.getMessage());
             }
-        } else {
-            LogBridge.w(TAG, "DECRYPT: Native not loaded, using Java fallback directly");
         }
-
-        try {
-            String s = javaAesDecrypt(cipher);
-            if (s != null && !s.isEmpty()) {
-                LogBridge.d(TAG, "DECRYPT: Java fallback decrypted OK, len=" + s.length());
-                return s;
-            }
-            LogBridge.e(TAG, "Java fallback 解密也失败");
-            LogBridge.e(TAG, "DECRYPT: Java fallback returned empty/null");
-            return null;
-        } catch (Throwable t) {
-            LogBridge.e(TAG, "Java fallback 解密异常: " + t.getMessage());
-            LogBridge.e(TAG, "DECRYPT: Java fallback exception: " + t.getMessage());
-            return null;
-        }
+        return null;
     }
 
     // =============================================================
@@ -256,6 +233,18 @@ public final class SecurityCore {
     public static final int C_LIVE_PHP = 5;   // 源5 直播端点（含 token）
     public static final int C_LIVE_HOST = 7;  // 源5 直播服务器主机名（识别 302 跳转器用）
     public static final int C_VOD_KEY   = 8;  // 源5 点播 AES-128 密钥（hex）
+
+    // ---- 【2026-10-15 第三批】上游 API 端点密文化（原为 public static final 明文常量）----
+    // ⚠️ 这批**未**迁移 HTTPS（服务端 TLS 支持未验证），明文仍是 http:// 原样。
+    public static final int C_API_NOWTV_NEW = 9;   // 主直播 host（nowtv-new.xiaoyouzb.cn）
+    public static final int C_API_NOWTV     = 10;  // 旧版直播 host（nowtv.xiaoyouzb.cn）
+    public static final int C_API_USER_CN   = 11;  // 用户服务 host（user.xiaoyouzb.cn）
+    public static final int C_API_PROBE     = 12;  // 探测 host（probe.xiaoyouzb.cn）
+    public static final int C_API_A8        = 13;  // A8 游戏接口 host
+    public static final int C_API_USER_NET  = 14;  // 用户服务 host（user.xiaoyouzb.net）
+    public static final int C_API_NOWTV_NET = 15;  // JS 插件热更元数据接口（.net）
+    public static final int C_API_GITV_AUTH = 16;  // GITV 点播鉴权端点前缀
+    public static final int C_API_GITV_KEY  = 17;  // GITV 鉴权固定 key（128 字符）
 
     /**
      * 取加密常量明文。SO 不可用时返回 null（调用方按「该源不可用」降级）。
@@ -290,52 +279,6 @@ public final class SecurityCore {
         }
     }
 
-    private static final byte[] KEY_PART_A = {
-            (byte) 0x9c, (byte) 0x3f, (byte) 0xa1, (byte) 0x77,
-            (byte) 0x55, (byte) 0x88, (byte) 0x10, (byte) 0xcc,
-            (byte) 0x2d, (byte) 0x4b, (byte) 0xe6, (byte) 0x91,
-            (byte) 0x07, (byte) 0xb3, (byte) 0xd5, (byte) 0x42
-    };
-
-    private static final byte[] KEY_PART_B = {
-            (byte) 0x7a, (byte) 0xb1, (byte) 0x05, (byte) 0xe9,
-            (byte) 0x33, (byte) 0x6f, (byte) 0xc2, (byte) 0x4d,
-            (byte) 0x18, (byte) 0xfa, (byte) 0x82, (byte) 0x59,
-            (byte) 0xa0, (byte) 0x21, (byte) 0x6c, (byte) 0xd7
-    };
-
-    private static byte[] buildAesKeyJava() {
-        byte[] token = sToken != null ? sToken : FIXED_TOKEN;
-        byte[] key = new byte[32];
-        for (int i = 0; i < 16; i++) {
-            key[i] = (byte) (KEY_PART_A[i] ^ token[i]);
-            key[16 + i] = (byte) (KEY_PART_B[i] ^ token[i]);
-        }
-        return key;
-    }
-
-    private static String javaAesDecrypt(byte[] cipher) throws Exception {
-        if (cipher.length < 32 || (cipher.length - 16) % 16 != 0) {
-            return null;
-        }
-        byte[] iv = new byte[16];
-        System.arraycopy(cipher, 0, iv, 0, 16);
-        byte[] encrypted = new byte[cipher.length - 16];
-        System.arraycopy(cipher, 16, encrypted, 0, encrypted.length);
-
-        byte[] key = buildAesKeyJava();
-        SecretKeySpec keySpec = new SecretKeySpec(key, "AES");
-        IvParameterSpec ivSpec = new IvParameterSpec(iv);
-
-        Cipher cipherObj = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipherObj.init(Cipher.DECRYPT_MODE, keySpec, ivSpec);
-
-        byte[] plain = cipherObj.doFinal(encrypted);
-        Arrays.fill(key, (byte) 0);
-
-        return new String(plain, StandardCharsets.UTF_8);
-    }
-
     private static String readFile(String path) {
         try {
             java.io.FileInputStream fis = new java.io.FileInputStream(path);
@@ -348,7 +291,6 @@ public final class SecurityCore {
         }
     }
 
-    private static native void nativeSetToken(byte[] token);
     private static native void nativeAntiDebug();
     private static native void nativeStartMonitor();
     private static native int  nativeCheck();
@@ -664,7 +606,8 @@ public final class SecurityCore {
 
             while (!sDestroyed && !BuildConfig.IS_DEBUG) {
                 try {
-                    Thread.sleep(30000);
+                    // 【2026-10-15】检测间隔从30秒改为30分钟，避免模拟器环境下频繁触发
+                    Thread.sleep(30 * 60 * 1000);
 
                     if (checkFrida()) {
                         if (!reported[0]) { LogBridge.w(TAG, "安全监控：命中 [CHK-01]"); reported[0] = true; }
@@ -749,21 +692,18 @@ public final class SecurityCore {
     }
 
     private static boolean checkXposed() {
+        // 栈轨迹检测：遍历当前线程栈帧，检查是否有 Xposed / Substrate 类
+        // （不使用 Class.forName，避免反射加载外部类）
         try {
-
-            Class.forName(ObStr.d(ObStr.X_CLASS_BRIDGE));
-            return true;
-        } catch (ClassNotFoundException e) {
-
-        }
-
-        try {
-
-            Class.forName(ObStr.d(ObStr.X_CLASS_SUBSTRATE));
-            return true;
-        } catch (ClassNotFoundException e) {
-
-        }
+            for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+                String cn = element.getClassName();
+                if (cn.startsWith("de.robv.android.xposed.")
+                        || cn.startsWith("com.saurik.substrate.")
+                        || cn.startsWith("org.lsposed.")) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {}
 
         String xposedProp = System.getProperty(ObStr.d(ObStr.X_PROP_HOOKLOAD));
         if (xposedProp != null) return true;
@@ -826,14 +766,13 @@ public final class SecurityCore {
     }
 
     private static String getThreatName(int threatType) {
-        // 【2026-10-13 日志脱敏】威胁名统一改为代号，避免日志本身变成"绕过指引"。
-        // 对照表见 LogRedactor 类注释。
+        // 【2026-10-16 解除日志脱敏】返回真实威胁名
         switch (threatType) {
-            case THREAT_DEBUGGER: return "[CHK-07]";
-            case THREAT_FRIDA: return "[CHK-01]";
-            case THREAT_XPOSED: return "[CHK-02]";
-            case THREAT_ROOT: return "[CHK-05]";
-            case THREAT_EMULATOR: return "[CHK-06]";
+            case THREAT_DEBUGGER: return "调试器";
+            case THREAT_FRIDA: return "Frida";
+            case THREAT_XPOSED: return "Xposed";
+            case THREAT_ROOT: return "Root";
+            case THREAT_EMULATOR: return "模拟器";
             case TAMPER_DETECTED: return "APK 篡改";
             case SIGNATURE_MISMATCH: return "签名不匹配";
             case HOOK_DETECTED: return "Hook 攻击";
@@ -930,6 +869,7 @@ public final class SecurityCore {
                 checkDirectoryForHooks(dataDir);
             }
 
+            //noinspection AndroidLintObsoleteSdkInt
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 File codeCacheDir = new File(context.getCodeCacheDir().getAbsolutePath());
                 if (codeCacheDir.exists()) {
@@ -956,7 +896,7 @@ public final class SecurityCore {
             };
 
             for (File file : files) {
-                String name = file.getName().toLowerCase();
+                String name = file.getName().toLowerCase(Locale.ROOT);
                 for (String suspicious : suspiciousNames) {
                     if (name.contains(suspicious)) {
                         LogBridge.w(TAG, "检测到可疑文件: " + file.getAbsolutePath());
@@ -1017,49 +957,6 @@ public final class SecurityCore {
         }
     }
 
-    public static Object[] getDexObjects() {
-        try {
-            ClassLoader classLoader = DexProtector.class.getClassLoader();
-            if (classLoader == null) return null;
-
-            Field pathListField = findField(classLoader.getClass(), "pathList");
-            if (pathListField == null) return null;
-
-            pathListField.setAccessible(true);
-            Object pathList = pathListField.get(classLoader);
-            if (pathList == null) return null;
-
-            Field dexElementsField = findField(pathList.getClass(), "dexElements");
-            if (dexElementsField == null) return null;
-
-            dexElementsField.setAccessible(true);
-            Object dexElements = dexElementsField.get(pathList);
-            if (dexElements == null) return null;
-
-            int length = Array.getLength(dexElements);
-            Object[] result = new Object[length];
-            for (int i = 0; i < length; i++) {
-                result[i] = Array.get(dexElements, i);
-            }
-            return result;
-
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static Field findField(Class<?> clazz, String name) {
-        Class<?> searchType = clazz;
-        while (searchType != null) {
-            try {
-                return searchType.getDeclaredField(name);
-            } catch (NoSuchFieldException e) {
-                searchType = searchType.getSuperclass();
-            }
-        }
-        return null;
-    }
-
     public static String getDexHash() {
         return sDexHash;
     }
@@ -1101,11 +998,11 @@ public final class SecurityCore {
         debugDetected = fridaFound || xposedFound || confirmedDebugger;
 
         if (debugDetected) {
-            // 【2026-10-13 日志脱敏】不再直写特征名，改用代号（对照表见 LogRedactor）
+            // 【2026-10-16 解除日志脱敏】直写真实特征名
             LogBridge.w(TAG, "⚠️ 检测到可疑环境: " +
-                (confirmedDebugger ? "[CHK-07]" : "") +
-                (fridaFound ? "[CHK-01]" : "") +
-                (xposedFound ? "[CHK-02]" : ""));
+                (confirmedDebugger ? "调试器 " : "") +
+                (fridaFound ? "Frida " : "") +
+                (xposedFound ? "Xposed " : ""));
 
             if (!BuildConfig.IS_DEBUG) {
                 if (confirmedDebugger && !fridaFound && !xposedFound) {
@@ -1614,181 +1511,6 @@ public final class SecurityCore {
     }
 }
 
-    public static class StringProtector {
-
-    private static final String TAG = "StringProtector";
-    private static volatile boolean sEnabled = false;
-
-    private static final Map<String, String> sEncryptedCache = new HashMap<>();
-
-    private static final Map<String, String> sDecryptedCache = new HashMap<>();
-
-    private static volatile byte[] sDynamicKey = null;
-
-    private static final int XOR_KEY_LENGTH = 16;
-
-    private StringProtector() {}
-
-    public static void init(boolean enable) {
-        sEnabled = enable;
-        if (enable) {
-
-            sDynamicKey = generateDynamicKey();
-            LogBridge.i(TAG, "字符串保护已启用");
-        } else {
-            LogBridge.i(TAG, "字符串保护已禁用（调试模式）");
-        }
-    }
-
-    public static void register(String key, String encryptedValue) {
-        if (key == null || encryptedValue == null) return;
-        sEncryptedCache.put(key, encryptedValue);
-
-        sDecryptedCache.remove(key);
-    }
-
-    public static void register(String key, String value, boolean encrypt) {
-        if (key == null || value == null) return;
-
-        if (encrypt && sEnabled) {
-            String encrypted = encryptValue(value);
-            sEncryptedCache.put(key, encrypted);
-            sDecryptedCache.remove(key);
-        } else {
-
-            sDecryptedCache.put(key, value);
-        }
-    }
-
-    public static String get(String key) {
-        if (key == null) return null;
-
-        String cached = sDecryptedCache.get(key);
-        if (cached != null) return cached;
-
-        String encrypted = sEncryptedCache.get(key);
-        if (encrypted != null) {
-            try {
-                String decrypted = decryptValue(encrypted);
-
-                if (decrypted != null) {
-                    sDecryptedCache.put(key, decrypted);
-                }
-                return decrypted;
-            } catch (Exception e) {
-                LogBridge.e(TAG, "解密字符串失败: " + key);
-                return null;
-            }
-        }
-
-        return null;
-    }
-
-    public static String[] getBatch(String... keys) {
-        if (keys == null) return null;
-        String[] result = new String[keys.length];
-        for (int i = 0; i < keys.length; i++) {
-            result[i] = get(keys[i]);
-        }
-        return result;
-    }
-
-    private static String encryptValue(String plain) {
-        if (plain == null) return null;
-        try {
-            byte[] plainBytes = plain.getBytes(StandardCharsets.UTF_8);
-            byte[] encryptedBytes = xorEncrypt(plainBytes, sDynamicKey);
-            return Base64.encodeToString(encryptedBytes, Base64.NO_WRAP);
-        } catch (Exception e) {
-            LogBridge.w(TAG, "加密失败: " + e.getMessage());
-            return plain;
-        }
-    }
-
-    private static String decryptValue(String encryptedBase64) {
-        if (encryptedBase64 == null) return null;
-        try {
-            byte[] encryptedBytes = Base64.decode(encryptedBase64, Base64.NO_WRAP);
-            byte[] decryptedBytes = xorDecrypt(encryptedBytes, sDynamicKey);
-            return new String(decryptedBytes, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            LogBridge.e(TAG, "解密失败: " + e.getMessage());
-            return null;
-        }
-    }
-
-    private static byte[] xorEncrypt(byte[] data, byte[] key) {
-        if (data == null || key == null) return null;
-        byte[] result = new byte[data.length];
-        for (int i = 0; i < data.length; i++) {
-            result[i] = (byte) (data[i] ^ key[i % key.length]);
-        }
-        return result;
-    }
-
-    private static byte[] xorDecrypt(byte[] data, byte[] key) {
-
-        return xorEncrypt(data, key);
-    }
-
-    private static byte[] generateDynamicKey() {
-        try {
-
-            String seed = "TVLive_" + System.currentTimeMillis() + "_" +
-                         android.os.Build.VERSION.SDK_INT;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(seed.getBytes(StandardCharsets.UTF_8));
-            byte[] key = new byte[XOR_KEY_LENGTH];
-            System.arraycopy(hash, 0, key, 0, XOR_KEY_LENGTH);
-            return key;
-        } catch (Exception e) {
-
-            return "TVLive2026Key!".getBytes(StandardCharsets.UTF_8);
-        }
-    }
-
-    public static void clearCache() {
-        sDecryptedCache.clear();
-    }
-
-    public static void rotateKey() {
-        if (!sEnabled) return;
-        sDynamicKey = generateDynamicKey();
-        clearCache();
-        LogBridge.i(TAG, "动态密钥已更新");
-    }
-
-    public static boolean isEnabled() {
-        return sEnabled;
-    }
-
-    public static int getRegisteredCount() {
-        return sEncryptedCache.size();
-    }
-
-    public static String quickEncrypt(String plain) {
-        if (plain == null) return null;
-        byte[] key = "TVLive2026Key!".getBytes(StandardCharsets.UTF_8);
-        byte[] plainBytes = plain.getBytes(StandardCharsets.UTF_8);
-        byte[] encryptedBytes = new byte[plainBytes.length];
-        for (int i = 0; i < plainBytes.length; i++) {
-            encryptedBytes[i] = (byte) (plainBytes[i] ^ key[i % key.length]);
-        }
-        return Base64.encodeToString(encryptedBytes, Base64.NO_WRAP);
-    }
-
-    public static String quickDecrypt(String encryptedBase64) {
-        if (encryptedBase64 == null) return null;
-        byte[] key = "TVLive2026Key!".getBytes(StandardCharsets.UTF_8);
-        byte[] encryptedBytes = Base64.decode(encryptedBase64, Base64.NO_WRAP);
-        byte[] decryptedBytes = new byte[encryptedBytes.length];
-        for (int i = 0; i < encryptedBytes.length; i++) {
-            decryptedBytes[i] = (byte) (encryptedBytes[i] ^ key[i % key.length]);
-        }
-        return new String(decryptedBytes, StandardCharsets.UTF_8);
-    }
-}
-
     public static class TamperReporter {
 
     private static final String TAG = "TamperReporter";
@@ -1813,9 +1535,9 @@ public final class SecurityCore {
     public static void init(Context context) {
         sAppContext = context.getApplicationContext();
         if (!BuildConfig.IS_DEBUG) {
-            LogBridge.i(TAG, "反编译检测器已启用");
+            LogBridge.d(TAG, "反编译检测器已启用");
         } else {
-            LogBridge.i(TAG, "反编译检测器：调试模式，仅记录日志");
+            LogBridge.d(TAG, "反编译检测器：调试模式，仅记录日志");
         }
     }
 
@@ -1869,7 +1591,7 @@ public final class SecurityCore {
             writer.write(logBuilder.toString());
             writer.close();
 
-            LogBridge.i(TAG, "篡改日志已写入: " + logFile.getAbsolutePath());
+            LogBridge.d(TAG, "篡改日志已写入: " + logFile.getAbsolutePath());
 
         } catch (Exception e) {
             LogBridge.e(TAG, "写入篡改日志失败: " + e.getMessage());
@@ -1935,12 +1657,12 @@ public final class SecurityCore {
             case TAMPER_PACKAGE_NAME: return "包名不匹配";
             case TAMPER_DEX_INTEGRITY: return "DEX完整性校验失败";
             case TAMPER_DEBUGGER: return "调试器检测";
-            // 【2026-10-13 日志脱敏】类型名改代号（对照表见 LogRedactor）
-            case TAMPER_FRIDA: return "[CHK-01]检测";
-            case TAMPER_XPOSED: return "[CHK-02]检测";
+            // 【2026-10-16 解除日志脱敏】返回真实类型名
+            case TAMPER_FRIDA: return "Frida检测";
+            case TAMPER_XPOSED: return "Xposed检测";
             case TAMPER_HOOK: return "Hook攻击检测";
-            case TAMPER_ROOT: return "[CHK-05]环境";
-            case TAMPER_EMULATOR: return "[CHK-06]环境";
+            case TAMPER_ROOT: return "Root环境";
+            case TAMPER_EMULATOR: return "模拟器环境";
             case TAMPER_MEMORY: return "内存篡改检测";
             default: return "未知篡改类型(" + tamperType + ")";
         }
@@ -2195,6 +1917,7 @@ public final class SecurityCore {
     }
 }
 
+@SuppressLint("StaticFieldLeak")
     public static class SecurityGuardManager {
 
     private static final String TAG = "SecurityGuard";
@@ -2356,19 +2079,19 @@ public final class SecurityCore {
 
     private void checkHookingFrameworks(SecurityReport report) {
 
-        // 【2026-10-13 日志脱敏】命中文案改代号，避免日志成为"绕过指引"
+        // 【2026-10-16 解除日志脱敏】直写真实名称
         if (isFridaPortOpen()) {
             report.fridaDetected = true;
             report.hookDetected = true;
-            report.threats.add("检测到 [CHK-01] 框架");
-            LogBridge.w(TAG, "⚠️ [CHK-01] 端口已开启");
+            report.threats.add("检测到 Frida 框架");
+            LogBridge.w(TAG, "⚠️ Frida 端口已开启");
         }
 
         if (isXposedFrameworkDetected()) {
             report.xposedDetected = true;
             report.hookDetected = true;
-            report.threats.add("检测到 [CHK-02] 框架");
-            LogBridge.w(TAG, "⚠️ [CHK-02] 框架已加载");
+            report.threats.add("检测到 Xposed 框架");
+            LogBridge.w(TAG, "⚠️ Xposed 框架已加载");
         }
 
         if (isMagiskDetected()) {
@@ -2480,7 +2203,7 @@ public final class SecurityCore {
 
             while ((line = reader.readLine()) != null) {
                 for (String name : suspiciousNames) {
-                    if (line.toLowerCase().contains(name)) {
+                    if (line.toLowerCase(Locale.ROOT).contains(name)) {
                         reader.close();
                         return true;
                     }
@@ -2614,12 +2337,6 @@ public final class SecurityCore {
                 return true;
             }
 
-            try {
-                Class<?> connectivityManagerClass = Class.forName("android.net.ConnectivityManager");
-
-            } catch (Exception e) {
-
-            }
         } catch (Exception e) {
 
         }

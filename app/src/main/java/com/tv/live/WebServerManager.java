@@ -19,9 +19,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import com.tv.live.util.M3u8AdStripper;
+import com.tv.live.util.LogBridge;
 
 public class WebServerManager {
 
@@ -151,6 +156,10 @@ public class WebServerManager {
         return isRunning;
     }
 
+    public int getPort() {
+        return port;
+    }
+
     private void handleHttpRequest(Socket socket) {
         try {
             BufferedReader reader = new BufferedReader(
@@ -207,7 +216,54 @@ public class WebServerManager {
             String contentType = "text/html; charset=utf-8";
             String purePath = path.contains("?") ? path.split("\\?")[0] : path;
 
-            if ("GET".equals(method) && ("/".equals(purePath) || "/index.html".equals(purePath))) {
+            if ("GET".equals(method) && "/m3u8".equals(purePath)) {
+                // 广告剥离代理接口：/m3u8?url=原始m3u8地址
+                String targetUrl = "";
+                if (path.contains("?")) {
+                    String query = path.substring(path.indexOf("?") + 1);
+                    for (String pair : query.split("&")) {
+                        if (pair.startsWith("url=")) {
+                            targetUrl = URLDecoder.decode(pair.substring(4), "UTF-8");
+                            break;
+                        }
+                    }
+                }
+                if (targetUrl.isEmpty()) {
+                    sendResponse(socket, "400 Bad Request", "text/plain", "Missing url parameter");
+                    return;
+                }
+                LogBridge.i("WebServer", "========== 广告剥离代理请求开始 ==========");
+                LogBridge.i("WebServer", "目标URL: " + targetUrl.substring(0, Math.min(100, targetUrl.length())));
+                long stripStartTime = System.currentTimeMillis();
+                String m3u8Content = downloadM3u8(targetUrl);
+                if (m3u8Content.isEmpty()) {
+                    sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to download m3u8");
+                    return;
+                }
+                // 处理 Master Playlist：如果是 master，先下载第一个子流再剥离
+                String finalContent = m3u8Content;
+                String finalBaseUrl = targetUrl;
+                if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
+                    LogBridge.i("WebServer", "检测到 Master Playlist，下载第一个子流");
+                    String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, targetUrl);
+                    if (variantUrl != null && !variantUrl.isEmpty()) {
+                        String variantContent = downloadM3u8(variantUrl);
+                        if (!variantContent.isEmpty()) {
+                            finalContent = variantContent;
+                            finalBaseUrl = variantUrl;
+                        }
+                    }
+                }
+
+                int beforeSegments = countSegmentsInM3u8(finalContent);
+                LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
+                String stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                int afterSegments = countSegmentsInM3u8(stripped);
+                LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个, 总耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
+                LogBridge.i("WebServer", "========== 广告剥离代理请求结束 ==========");
+                sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", stripped);
+                return;
+            } else if ("GET".equals(method) && ("/".equals(purePath) || "/index.html".equals(purePath))) {
                 responseBody = buildConfigPage();
             } else if ("POST".equals(method) && "/submit".equals(purePath)) {
 
@@ -450,5 +506,70 @@ public class WebServerManager {
     private void addHistory(String key, String url) {
         SourceManager sourceManager = new SourceManager(context, key);
         sourceManager.addSource("网页推送", url);
+    }
+
+    /**
+     * 统计 m3u8 中的分片数量
+     */
+    private int countSegmentsInM3u8(String content) {
+        if (content == null || content.isEmpty()) return 0;
+        int count = 0;
+        for (String line : content.split("\\r?\\n")) {
+            if (line.trim().startsWith("#EXTINF:")) count++;
+        }
+        return count;
+    }
+
+    /**
+     * 下载原始 m3u8 内容
+     */
+    private String downloadM3u8(String urlStr) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(urlStr);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(15000);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36");
+            conn.setRequestProperty("Accept", "*/*");
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode != 200) {
+                LogBridge.w("WebServer", "m3u8下载失败: HTTP " + responseCode);
+                return "";
+            }
+
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            reader.close();
+            return sb.toString();
+        } catch (Exception e) {
+            LogBridge.e("WebServer", "m3u8下载异常: " + e.getMessage());
+            return "";
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    /**
+     * 获取广告剥离代理地址
+     */
+    public String getAdStripProxyUrl(String originalUrl) {
+        try {
+            String encoded = java.net.URLEncoder.encode(originalUrl, "UTF-8");
+            return "http://127.0.0.1:" + port + "/m3u8?url=" + encoded;
+        } catch (Exception e) {
+            return originalUrl;
+        }
+    }
+
+    public static WebServerManager getRunningInstance() {
+        return runningInstance;
     }
 }

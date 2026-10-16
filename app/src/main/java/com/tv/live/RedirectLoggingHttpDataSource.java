@@ -203,6 +203,24 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
     public long open(DataSpec dataSpec) throws HttpDataSource.HttpDataSourceException {
         try {
             transferInitializing(dataSpec);
+            // 【DNS 广告拦截】检查请求域名是否在广告黑名单中
+            String urlStr = dataSpec.uri.toString();
+            if (com.tv.live.util.DnsAdBlocker.isUrlBlocked(urlStr)) {
+                LogBridge.w(TAG, "DNS 拦截广告请求: " + urlStr.substring(0, Math.min(80, urlStr.length())));
+                throw new HttpDataSource.HttpDataSourceException(
+                    new IOException("Blocked by DNS ad filter"),
+                    dataSpec,
+                    HttpDataSource.HttpDataSourceException.TYPE_OPEN);
+            }
+
+            // 【URL 关键词广告拦截】检查 URL 路径是否包含广告关键词
+            if (com.tv.live.util.M3u8AdStripper.isAdUrl(urlStr)) {
+                LogBridge.w(TAG, "URL关键词拦截广告请求: " + urlStr.substring(0, Math.min(80, urlStr.length())));
+                throw new HttpDataSource.HttpDataSourceException(
+                    new IOException("Blocked by ad keyword filter"),
+                    dataSpec,
+                    HttpDataSource.HttpDataSourceException.TYPE_OPEN);
+            }
             long tOpen0 = android.os.SystemClock.elapsedRealtime();
             // 【2026-09-29 虎牙 CDN 403 抖动专项】连接 + 取响应码放进重试循环：
             // 虎牙 CDN 对同一条 m3u8 的 403/404/5xx 是随机抖动（同一 URL 前后都能 200），

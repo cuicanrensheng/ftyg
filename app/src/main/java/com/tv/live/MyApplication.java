@@ -1,6 +1,7 @@
 package com.tv.live;
 
 import android.app.Application;
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -28,7 +29,6 @@ import com.tv.live.security.SecurityCore;
 import com.tv.live.security.SecurityCore.AntiDebug;
 import com.tv.live.security.SecurityCore.StringObfuscator;
 import com.tv.live.security.SecurityCore.DexProtector;
-import com.tv.live.security.SecurityCore.StringProtector;
 import com.tv.live.security.SecurityCore.SecurityGuard;
 import com.tv.live.security.SecurityCore.SecurityCheck;
 public class MyApplication extends Application {
@@ -56,11 +56,13 @@ public class MyApplication extends Application {
     }
 
     @Override
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter, int flags) {
         return registerReceiverCompat(receiver, filter, null, null, flags);
     }
 
     @Override
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter,
                                    String broadcastPermission, Handler scheduler) {
         return registerReceiverCompat(receiver, filter, broadcastPermission, scheduler, 0);
@@ -71,6 +73,7 @@ public class MyApplication extends Application {
      * 调用方未显式声明时默认 RECEIVER_NOT_EXPORTED（系统广播与自有广播均可送达）；
      * 调用方已显式指定 EXPORTED/NOT_EXPORTED 时尊重原值。
      */
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     private Intent registerReceiverCompat(BroadcastReceiver receiver, IntentFilter filter,
                                           String broadcastPermission, Handler scheduler, int flags) {
         if (Build.VERSION.SDK_INT >= 33) {
@@ -444,19 +447,10 @@ public class MyApplication extends Application {
             LogBridge.w("MyApplication", "DEX 保护初始化失败: " + e.getMessage());
         }
 
-        try {
-            StringProtector.init(!BuildConfig.IS_DEBUG);
-
-            StringProtector.register("huya_app_id",
-                BuildConfig.IS_DEBUG ? "123456" : StringProtector.quickEncrypt("123456"));
-            StringProtector.register("huya_app_key",
-                BuildConfig.IS_DEBUG ? "d8f193dd" : StringProtector.quickEncrypt("d8f193dd"));
-            StringProtector.register("huya_game_id",
-                BuildConfig.IS_DEBUG ? "2135" : StringProtector.quickEncrypt("2135"));
-            LogCollector.getInstance().info("MyApplication", "字符串保护初始化完成");
-        } catch (Throwable e) {
-            LogBridge.w("MyApplication", "字符串保护初始化失败: " + e.getMessage());
-        }
+        // 【2026-10-15 移除虎牙死代码】原此处调用 StringProtector.init + register("huya_app_id" /
+        // "huya_app_key" / "huya_game_id")，用固定密钥 XOR 混淆三个虎牙占位常量。
+        // 虎牙 SDK 已于 2026-10-08 整体拆除，且全仓库已无任何代码读取这三个键
+        // （StringProtector.get() 零调用者），属纯死代码 —— 连同其固定密钥一并删除。
 
         try {
             SecurityGuard.init(this);
@@ -531,6 +525,22 @@ public class MyApplication extends Application {
             LogBridge.w("MyApplication", "ExceptionReporter init failed: " + e.getMessage());
         }
 
+        // 【2026-10-16】腾讯 Bugly 崩溃上报初始化（必须在 CrashHandler 之前）
+        try {
+            com.tencent.bugly.crashreport.CrashReport.UserStrategy strategy =
+                    new com.tencent.bugly.crashreport.CrashReport.UserStrategy(this);
+            strategy.setAppVersion(BuildConfig.VERSION_NAME);
+            strategy.setAppReportDelay(10000); // 10秒延迟上报，避免启动时阻塞
+            com.tencent.bugly.crashreport.CrashReport.initCrashReport(
+                    getApplicationContext(),
+                    "4a23007223", // App ID
+                    !BuildConfig.IS_DEBUG // debug 模式：release 包关闭
+            );
+            LogCollector.getInstance().info("MyApplication", "Bugly 崩溃上报初始化完成");
+        } catch (Throwable e) {
+            LogBridge.w("MyApplication", "Bugly init failed: " + e.getMessage());
+        }
+
         try {
             CrashHandler.getInstance().init(this);
             LogCollector.getInstance().info("MyApplication", "崩溃处理器初始化完成");
@@ -545,6 +555,24 @@ public class MyApplication extends Application {
             LogCollector.getInstance().info("MyApplication", "LogServer 启动成功: " + ip + ":" + port);
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "LogServer init failed (ignore): " + e.getMessage());
+        }
+
+        // 【2026-10-16】启动本地广告剥离代理服务器（端口 10481）
+        try {
+            WebServerManager adStripServer = new WebServerManager(this, 10481);
+            adStripServer.start();
+            // start() 是异步的，等待最多 2 秒让服务器启动
+            for (int i = 0; i < 20; i++) {
+                if (adStripServer.isRunning()) break;
+                Thread.sleep(100);
+            }
+            if (adStripServer.isRunning()) {
+                LogCollector.getInstance().info("MyApplication", "广告剥离代理启动成功: 127.0.0.1:" + adStripServer.getPort());
+            } else {
+                LogBridge.w("MyApplication", "广告剥离代理启动失败，端口可能被占用");
+            }
+        } catch (Throwable e) {
+            LogBridge.w("MyApplication", "广告剥离代理启动失败 (ignore): " + e.getMessage());
         }
 
         try {

@@ -3597,6 +3597,14 @@ public class TVPlayerManager {
     private boolean surfaceReady = false;
     private boolean pendingBindPlayer = false;
 
+    /** 【2026-10-17 OTT 续播】点播退后台时暂停的位置（-1=未暂停）。
+     *  原实现退后台仍让播放器空跑（Surface 已销毁）→ 约 2s 后解码器
+     *  Unexpected runtime error(1003/1004) → 自动重试从 0 重播，
+     *  于是"退出后再进不按上次时间续播"。暂停后位置原样保留，回前台 play() 即续。 */
+    private long mVodPausedPositionMs = -1;
+    /** 与 mVodPausedPositionMs 配套的频道名：换片时必须丢弃旧位置，同一片重试则沿用 */
+    private String mVodPausedChannel = null;
+
     private boolean surfaceCallbackBound = false;
 
     // 【2026-09-29 黑屏根因修复·第二轮】当前正在排队的 Surface 恢复重试轮询；
@@ -3650,6 +3658,24 @@ public class TVPlayerManager {
                     } catch (Exception ignored) {}
 
                     retryResumeAfterSurface();
+                }
+            }
+            // 【2026-10-17 OTT 续播】退后台时暂停过 → 回前台恢复到暂停位置
+            //   （若期间播放器被重建/重试，位置会归 0，这里补一次 seek）
+            final long resumeMs = mVodPausedPositionMs;
+            if (resumeMs > 0) {
+                mVodPausedPositionMs = -1;
+                mVodPausedChannel = null;
+                final Player p = player;
+                if (playerView != null) {
+                    playerView.postDelayed(() -> {
+                        try {
+                            if (p != null && Math.abs(p.getCurrentPosition() - resumeMs) > 2000) {
+                                p.seekTo(resumeMs);
+                                LogBridge.i(TAG, "onForeground: 点播恢复到后台暂停位置 " + resumeMs + "ms");
+                            }
+                        } catch (Throwable ignored) {}
+                    }, 700);
                 }
             }
         } catch (Exception e) {
@@ -3789,6 +3815,34 @@ public class TVPlayerManager {
             surfaceReady = false;
             pendingBindPlayer = true;
             LogBridge.d(TAG, "onBackground: 已主动失效 Surface 状态（surfaceReady=false, pendingBindPlayer=true）");
+
+            // 【2026-10-17 OTT 续播】点播（源7 影视 / 源5 影视 / 咪咕回看）退后台必须
+            //   「暂停 + 解绑 Surface」：
+            //   Surface 被系统销毁而解码器仍持有引用 → 约 2s 后 MediaCodec 抛
+            //   "Unexpected runtime error"（1003/1004）→ 自动重试从头播。
+            //   实测「凡人修仙传」退出时已存 44.6s，重进却 44s→0s 重播。
+            //   现在：记住位置 + 暂停 + 解绑 Surface，回前台由 onForeground 重绑并 play()；
+            //   若期间仍走了重试，doPlay 会沿用 mVodPausedPositionMs 作为起播 seek 位置。
+            try {
+                if (player != null && player.isPlaying()
+                        && isVodPlayContext(currentChannel == null ? null : currentChannel.getMainPlayUrl())) {
+                    mVodPausedPositionMs = player.getCurrentPosition();
+                    mVodPausedChannel = (currentChannel == null) ? null : currentChannel.getName();
+                    player.pause();
+                    LogBridge.i(TAG, "onBackground: 点播已暂停，位置 " + mVodPausedPositionMs
+                            + "ms（避免退后台解码器报错后从 0 重播）");
+                    try {
+                        if (playerView != null && playerView.getPlayer() == player) {
+                            playerView.setPlayer(null);
+                            LogBridge.i(TAG, "onBackground: 已解绑 Surface（防止解码器持失效 Surface 报 1003）");
+                        }
+                    } catch (Throwable detachEx) {
+                        LogBridge.w(TAG, "onBackground 解绑 Surface 失败: " + detachEx.getMessage());
+                    }
+                }
+            } catch (Throwable pauseEx) {
+                LogBridge.w(TAG, "onBackground 暂停点播失败: " + pauseEx.getMessage());
+            }
         } catch (Exception e) {
             LogBridge.e(TAG, "切后台异常", e);
         }
@@ -4355,6 +4409,20 @@ public class TVPlayerManager {
     private void doPlay(String url, long initialSeekPosition) {
         try {
             if (player == null || url == null || url.trim().isEmpty()) return;
+            // 【2026-10-17 OTT 续播】退后台暂停过的同一部片子（含 1003 重试再次 doPlay）
+            //   → 直接把暂停位置当作起播 seek 位置；换成别的片子则丢弃，避免串台。
+            if (mVodPausedPositionMs > 0) {
+                String curName = (currentChannel == null) ? null : currentChannel.getName();
+                if (mVodPausedChannel == null || mVodPausedChannel.equals(curName)) {
+                    if (initialSeekPosition <= 0) initialSeekPosition = mVodPausedPositionMs;
+                    LogBridge.i(TAG, "doPlay: 沿用后台暂停位置 " + initialSeekPosition + "ms 续播");
+                } else {
+                    LogBridge.i(TAG, "doPlay: 频道已切换（" + mVodPausedChannel + " → " + curName
+                            + "），丢弃后台暂停位置");
+                    mVodPausedPositionMs = -1;
+                    mVodPausedChannel = null;
+                }
+            }
 
             String playUrl = url.trim();
 

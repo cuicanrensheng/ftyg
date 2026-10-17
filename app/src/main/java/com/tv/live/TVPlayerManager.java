@@ -4557,11 +4557,51 @@ public class TVPlayerManager {
         return false;
     }
 
+    /**
+     * 【2026-10-17 直播直连】判断本次播放是否属于「点播上下文」——只有点播才走广告剥离代理。
+     *
+     * 直播清单是滑动窗口，任何中间层缓存（哪怕只有几秒）都可能让播放器拿不到新分片，
+     * 触发 Source error(2000) → STATE_IDLE（黑屏）→ 3s 重试；因此直播一律直连。
+     * 点播地址带明确协议，直接按协议判定，不依赖网络探测：
+     *   renyibo-vod://（源5 影视）、afhgrj://（源7 影视）、zgyj_vod://（追光影界）、
+     *   yuntulunbo://（云图回看）。
+     */
+    private boolean isVodPlayContext(String playUrl) {
+        if (isVodSchemeUrl(playUrl)) return true;
+        return currentChannel != null && isVodSchemeUrl(currentChannel.getMainPlayUrl());
+    }
+
+    private boolean isVodSchemeUrl(String u) {
+        if (u == null || u.isEmpty()) return false;
+        return com.tv.live.renyibo.RenYiBoVodSourceLoader.isVodSchemeUrl(u)
+                || com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(u)
+                || com.tv.live.migu.source.ZgyjVodApi.isZgyjVodUrl(u)
+                || com.tv.live.migu.source.CarouselApi.isYunTuLookBackUrl(u);
+    }
+
     private void doPlayNormal(String url, long initialSeekPosition) {
         LogBridge.d(TAG, "【普通源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
-        // 【广告剥离】m3u8 点播走本地代理剥离广告
+        // 【2026-10-17】直播直连标记：直播 m3u8（非点播上下文）不走代理，并加 live offset。
+        //   实测（09:51）直连后无代理延迟打底，播放器紧贴直播边缘 → BUFFERING↔READY 每秒 20+ 次微颤；
+        //   加 6s 偏移后播放位置落后边缘 6s，缓冲可正常蓄起（与虎牙线 targetOffset=20s 同理，
+        //   直播只取 6s 折中，兼顾延迟与稳定）。
+        boolean isLiveHls = isHlsUrl(url) && url.contains(".m3u8") && !isVodPlayContext(url);
+
+        // 【广告剥离】仅 m3u8 点播走本地代理剥离广告
+        // 【2026-10-17 直播黑屏·二期修复】直播源直连，彻底绕开本地剥离代理：
+        //   代理的「剥离 + 5 分钟缓存 + 请求去重」只对点播（有 #EXT-X-ENDLIST）有意义；
+        //   直播清单是滑动窗口（9 分片×4s≈36s），只要代理按 TTL 返回旧清单，播放器就拿不到
+        //   新分片 → 卡 6s → ExoPlaybackException(Source error, code=2000) → STATE_IDLE（黑屏）
+        //   → 3s 后自动重试才恢复（用户实测"黑屏一下又立刻出画面"，周期性复发）。
+        //   直播直连后：播放器自己每 targetDuration 拉一次清单（与原生行为一致，请求量不增加），
+        //   不再有任何中间层缓存可以过期；源1/2/3/5 等所有直播源一并免疫。
+        //   点播（renyibo-vod / afhgrj / zgyj_vod / yuntulunbo）仍走代理，广告剥离与秒开缓存不变。
         if (isHlsUrl(url) && url.contains(".m3u8")) {
+            if (isLiveHls) {
+                LogBridge.i(TAG, "【广告剥离】直播源直连（跳过代理，避免清单缓存过期导致黑屏）: "
+                        + url.substring(0, Math.min(80, url.length())));
+            } else {
             WebServerManager webServer = WebServerManager.getRunningInstance();
             if (webServer == null || !webServer.isRunning()) {
                 LogBridge.w(TAG, "广告剥离代理未运行，尝试启动...");
@@ -4602,6 +4642,7 @@ public class TVPlayerManager {
                 // } catch (Exception ignored) {}
             } else {
                 LogBridge.w(TAG, "【广告剥离】代理不可用，直连原始地址");
+            }
             }
         }
 
@@ -4652,7 +4693,21 @@ public class TVPlayerManager {
                         .setConnectTimeoutMs(5000)
                         .setReadTimeoutMs(4000);
 
-                MediaItem mediaItem = MediaItem.fromUri(finalUrl);
+                MediaItem mediaItem;
+                if (isLiveHls) {
+                    // 【2026-10-17 直播直连】显式给直播一个 live offset：
+                    //   直连后没有代理的几百毫秒延迟打底，播放器会紧贴直播边缘，
+                    //   每次都只能拿到刚产出的一小段 → BUFFERING↔READY 每秒 20+ 次微颤（实测）。
+                    //   落后边缘 6s 播放，缓冲才有空间蓄起来；直播延迟 +6s（电视直播可接受）。
+                    mediaItem = new MediaItem.Builder()
+                            .setUri(finalUrl)
+                            .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
+                                    .setTargetOffsetMs(6000)
+                                    .build())
+                            .build();
+                } else {
+                    mediaItem = MediaItem.fromUri(finalUrl);
+                }
                 MediaSource mediaSource;
                 if (isHlsUrl(finalUrl)) {
                     // 🎯 HLS 直播流优化：setAllowChunklessPreparation(true) 让 m3u8

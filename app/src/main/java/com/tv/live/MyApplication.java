@@ -357,6 +357,27 @@ public class MyApplication extends Application {
             }
         }, "init-player-preheat").start();
 
+        // 【2026-10-17 启动提速】广告剥离代理（WebServerManager:10481）预启动：
+        //   原为 doPlay 时懒启动 + 主线程 Thread.sleep 等待（最多 2s），冷启动首个频道起播时
+        //   白白多付启动窗口。这里在 Application 阶段就后台拉起，起播时 getRunningInstance()
+        //   直接命中，省 ~100-300ms 并消除主线程阻塞等待风险。
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (WebServerManager.getRunningInstance() == null) {
+                        long t0 = android.os.SystemClock.elapsedRealtime();
+                        WebServerManager ws = new WebServerManager(MyApplication.this, 10481);
+                        ws.start();
+                        LogCollector.getInstance().info("MyApplication",
+                                "广告剥离代理预启动完成: " + (android.os.SystemClock.elapsedRealtime() - t0) + "ms");
+                    }
+                } catch (Throwable t) {
+                    LogBridge.w("MyApplication", "广告剥离代理预启动失败: " + t.getMessage());
+                }
+            }
+        }, "init-webserver").start();
+
         new Thread(new Runnable() {
             @Override
             public void run() {

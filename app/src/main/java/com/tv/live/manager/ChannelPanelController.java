@@ -418,7 +418,16 @@ public class ChannelPanelController {
                             return;
                         }
                         // 与两条 HTTP 线路同一增量通道：去重合并 + 分组计数刷新 + 去抖增量刷新
-                        appendChannelsIncremental(incoming, "虎牙缓存(异步)");
+                        // 【2026-10-17 启动提速】原为「立即合并」——608 条合并 + 分组刷新 + 通知刷新
+                        //   恰好落在冷启动起播瞬间（首帧 0~2s 窗口），与播放器竞争主线程、并触发
+                        //   3MB 级 GC（实测 786ms）。改为延迟 2 秒合并：基础列表先展示，虎牙分组稍后合入。
+                        final java.util.List<Channel> mergePayload = incoming;
+                        panelLayout.postDelayed(new Runnable() {
+                            @Override public void run() {
+                                if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                                appendChannelsIncremental(mergePayload, "虎牙缓存(异步)");
+                            }
+                        }, 2000);
 
                             // 【2026-10-16】有缓存时延迟5秒后再后台刷新，避免与视频播放竞争带宽
                             LogBridge.d("ChannelPanel", "虎牙缓存命中，延迟5秒后后台刷新");

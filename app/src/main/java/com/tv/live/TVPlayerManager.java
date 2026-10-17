@@ -230,6 +230,8 @@ public class TVPlayerManager {
      */
     private long severeStallTime = 0;
     private int retryCount = 0;
+    /** 【2026-10-17 启动体验】最近一次「播放就绪」的时刻（elapsedRealtime）；0 = 本次会话尚未就绪过 */
+    private long lastPlayReadyAtMs = 0;
     private int chanxiangRefreshCount = 0;
     /** 源5(爱其意)直链重拉计数，每频道最多触发 {@link #MAX_RENYIBO_REFRESH} 次，防循环 */
     private int renyiboRefreshCount = 0;
@@ -1088,6 +1090,8 @@ public class TVPlayerManager {
                 if (state == Player.STATE_READY) {
                     logPlaybackDebug("播放就绪 (STATE_READY)");
                     updateWakeLock(true);
+                    // 【2026-10-17 启动体验】记录就绪时刻（BUFFERING 提示的抑制窗口用）
+                    lastPlayReadyAtMs = android.os.SystemClock.elapsedRealtime();
 
                     // 【P0-B】首帧已出，此刻再初始化虎牙 SDK，避免与首帧抢 CPU/IO
                     try {
@@ -1128,6 +1132,15 @@ public class TVPlayerManager {
                 } else if (state == Player.STATE_BUFFERING) {
                     logPlaybackDebug("缓冲中 (STATE_BUFFERING)");
                     if (listener != null) listener.onBuffering();
+                    // 【2026-10-17 启动体验】冷启动/切台等待期显示频道号大字，避免纯黑屏无反馈；
+                    //   仅当「距上次就绪 > 8s」（= 新起播/切换/长时间断流）才显示，播放中的
+                    //   瞬时缓冲抖动不会弹提示。
+                    try {
+                        long nowBuf = android.os.SystemClock.elapsedRealtime();
+                        if (nowBuf - lastPlayReadyAtMs > 8000) {
+                            showChannelAndAutoHide();
+                        }
+                    } catch (Exception ignored) {}
                     lastPositionUpdateTime = System.currentTimeMillis();
                     bufferCount++;
                     if (!isStalled) {
@@ -3743,7 +3756,9 @@ public class TVPlayerManager {
                             } catch (Exception ignored) {}
 
                             if (pendingBindPlayer && retryCount[0] < maxRetries) {
-                                mHandler.postDelayed(this, 300);
+                                // 【2026-10-17 启动提速】轮询间隔 300→100ms：冷启动 Surface 就绪后
+                                //   最快 100ms 内命中恢复（原 300ms + 主线程忙时的排队延迟 ≈ 0.6-0.7s）
+                                mHandler.postDelayed(this, 100);
                             } else if (retryCount[0] >= maxRetries) {
                                 LogBridge.w(TAG, "Surface恢复重试已达上限(" + maxRetries + "次)，停止重启");
                                 pendingBindPlayer = false;
@@ -3756,7 +3771,8 @@ public class TVPlayerManager {
                 }
             };
             pendingRetryRunnable = retryRunnable;
-            mHandler.postDelayed(retryRunnable, 300);
+            // 【2026-10-17 启动提速】首次调度同样 300→100ms
+            mHandler.postDelayed(retryRunnable, 100);
         } catch (Exception e) {
             LogBridge.e(TAG, "启动恢复重试异常", e);
         }

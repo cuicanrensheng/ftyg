@@ -700,16 +700,28 @@ public class M3u8AdStripper {
                 if (numMatcher.find()) {
                     String numStr = numMatcher.group(1);
                     String prefix = fname.substring(0, fname.length() - numStr.length());
-                    int nextNum = Integer.parseInt(numStr) + blockSegCounts[i];
-                    String predictedName = prefix + String.format("%0" + numStr.length() + "d", nextNum) + ".ts";
-                    // 检查下一个块的第一个文件名是否匹配预测
-                    String nextBlockFirstUrl = "";
-                    String[] nextBlockLines = blocks[i + 1].split("\n");
-                    for (String nl : nextBlockLines) {
-                        if (!nl.startsWith("#") && !nl.isEmpty()) { nextBlockFirstUrl = nl; break; }
+                    // 【2026-10-17 源7 播放失败修复】文件名数字可能极长（源7 部分 CDN 用 20 位
+                    //   时间戳命名，如 17873200017900000000 > Integer.MAX），原 Integer.parseInt
+                    //   会抛 NumberFormatException 并把整段剥离带崩 → 回退"原文"→ 相对分片被解析到
+                    //   本地代理 → 取到 HTML → "Cannot find sync byte" → errorCode=3001 播放失败。
+                    //   这里改为安全解析，解析不了就跳过"文件名预测"这一维度（不影响其它广告判据）。
+                    int nextNum = -1;
+                    try {
+                        nextNum = Integer.parseInt(numStr) + blockSegCounts[i];
+                    } catch (NumberFormatException ignored) {
+                        nextNum = -1;
                     }
-                    if (!nextBlockFirstUrl.isEmpty() && !nextBlockFirstUrl.endsWith(predictedName)) {
-                        filenamePredictionMismatch = true;
+                    if (nextNum >= 0) {
+                        String predictedName = prefix + String.format("%0" + numStr.length() + "d", nextNum) + ".ts";
+                        // 检查下一个块的第一个文件名是否匹配预测
+                        String nextBlockFirstUrl = "";
+                        String[] nextBlockLines = blocks[i + 1].split("\n");
+                        for (String nl : nextBlockLines) {
+                            if (!nl.startsWith("#") && !nl.isEmpty()) { nextBlockFirstUrl = nl; break; }
+                        }
+                        if (!nextBlockFirstUrl.isEmpty() && !nextBlockFirstUrl.endsWith(predictedName)) {
+                            filenamePredictionMismatch = true;
+                        }
                     }
                 }
             }

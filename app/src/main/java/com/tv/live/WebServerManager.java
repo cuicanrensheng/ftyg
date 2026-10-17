@@ -330,8 +330,12 @@ public class WebServerManager {
                             try {
                                 stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
                             } catch (Exception stripEx) {
-                                LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
-                                stripped = finalContent;
+                                LogBridge.e("WebServer", "广告剥离异常，返回原文(已绝对化): " + stripEx.getMessage());
+                                try {
+                                    stripped = M3u8AdStripper.resolveAllUrls(finalContent, finalBaseUrl);
+                                } catch (Exception rex) {
+                                    stripped = finalContent;
+                                }
                             }
                             int afterSegments = countSegmentsInM3u8(stripped);
                             LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个");
@@ -718,8 +722,12 @@ public class WebServerManager {
                     try {
                         stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
                     } catch (Exception stripEx) {
-                        LogBridge.e("WebServer", "广告剥离异常，返回原文: " + stripEx.getMessage());
-                        stripped = finalContent;
+                        LogBridge.e("WebServer", "广告剥离异常，返回原文(已绝对化): " + stripEx.getMessage());
+                        try {
+                            stripped = M3u8AdStripper.resolveAllUrls(finalContent, finalBaseUrl);
+                        } catch (Exception rex) {
+                            stripped = finalContent;
+                        }
                     }
                     putM3u8Cache(url, stripped);
                     LogBridge.i("WebServer", "[预加载] 完成，存入缓存");
@@ -768,7 +776,15 @@ public class WebServerManager {
                         stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
                     } catch (Exception stripEx) {
                         LogBridge.e("WebServer", "预剥离异常，返回原文: " + stripEx.getMessage());
-                        stripped = finalContent;
+                        // 【2026-10-17 源7 播放失败修复·兜底】即使剥离抛异常，也必须把相对分片
+                        //   地址转成绝对地址：否则播放器以「本地代理 URL」为 base 解析相对路径，
+                        //   请求打到 127.0.0.1:1048x → 返回 HTML → "Cannot find sync byte"（3001）。
+                        try {
+                            stripped = M3u8AdStripper.resolveAllUrls(finalContent, finalBaseUrl);
+                        } catch (Exception resolveEx) {
+                            LogBridge.e("WebServer", "回退绝对化也失败: " + resolveEx.getMessage());
+                            stripped = finalContent;
+                        }
                     }
                     putM3u8Cache(finalUrl, stripped);
                     LogBridge.i("WebServer", "[预剥离] 完成，存入缓存");
@@ -811,7 +827,12 @@ public class WebServerManager {
                     LogBridge.i("WebServer", "[超时降级] 后台剥离完成，已存入缓存");
                 } catch (Exception ignored) {}
             });
-            return content; // 返回原文
+            // 【2026-10-17】返回原文前也要把相对分片转绝对，否则播放器会拿本地代理地址当 base
+            try {
+                return M3u8AdStripper.resolveAllUrls(content, baseUrl);
+            } catch (Exception ignored) {
+                return content;
+            }
         }
     }
     /**

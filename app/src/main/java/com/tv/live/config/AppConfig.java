@@ -58,6 +58,26 @@ public class AppConfig {
         appSp.edit().putInt("source_mode", mode).apply();
     }
 
+    // ==================== 【2026-10-17 OTT 清晰度】 ====================
+
+    /** 点播最高清晰度（视频高度 px）；0 = 自动（不封顶） */
+    public int getVodMaxHeight() {
+        return appSp.getInt("vod_max_height", 0);
+    }
+
+    public void setVodMaxHeight(int height) {
+        appSp.edit().putInt("vod_max_height", height).apply();
+    }
+
+    /** 记住用户上次选择的清晰度档位（用于菜单打勾） */
+    public int getVodQualityChoice() {
+        return appSp.getInt("vod_quality_choice", 0);
+    }
+
+    public void setVodQualityChoice(int height) {
+        appSp.edit().putInt("vod_quality_choice", height).apply();
+    }
+
     public String getScreenRatio() {
         return appSp.getString("screen_ratio", "全屏");
     }

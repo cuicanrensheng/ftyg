@@ -27,6 +27,8 @@ import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.PlaybackException;
+import androidx.media3.common.TrackSelectionParameters;
+import androidx.media3.common.Tracks;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.DataSpec;
 import androidx.media3.common.Player;
@@ -7011,6 +7013,53 @@ public class TVPlayerManager {
         try {
             if (player != null) player.seekTo(positionMs);
         } catch (Exception ignored) {}
+    }
+
+    // ==================== 【2026-10-17 OTT 清晰度切换】 ====================
+
+    /**
+     * 当前流里真实存在的视频高度（去重、降序）。
+     *
+     * <p>取自 {@link Player#getCurrentTracks()}，因此只列出「这条流真的有」的档位，
+     * 避免用户选了不存在的 720P 导致解码器拿不到轨道。
+     */
+    public java.util.List<Integer> getAvailableVideoHeights() {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        try {
+            if (player == null) return out;
+            Tracks tracks = player.getCurrentTracks();
+            for (Tracks.Group g : tracks.getGroups()) {
+                if (g.getType() != C.TRACK_TYPE_VIDEO) continue;
+                for (int i = 0; i < g.length; i++) {
+                    Format f = g.getTrackFormat(i);
+                    if (f.height > 0 && !out.contains(f.height)) out.add(f.height);
+                }
+            }
+            Collections.sort(out, Collections.reverseOrder());
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "取清晰度档位失败: " + t.getMessage());
+        }
+        return out;
+    }
+
+    /**
+     * 限制最高清晰度：0 = 自动（不限制）；其它值 = 只允许 ≤ 该高度的视频轨。
+     * 采用「封顶自适应」而不是硬锁单档——弱网时仍能在封顶以下继续降到更低档，不会卡死。
+     */
+    public void setMaxVideoHeight(int height) {
+        try {
+            if (trackSelector == null) return;
+            TrackSelectionParameters.Builder b = trackSelector.getParameters().buildUpon();
+            if (height <= 0) {
+                b.setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE);
+            } else {
+                b.setMaxVideoSize(Integer.MAX_VALUE, height);
+            }
+            trackSelector.setParameters(b.build());
+            LogBridge.i(TAG, "【清晰度】限制设为 " + (height <= 0 ? "自动" : height + "p"));
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "设置清晰度失败: " + t.getMessage());
+        }
     }
 
     public void release() {

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  启动窗口背景（2026-10-17 启动图方案）
+  作用：从「点击图标」到「Activity 首帧」之间，系统启动预览窗(Starting Window)直接绘制本 drawable，
+        消除原先 windowBackground=纯黑 + windowDisablePreview=true 造成的启动黑屏。
+  构成：底色 #070A0F（与启动图四角颜色一致，保证接缝无痕）+ 启动图原尺寸居中。
+  注：图放 drawable-nodpi，bitmap gravity=center 表示 1:1 像素居中（1080p 电视即全屏 1:1）。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="#070A0F" />
+    </item>
+    <item android:gravity="center">
+        <bitmap
+            android:src="@drawable/splash_launch"
+            android:gravity="center" />
+    </item>
+</layer-list>

@@ -71,6 +71,14 @@ public class MainActivity extends AppCompatActivity {
     private ScreenRatioManager screenRatioManager;
     private GestureManager gestureManager;
     private PlayerStateListenerImpl playerStateListener;
+    /** 【2026-10-17 启动图】App 内启动覆盖层（播放就绪/保底超时/用户按键后淡出） */
+    private View splashOverlay;
+    private boolean splashDismissed = false;
+    /** 【2026-10-17 启动图】保底自动淡出时长 ms（就绪信号优先；此为极端兜底）
+     *  实测：正常冷启动「就绪」约在启动图显示后 8s 左右（含主线程布局与缓冲），
+     *  保底设 9s 让就绪信号先到，实现「淡出即画面」；停留列表/播放异常时由本兜底放行。 */
+    private static final long SPLASH_FALLBACK_MS = 9000;
+    private static final long SPLASH_FADE_MS = 350;
     private DisplayManager displayManager;
     private InfoDisplayManager infoDisplayManager;
     private ChannelPanelController channelPanelController;
@@ -249,6 +257,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         displayManager.applyFullScreen();
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // 【2026-10-17 启动图】App 内启动覆盖层初始化（冷启动展示，就绪/超时/按键后淡出）
+        setupSplashOverlay(savedInstanceState);
 
         logScrollView = findViewById(R.id.log_scroll_view);
         tvLogContent = findViewById(R.id.tv_log_content);
@@ -439,6 +450,13 @@ public class MainActivity extends AppCompatActivity {
     private boolean panelOpenOnBackDown = false;
 
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // 【2026-10-17 启动图】覆盖层显示期间：任意按键 → 立即淡出并消费本次事件
+        //（置于最前，优先于面板/播放器的按键处理；淡出后原有逻辑不受影响）
+        if (!splashDismissed && splashOverlay != null && event != null
+                && event.getAction() == KeyEvent.ACTION_DOWN) {
+            dismissSplashOverlay("用户按键 keyCode=" + event.getKeyCode());
+            return true;
+        }
         if (channelPanelController == null || mPlayerManager == null || event == null) {
             return super.dispatchKeyEvent(event);
         }
@@ -770,6 +788,58 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // =====================================================================
+    // 【2026-10-17 启动图】App 内启动覆盖层控制
+    // 覆盖「Activity 首帧 → 播放就绪」阶段（首屏布局/数据加载/缓冲），
+    // 三路信号触发淡出：① 首次播放就绪  ② 保底超时 SPLASH_FALLBACK_MS
+    //                  ③ 用户按键/点击（首次按键由 dispatchKeyEvent 消费）。
+    // 与系统启动预览窗（Theme windowBackground=splash_window_bg）衔接，
+    // 实现「点击图标 → 启动图全程覆盖 → 淡出至画面」无黑屏体验。
+    // =====================================================================
+    private void setupSplashOverlay(Bundle savedInstanceState) {
+        splashOverlay = findViewById(R.id.splash_overlay);
+        if (splashOverlay == null) return;
+        // Activity 重建（配置变化等非冷启动场景）：跳过启动图，避免打断用户
+        if (savedInstanceState != null) {
+            splashOverlay.setVisibility(View.GONE);
+            splashDismissed = true;
+            return;
+        }
+        // 保底：超时无条件淡出（覆盖「停留列表页未播放 / 播放异常」等场景）
+        splashOverlay.postDelayed(() -> dismissSplashOverlay("保底超时"), SPLASH_FALLBACK_MS);
+        // 触摸点击（触摸屏设备）→ 理解为「想操作」，立即放行
+        splashOverlay.setOnClickListener(v -> dismissSplashOverlay("用户点击"));
+    }
+
+    /** 【2026-10-17 启动图】淡出启动覆盖层（幂等）：动画结束后 GONE 并置空图片引用。 */
+    private void dismissSplashOverlay(String reason) {
+        if (splashDismissed) {
+            try {
+                LogBridge.d("MainActivity", "【启动图】已淡出，忽略触发: " + reason);
+            } catch (Throwable ignored) {
+            }
+            return;
+        }
+        splashDismissed = true;
+        try {
+            LogBridge.i("MainActivity", "【启动图】淡出覆盖层: " + reason);
+        } catch (Throwable ignored) {
+        }
+        if (splashOverlay == null) return;
+        splashOverlay.animate()
+                .alpha(0f)
+                .setDuration(SPLASH_FADE_MS)
+                .withEndAction(() -> {
+                    splashOverlay.setVisibility(View.GONE);
+                    // 置空 ImageView 图片引用（窗口背景层由系统持有，属正常）
+                    View img = splashOverlay.findViewById(R.id.splash_image);
+                    if (img instanceof android.widget.ImageView) {
+                        ((android.widget.ImageView) img).setImageDrawable(null);
+                    }
+                })
+                .start();
+    }
+
     private void initInfoDisplayManager() {
         TextView tv_channel_num = findViewById(R.id.tv_channel_num);
         View info_bar = findViewById(R.id.info_bar);
@@ -927,6 +997,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         playerStateListener = new PlayerStateListenerImpl(this);
+        // 【2026-10-17 启动图】首次播放就绪 → 淡出启动覆盖层（dismiss 幂等）
+        playerStateListener.setOnReadyCallback(() ->
+                runOnUiThread(() -> dismissSplashOverlay("播放就绪")));
         mPlayerManager.setOnPlayStateListener(playerStateListener);
         mPlayerManager.setOnLiveInfoUpdateListener(info -> {
             infoDisplayManager.updateLiveInfo(info);

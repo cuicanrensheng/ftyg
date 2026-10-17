@@ -14,12 +14,22 @@ public class PlayerStateListenerImpl implements TVPlayerManager.OnPlayStateListe
 
     private String currentChannelName = "";
 
+    /** 【2026-10-17 启动图】「本次启动首次播放就绪」回调，供 MainActivity 淡出启动覆盖层；可为 null。 */
+    private Runnable onReadyCallback;
+    /** 【2026-10-17 启动图】仅通知一次（首次就绪即代表界面/播放已可展示）。 */
+    private boolean readyNotified = false;
+
     public PlayerStateListenerImpl(Context context) {
         this.context = context.getApplicationContext();
     }
 
     public void setCurrentChannelName(String name) {
         this.currentChannelName = name;
+    }
+
+    /** 【2026-10-17 启动图】注册「首次播放就绪」回调（幂等，仅触发一次）。 */
+    public void setOnReadyCallback(Runnable cb) {
+        this.onReadyCallback = cb;
     }
 
     @Override
@@ -34,6 +44,14 @@ public class PlayerStateListenerImpl implements TVPlayerManager.OnPlayStateListe
 
     @Override
     public void onPlayReady() {
+        // 【2026-10-17 启动图】首次就绪 → 通知 UI 淡出启动覆盖层
+        if (!readyNotified && onReadyCallback != null) {
+            readyNotified = true;
+            try {
+                onReadyCallback.run();
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @Override

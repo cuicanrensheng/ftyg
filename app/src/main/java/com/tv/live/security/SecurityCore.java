@@ -246,6 +246,17 @@ public final class SecurityCore {
     public static final int C_API_GITV_AUTH = 16;  // GITV 点播鉴权端点前缀
     public static final int C_API_GITV_KEY  = 17;  // GITV 鉴权固定 key（128 字符）
 
+    // ---- 【2026-10-17 第四批】源5 加密线路「服务端解析」端点（见 VodLineResolver）----
+    public static final int C_VODP_VERTIFY = 18;   // vertify.php（官方① BBA/deja-）
+    public static final int C_VODP_JXXH    = 19;   // jxxh.php（官方③ ZY-icial_/ZY-anime_）
+    public static final int C_VODP_ZSYZX   = 20;   // zsyzx.php（官方⑥ yzx-）
+    public static final int C_VODP_4KYS    = 21;   // 4kys.php（高清① 4kvm.top/play）
+    public static final int C_VODP_NBY     = 22;   // 43.248.96.62 /api（官方② NBY）
+    public static final int C_VODP_CO      = 23;   // 43.248.102.96 /api（官方⑤ co_）
+    public static final int C_VODP_ACE     = 24;   // 175.24.181.180:5000 /api/jiexi（Ace）
+    public static final int C_VODP_YKTX    = 25;   // 118.107.11.4 /jx（官方④ YKTX）
+    public static final int C_VODP_DMM     = 26;   // 49.233.180.127:7788/dmm.php（动漫专线 ZY-anime_）
+
     /**
      * 取加密常量明文。SO 不可用时返回 null（调用方按「该源不可用」降级）。
      * 不可缓存到 static final：init() 要 loadLibrary，可能耗时。

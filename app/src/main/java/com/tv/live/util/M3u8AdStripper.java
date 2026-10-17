@@ -69,6 +69,13 @@ public class M3u8AdStripper {
     // 广告总时长熔断阈值（秒）：超过此值放弃剥离
     private static final int AD_TOTAL_DURATION_FUSE = 180;
 
+    // 【2026-10-16 优化】广告段URL缓存：记录已识别的广告URL特征，重复出现直接拦截
+    private static final java.util.Set<String> adUrlCache = java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+    private static final int AD_URL_CACHE_MAX = 500; // 缓存上限
+
+    // 【2026-10-16 优化】超短时长阈值：低于此值的块几乎肯定是广告（开源方案dytt-cine验证）
+    private static final int ULTRA_SHORT_DURATION = 6; // 秒
+
     // ========================================================================
     // 主入口：剥离 m3u8 中的广告
     // ========================================================================
@@ -95,6 +102,14 @@ public class M3u8AdStripper {
         long startTime = System.currentTimeMillis();
         // 归一化换行符
         String content = m3u8Content.replace("\r\n", "\n");
+
+        // 【2026-10-17 源5 官方⑥ 防诱饵】无条件先做「碎分片剔除」——
+        //   不参与下面的算法选择（无论走到哪条分支都必须先生效）。
+        content = stripTinyByteRangeSegments(content);
+        // 【2026-10-17 源5 官方⑥ AES 零 IV 归一】同族清单：KEY 无 IV 属性但服务端按 IV=0
+        //   加密（实测 5 个分片 IV=0 全部解出 TS 同步字）。按 RFC 8216 / ExoPlayer 解析器，
+        //   无 IV 属性时用「媒体序号」当 IV → 第 2 块起（seq=1,2…）必解错。显式注入 IV=0。
+        content = injectZeroIvForAesKey(content);
 
         // 统计分片数量
         int segmentCount = countSegments(content);
@@ -186,6 +201,90 @@ public class M3u8AdStripper {
         LogBridge.i(TAG, "【算法选择⑤】所有算法均未命中，返回原文，不影响播放");
         LogBridge.i(TAG, "========== 广告剥离流程结束（未命中）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
         return content;
+    }
+
+    // ========================================================================
+    // 【2026-10-17 源5 官方⑥（yzx 线）防诱饵】碎分片剔除
+    // ========================================================================
+
+    /** 碎分片阈值：`#EXT-X-BYTERANGE` 长度小于该值的条目视为「诱饵」整条剔除。
+     *  实测依据（爱其意官方⑥ yzx 线 playlist）：真分片 58KB~6MB（AES-128 + IV=0 +
+     *  字节范围藏在 B 站 CDN 的 .png 里），唯独首条为 16 字节、内容是非密文的 PNG 魔数——
+     *  严格播放器（ExoPlayer）对其做 AES 解密必然 BadPaddingException → 整条播放失败。
+     *  剔除后其余分片解密不受影响（该线实测 IV 恒为 0，与媒体序号无关）。 */
+    private static final int TINY_BYTERANGE_THRESHOLD = 4096;
+
+    /** AES-128 零 IV（16 字节全 0，HLS hex 表示）。 */
+    private static final String ZERO_IV_HEX = "0x00000000000000000000000000000000";
+
+    /**
+     * 给「METHOD=AES-128 且无 IV 属性」的 #EXT-X-KEY 行注入显式 {@code IV=0x00…}。
+     *
+     * <p>背景：官方⑥（yzx 线）的清单无 IV 属性，但服务端对全部分片都按 <b>IV=0</b> 加密
+     * （2026-10-17 实测 idx=1/5/50/100/200 全部 IV=0 解出 TS 0x47）。而 RFC 8216 与
+     * ExoPlayer 解析器在无 IV 属性时用「媒体序号」推导 IV → 第 2 块起（seq=1,2,…）必解错。
+     * 注入显式零 IV 后，播放器与服务器口径一致，全部分片可解。
+     * （仅改写 KEY 行文本；有 IV 属性的清单原样保留。）
+     */
+    private static String injectZeroIvForAesKey(String content) {
+        if (content == null || !content.contains("#EXT-X-KEY")) return content;
+        String[] lines = content.split("\n", -1);
+        boolean changed = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.startsWith("#EXT-X-KEY")
+                    && line.contains("METHOD=AES-128")
+                    && !line.contains("IV=")) {
+                lines[i] = line + ",IV=" + ZERO_IV_HEX;
+                changed = true;
+                LogBridge.i(TAG, "【防诱饵】注入零 IV → " + lines[i].substring(0, Math.min(120, lines[i].length())));
+            }
+        }
+        if (!changed) return content;
+        StringBuilder sb = new StringBuilder(content.length() + 64);
+        for (int i = 0; i < lines.length; i++) {
+            sb.append(lines[i]);
+            if (i < lines.length - 1) sb.append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String stripTinyByteRangeSegments(String content) {
+        if (content == null || !content.contains("#EXT-X-BYTERANGE")) return content;
+        String[] lines = content.split("\n", -1);
+        StringBuilder sb = new StringBuilder(content.length());
+        int removed = 0;
+        int i = 0;
+        while (i < lines.length) {
+            String line = lines[i];
+            // 条目 = "#EXTINF:..." [+ "#EXT-X-BYTERANGE:..." ] + URL行
+            if (line.startsWith("#EXTINF:") && i + 2 < lines.length
+                    && lines[i + 1].startsWith("#EXT-X-BYTERANGE:")) {
+                String spec = lines[i + 1].substring("#EXT-X-BYTERANGE:".length()).trim();
+                String url = lines[i + 2];
+                long len = -1L;
+                try {
+                    int at = spec.indexOf('@');
+                    len = Long.parseLong((at >= 0 ? spec.substring(0, at) : spec).trim());
+                } catch (Throwable ignored) {
+                }
+                if (len >= 0 && len < TINY_BYTERANGE_THRESHOLD && !url.startsWith("#")) {
+                    LogBridge.w(TAG, "【防诱饵】剔除碎分片条目 len=" + len + "B url="
+                            + url.substring(0, Math.min(60, url.length())));
+                    removed++;
+                    i += 3;
+                    continue;
+                }
+            }
+            sb.append(line);
+            if (i < lines.length - 1) sb.append('\n');
+            i++;
+        }
+        if (removed > 0) {
+            LogBridge.i(TAG, "【防诱饵】共剔除碎分片 " + removed + " 个（阈值 <"
+                    + TINY_BYTERANGE_THRESHOLD + " 字节）");
+        }
+        return sb.toString();
     }
 
     /**
@@ -366,7 +465,33 @@ public class M3u8AdStripper {
         if (validBlockCount > 0) {
             avgSegCount /= validBlockCount;
             avgDuration = avgDuration.divide(new BigDecimal(validBlockCount), 2, RoundingMode.HALF_UP);
+
         }
+
+        // 【2026-10-16 优化】全局URL长度聚类：广告块URL长度常与正片不同（样本7/8广告URL长度=105）
+        java.util.Map<Integer, Integer> urlLenCount = new java.util.HashMap<>();
+        int[] blockUrlLens = new int[blocks.length];
+        for (int bi = 0; bi < blocks.length; bi++) {
+            String[] blines = blocks[bi].split("\n");
+            for (String bline : blines) {
+                String btrim = bline.trim();
+                if (!btrim.startsWith("#") && !btrim.isEmpty()) {
+                    blockUrlLens[bi] = btrim.length();
+                    urlLenCount.merge(btrim.length(), 1, Integer::sum);
+                    break;
+                }
+            }
+        }
+        int dominantUrlLen = 0;
+        int dominantUrlLenCount = 0;
+        for (java.util.Map.Entry<Integer, Integer> entry : urlLenCount.entrySet()) {
+            if (entry.getValue() > dominantUrlLenCount) {
+                dominantUrlLenCount = entry.getValue();
+                dominantUrlLen = entry.getKey();
+            }
+        }
+        double dominantUrlLenRatio = validBlockCount > 0 ? (double) dominantUrlLenCount / validBlockCount : 0;
+        LogBridge.d(TAG, "【算法选择①】URL长度统计: 主流长度=" + dominantUrlLen + ", 占比=" + String.format("%.1f%%", dominantUrlLenRatio * 100));
         LogBridge.d(TAG, "【算法选择①】块统计: 有效块=" + validBlockCount + ", 平均分片数=" + avgSegCount + ", 平均时长=" + avgDuration + "s");
 
         LinkedList<String> keepBlocks = new LinkedList<>();  // 保留的块（正片）
@@ -476,12 +601,14 @@ public class M3u8AdStripper {
 
             // 【2026-10-16 优化】多维度综合评分判定广告块
             // 维度1: 块内分片数异常（26样本统计：广告块固定3个分片，正片5-10个）
+            // 【2026-10-16 优化】分片数异常阈值从50%放宽到60%（冰剑的魔术师块14: 3分片未识别）
             boolean segCountAnomaly = blockSegCounts[i] > 0 && blockSegCounts[i] <= 3 &&
-                    blockSegCounts[i] < avgSegCount / 2;
-            boolean exactlyThreeSeg = blockSegCounts[i] == 3 && blockSegCounts[i] < avgSegCount / 2;
+                    blockSegCounts[i] < avgSegCount * 0.6;
+            boolean exactlyThreeSeg = blockSegCounts[i] == 3 && blockSegCounts[i] <= avgSegCount * 0.6;
             // 维度2: 时长异常（广告块时长偏短）
+            // 【2026-10-16 优化】时长异常阈值从50%放宽到65%（冰剑的魔术师块14: 14.5秒未识别）
             boolean durationAnomaly = blockDurations[i] != null &&
-                    blockDurations[i].compareTo(avgDuration.divide(new BigDecimal(2), 2, RoundingMode.HALF_UP)) < 0 &&
+                    blockDurations[i].compareTo(avgDuration.multiply(new BigDecimal("0.65")).setScale(2, RoundingMode.HALF_UP)) < 0 &&
                     blockDurations[i].intValue() < 30;
             // 维度3: 文件名不连续（广告块文件名通常不连续）
             boolean filenameDiscontinuous = !blockFilenameContinuous[i];
@@ -490,12 +617,42 @@ public class M3u8AdStripper {
             // 维度5: URL长度突变
             boolean urlLenAnomaly = lastUrl.length() > 0 && lastUrlLen != curUrlLen &&
                     lastUrlLen == nextUrlLen && nextUrlLen > 0;
-            // 维度6: 相邻小块联合判定（连续两个<=3分片的小块，通常是广告）
+            // 【2026-10-16 优化】维度5.5: 全局URL长度聚类（广告块URL长度与主流不同，且主流占比>60%）
+            boolean globalUrlLenAnomaly = dominantUrlLenRatio > 0.6 && curUrlLen > 0 && curUrlLen != dominantUrlLen;
+            // 维度6: 相邻小块联合判定（优化：≤5分片且<30秒为小块，连续3个以上判定为广告群）
+            // 【2026-10-16 优化】小块阈值改为相对值，避免小块源误判
+            double smallSegThreshold = avgSegCount * 0.6;
+            BigDecimal smallDurationThreshold = avgDuration.multiply(new BigDecimal("0.6")).setScale(2, RoundingMode.HALF_UP);
+            boolean isSmallBlock = blockSegCounts[i] > 0 &&
+                    blockSegCounts[i] < smallSegThreshold &&
+                    blockDurations[i] != null && blockDurations[i].compareTo(smallDurationThreshold) < 0;
             boolean adjacentSmallBlock = false;
-            if (blockSegCounts[i] > 0 && blockSegCounts[i] <= 3) {
-                boolean prevSmall = (i > 0 && blockSegCounts[i - 1] > 0 && blockSegCounts[i - 1] <= 3);
-                boolean nextSmall = (i + 1 < blocks.length && blockSegCounts[i + 1] > 0 && blockSegCounts[i + 1] <= 3);
+            if (isSmallBlock) {
+                boolean prevSmall = (i > 0 && blockSegCounts[i - 1] > 0 && blockSegCounts[i - 1] < smallSegThreshold &&
+                        blockDurations[i - 1] != null && blockDurations[i - 1].compareTo(smallDurationThreshold) < 0);
+                boolean nextSmall = (i + 1 < blocks.length && blockSegCounts[i + 1] > 0 && blockSegCounts[i + 1] < smallSegThreshold &&
+                        blockDurations[i + 1] != null && blockDurations[i + 1].compareTo(smallDurationThreshold) < 0);
                 adjacentSmallBlock = prevSmall || nextSmall;
+            }
+            // 【2026-10-16 优化】连续小块群检测：连续3个以上小块，群内所有块+3分
+            // 【2026-10-16 修复】全局小块源判断：如果平均分片数<=8，说明该源本身就是小块命名，禁用连续小块群
+            boolean globalSmallBlockSource = avgSegCount <= 8;
+            boolean inSmallBlockGroup = false;
+            if (!globalSmallBlockSource && isSmallBlock) {
+                int consecutiveSmall = 1;
+                // 向前统计连续小块
+                for (int j = i - 1; j >= 0; j--) {
+                    if (blockSegCounts[j] > 0 && blockSegCounts[j] < smallSegThreshold && blockDurations[j] != null && blockDurations[j].compareTo(smallDurationThreshold) < 0) {
+                        consecutiveSmall++;
+                    } else break;
+                }
+                // 向后统计连续小块
+                for (int j = i + 1; j < blocks.length; j++) {
+                    if (blockSegCounts[j] > 0 && blockSegCounts[j] < smallSegThreshold && blockDurations[j] != null && blockDurations[j].compareTo(smallDurationThreshold) < 0) {
+                        consecutiveSmall++;
+                    } else break;
+                }
+                inSmallBlockGroup = consecutiveSmall >= 3;
             }
             // 维度7: 文件名哈希长度检测（广告块文件名多为32位MD5哈希，正片多为数字递增）
             // 【2026-10-16】仅当该源不是哈希命名主导时才启用，否则所有正片都会被误判
@@ -521,8 +678,49 @@ public class M3u8AdStripper {
             if (filenameDiscontinuous) adScore++;
             if (originAnomaly) adScore++;
             if (urlLenAnomaly) adScore++;
+            if (globalUrlLenAnomaly) adScore += 2;  // 【2026-10-16 优化】全局URL长度差异，权重+2
             if (adjacentSmallBlock) adScore += 2;
+            if (inSmallBlockGroup) adScore += 3;  // 【2026-10-16 优化】连续3个以上小块群，群内都是广告
             if (filenameHashAnomaly) adScore++;
+            // 【2026-10-16 优化1】超短时长：低于6秒的块几乎肯定是广告（dytt-cine开源方案验证）
+            boolean ultraShortDuration = blockDurations[i] != null && blockDurations[i].intValue() < ULTRA_SHORT_DURATION;
+            if (ultraShortDuration) adScore += 2;
+
+            // 【2026-10-16 优化2】文件名连续性预测：预测下一个文件名，不匹配则加分（油猴中文网开源算法）
+            boolean filenamePredictionMismatch = false;
+            if (!hashFilenameDominant && blockUrls.size() > 0 && i + 1 < blocks.length) {
+                String curName = blockUrls.get(0);
+                int slashIdx = curName.lastIndexOf('/');
+                String fname = slashIdx >= 0 ? curName.substring(slashIdx + 1) : curName;
+                int qIdx = fname.indexOf('?');
+                if (qIdx > 0) fname = fname.substring(0, qIdx);
+                fname = fname.replace(".ts", "").replace(".m4s", "");
+                // 尝试提取数字后缀并预测下一个
+                java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("(\\d+)$").matcher(fname);
+                if (numMatcher.find()) {
+                    String numStr = numMatcher.group(1);
+                    String prefix = fname.substring(0, fname.length() - numStr.length());
+                    int nextNum = Integer.parseInt(numStr) + blockSegCounts[i];
+                    String predictedName = prefix + String.format("%0" + numStr.length() + "d", nextNum) + ".ts";
+                    // 检查下一个块的第一个文件名是否匹配预测
+                    String nextBlockFirstUrl = "";
+                    String[] nextBlockLines = blocks[i + 1].split("\n");
+                    for (String nl : nextBlockLines) {
+                        if (!nl.startsWith("#") && !nl.isEmpty()) { nextBlockFirstUrl = nl; break; }
+                    }
+                    if (!nextBlockFirstUrl.isEmpty() && !nextBlockFirstUrl.endsWith(predictedName)) {
+                        filenamePredictionMismatch = true;
+                    }
+                }
+            }
+            if (filenamePredictionMismatch) adScore++;
+
+            // 【2026-10-16 优化3】广告段缓存匹配：命中已识别的广告URL特征直接加分（TwitchAdSolutions AdSegmentCache思路）
+            boolean adUrlCacheHit = false;
+            for (String url : blockUrls) {
+                if (adUrlCache.contains(url)) { adUrlCacheHit = true; break; }
+            }
+            if (adUrlCacheHit) adScore += 3;
 
             // 【2026-10-16 修复】广告块上限阈值：避免大块正片误判
             // 广告块不可能超过60秒或超过20个分片（26样本统计：广告块9-26秒/3-9分片）
@@ -536,6 +734,12 @@ public class M3u8AdStripper {
                 LogBridge.i(TAG, "  [广告块" + i + "] 位置=" + min + "分" + sec + "秒, 时长=" +
                         blockDurations[i] + "s, 评分=" + adScore + " (分片数=" + blockSegCounts[i] +
                         ", 文件名连续=" + blockFilenameContinuous[i] + ")");
+            }
+            // 【2026-10-16 优化3】识别为广告块后，将URL加入缓存，重复出现直接拦截
+            if (isAdBlock && adUrlCache.size() < AD_URL_CACHE_MAX) {
+                for (String url : blockUrls) {
+                    adUrlCache.add(url);
+                }
             }
             // 累加当前块时长
             if (blockDurations[i] != null) {

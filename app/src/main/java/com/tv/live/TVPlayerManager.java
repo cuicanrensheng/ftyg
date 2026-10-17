@@ -99,6 +99,8 @@ public class TVPlayerManager {
     private static final int MAX_RETRY_COUNT_NETWORK = 5;
     private static final int MAX_CHANXIANG_REFRESH = 1;
     private static final int MAX_RENYIBO_REFRESH = 3;
+    /** 【2026-10-17 源5点播·失效自动换线】单次失效最多触发次数（防在死线间循环） */
+    private static final int MAX_RENYIBO_VOD_LINE_SWITCH = 4;
     /** 源5 直链有效期实测仅约 120s，故设冷却间隔：距上次重拉不足此值则不再重拉（防抖/防循环） */
     private static final long RENYIBO_REFRESH_MIN_INTERVAL_MS = 15000;
     /** 源6(咪咕)直链签名同样短时有效，重解析次数与冷却间隔 */
@@ -231,6 +233,8 @@ public class TVPlayerManager {
     private int chanxiangRefreshCount = 0;
     /** 源5(爱其意)直链重拉计数，每频道最多触发 {@link #MAX_RENYIBO_REFRESH} 次，防循环 */
     private int renyiboRefreshCount = 0;
+    /** 【2026-10-17 源5点播·失效自动换线】本播放会话触发计数，播放就绪清零，防循环 */
+    private int mRenYiBoVodLineSwitchCount = 0;
     /** 上次源5 直链重拉时间戳（冷却用） */
     private long lastRenyiboRefreshAtMs = 0;
     /** 源6(咪咕)重解析计数与时间戳（冷却用） */
@@ -1108,6 +1112,13 @@ public class TVPlayerManager {
                     // 【源5 兜底】播放恢复 = 新一轮稳定，清零连续重拉计数与冷却（2 分钟短时效下需可反复重拉）
                     renyiboRefreshCount = 0;
                     lastRenyiboRefreshAtMs = 0;
+                    // 【2026-10-17 源5点播·失效自动换线】播放恢复 = 新一轮稳定：清零换线计数与已试线路
+                    mRenYiBoVodLineSwitchCount = 0;
+                    if (currentChannel != null) {
+                        com.tv.live.renyibo.RenYiBoVodSourceLoader.resetLineAutoTried(
+                                com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(
+                                        currentChannel.getChannelId()));
+                    }
                     // 【2026-09-19 404 升级】播放就绪 = 当前线路已稳定，清零连续404计数
                     mHuya404Streak = 0;
                     startStuckDetection();
@@ -1347,6 +1358,12 @@ public class TVPlayerManager {
             }
             final String finalResolved = resolved;
             mHandler.post(() -> {
+                // 【2026-10-17 竞态保护】解析期间用户已换台（currentUrl 不再是这条待解析地址）
+                //   → 丢弃本次结果（与源7 resolveAfhgrjAndPlay 同口径），避免旧结果篡改新台播放。
+                if (!TextUtils.equals(currentUrl, rawUrl)) {
+                    LogBridge.d(TAG, "【爱其意·点播】解析完成但已切换，丢弃");
+                    return;
+                }
                 if (TextUtils.isEmpty(finalResolved)) {
                     // 未补齐：给出可读提示，回退到该分类首条（若存在）或直接上报错误。
                     com.tv.live.renyibo.RenYiBoVodCatalog.Category cat =
@@ -1547,6 +1564,59 @@ public class TVPlayerManager {
             return true;
         } catch (Throwable t) {
             LogBridge.w(TAG, "【爱其意重拉】发起失败: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 【2026-10-17 源5点播·线路级失效兜底】当前频道是源5点播（{@code renyibo-vod:<typeId>:<vodId>}）
+     * 且播放彻底失败（重试达上限判失效源）时：后台自动轮转切换到其他线路
+     * （畅享失效 → 备用1 → 官方①…；先测速直链、再 HTTP 解析 token 型线路），
+     * 找到可用线路即重播。每播放会话最多触发 {@link #MAX_RENYIBO_VOD_LINE_SWITCH} 次，防循环。
+     *
+     * <p>与 {@link #tryRefreshRenyiboSource()} 的区别：后者只服务直播源（{@code renyibo:} 前缀，
+     * live.php 重拉签名）；本函数服务点播（{@code renyibo-vod:} 前缀，VOD 线路表轮转）。
+     *
+     * @return true = 已接管（结果无论成败都走其内部回调）；false = 非源5点播或已超限，调用方继续兜底链
+     */
+    private boolean trySwitchRenyiboVodLine() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String vodId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId());
+        if (TextUtils.isEmpty(vodId)) return false;   // 非源5点播：不接管
+        if (mRenYiBoVodLineSwitchCount >= MAX_RENYIBO_VOD_LINE_SWITCH) {
+            LogBridge.w(TAG, "【源5 换线】本会话触发已达上限(" + MAX_RENYIBO_VOD_LINE_SWITCH + ")，转下一条兜底链");
+            return false;
+        }
+        mRenYiBoVodLineSwitchCount++;
+        final String chName = currentChannelName;
+        LogBridge.i(TAG, "【源5 换线】当前线路播放失败 → 后台轮转其他线路（第 "
+                + mRenYiBoVodLineSwitchCount + "/" + MAX_RENYIBO_VOD_LINE_SWITCH + " 次）");
+        try {
+            new Thread(() -> {
+                String newUrl = null;
+                try {
+                    newUrl = com.tv.live.renyibo.RenYiBoVodSourceLoader.tryNextVodLineAuto(vodId);
+                } catch (Throwable t) {
+                    LogBridge.w(TAG, "【源5 换线】异常: " + t.getMessage());
+                }
+                final String url = newUrl;
+                mHandler.post(() -> {
+                    if (url != null && !url.isEmpty()) {
+                        LogBridge.i(TAG, "【源5 换线】已切到可用线路，重播 " + chName);
+                        // 换线期间抑制「卡住检测」误判重试（与联播换集同规格宽限）
+                        renyiboSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + RENYIBO_SWITCH_GRACE_MS;
+                        retryCount = 0;   // 换线重播 = 新一轮：重置重试计数，否则新线一遇抖动立刻又判失效
+                        playUrlInternal(url);
+                    } else {
+                        LogBridge.w(TAG, "【源5 换线】无可用线路，转下一条兜底链");
+                        if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
+                    }
+                });
+            }, "Renyibo-LineSwitch").start();
+            return true;
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【源5 换线】发起失败: " + t.getMessage());
             return false;
         }
     }
@@ -2595,6 +2665,11 @@ public class TVPlayerManager {
             if (!isNetworkError || !isNetworkUnavailable()) {
                 boolean backupSwitched = trySwitchBackup();
                 if (!backupSwitched) {
+                    // 【2026-10-17 源5点播·线路级兜底】当前线路失效 → 自动轮转其他线路重播
+                    //   （畅享失效 → 备用1 → 官方①…；专属逻辑优先于下面的各源刷新兜底）
+                    if (trySwitchRenyiboVodLine()) {
+                        return;
+                    }
                     // 畅享源失效兜底：备线用尽前，先尝试实时重拉最新签名源重播
                     if (tryRefreshChanxiangSource()) {
                         return;
@@ -4288,6 +4363,16 @@ public class TVPlayerManager {
             //   同为待解析地址（本期播放地址依赖未补齐的加密接口），不能被「频道线路表」覆盖。
             boolean isRenyiboVod = com.tv.live.renyibo.RenYiBoVodSourceLoader.isVodSchemeUrl(playUrl);
             isRenyiboPending = isRenyiboPending || isRenyiboVod;
+            // 【2026-10-17 修复·源5 解析链回吐直链被线路表覆盖】当前频道是 renyibo-vod 本源，
+            //   而传入的是 http(s) 直链 —— 这必然是本类解析链（resolveVodPlayUrl/VodLineResolver/
+            //   WebVideoResolver）刚回吐的真实流地址，必须原样播放：
+            //   ⚠ TikTok/移动云/大土牛等 CDN 直链路径常无媒体扩展名（.mp4 只在 ?filename= 查询里），
+            //   isRealStream 判不出 → 老逻辑会走「频道线路表覆盖」，把 finalUrl 换成
+            //   currentChannel.getMainPlayUrl()（= renyibo-vod:// 协议串）→ ExoPlayer 报
+            //   java.net.MalformedURLException: unknown protocol: renyibo-vod（实机复现）。
+            boolean isRenyiboResolvedStream = currentChannel != null
+                    && com.tv.live.renyibo.RenYiBoVodSourceLoader.isVodSchemeUrl(currentChannel.getMainPlayUrl())
+                    && (playUrl.startsWith("http://") || playUrl.startsWith("https://"));
             // 【2026-10-10】内置源7（afhgrj 影视）：afhgrj://<vodId> 或 afhgrj://<vodId>-<sid>-<nid>
             //   是待解析地址，不能被「频道线路表」覆盖（EPG 切集时传的是具体某一集）。
             boolean isAfhgrjPending = com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(playUrl);
@@ -4297,7 +4382,8 @@ public class TVPlayerManager {
             // 【2026-10-07】mMiguDirectPlay：咪咕切线路/切清晰度时置位 —— 本次起播必须
             // 直接采用传入的源串，不能被「频道线路表」覆盖（咪咕频道 backupUrls 不含这些源）。
             if (currentChannel != null && !isRealStream && !isZgyjVod && !isYunTuLb
-                    && !isRenyiboPending && !isAfhgrjPending && !mHuyaDirectPlay && !mMiguDirectPlay) {
+                    && !isRenyiboPending && !isAfhgrjPending && !isRenyiboResolvedStream
+                    && !mHuyaDirectPlay && !mMiguDirectPlay) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                 String channelKey = currentChannel.getChannelId();
                 if (TextUtils.isEmpty(channelKey)) {

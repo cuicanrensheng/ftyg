@@ -55,6 +55,9 @@ public final class RenYiBoVodSourceLoader {
 
     private static final String TAG = "RenYiBoVodSourceLoader";
 
+    /** 【2026-10-16 增加线路】应用上下文，用于 WebVideoResolver 初始化 */
+    private static volatile Context sAppContext;
+
     // ------------------------------------------------------------------
     // 【2026-10-12 VOD 加密移植】真实请求双重开关
     // ------------------------------------------------------------------
@@ -151,6 +154,9 @@ public final class RenYiBoVodSourceLoader {
      * @return 片段文本；无缓存且抓取失败/残表时返回 {@code null}（调用方应跳过点播部分）
      */
     public static String loadVodFragmentCached(Context context) {
+        if (context != null && sAppContext == null) {
+            sAppContext = context.getApplicationContext();
+        }
         return sVodCache.load(context);
     }
 
@@ -599,12 +605,68 @@ public final class RenYiBoVodSourceLoader {
         //   video_detail 明文，<b>不新增任何网络请求</b>），让 STATE_ENDED 的自动联播在
         //   主界面 / OTT 两条播放通路下都能拿到「当前 vod 全部集顺序」。
         ensureVodEpisodeCacheFromDetail(vodId, obj);
-        // 【2026-10-13 线路接入】优先取用户所选线路的直链；无线路表再回落 extractPlayUrl。
+        // 【2026-10-16 源5 CDN测速自动切源】优先取用户所选线路的直链；
+        // 若用户线路不可达，则自动测速选择最快的可达线路。
+        // 【2026-10-16 增加线路】解析页面线路（直链为空）通过 WebVideoResolver 异步解析。
         List<String[]> lines = sVodLineCache.get(vodId);
         String u = null;
         if (lines != null && !lines.isEmpty()) {
             int idx = clampVodLineIndex(vodId, lines.size());
-            u = lines.get(idx)[3];
+            String[] selLine = lines.get(idx);
+            String userUrl = selLine[3];
+            // 【2026-10-17 增加线路】解析型线路（直链为空）两个解析通路：
+            //   ① 服务端解析 token（deja-/NBY-/co_/yzx-/ZY-/Ace_Net-/48B b64）→ HTTP 直解；
+            //   ② 解析页面（4kvm.top/play 等）→ WebView 解析。
+            if (userUrl == null || userUrl.isEmpty()) {
+                String firstSeg = firstSegPlayable(selLine[4]); // 首集 token / 解析页 URL
+                String resolved = null;
+                if (firstSeg != null && VodLineResolver.isResolvableToken(firstSeg)) {
+                    LogBridge.i(TAG, "源5点播：选中服务端解析线路 [" + selLine[0] + "]，HTTP 解析首集");
+                    resolved = VodLineResolver.resolveToken(firstSeg);
+                } else {
+                    LogBridge.i(TAG, "源5点播：选中解析页面线路 [" + selLine[0] + "]，开始WebView解析: " + firstSeg);
+                    resolved = (sAppContext == null) ? null
+                            : WebVideoResolver.get(sAppContext).resolve(
+                                    firstSeg != null ? firstSeg : selLine[4]);
+                }
+                if (resolved != null && !resolved.isEmpty()) {
+                    userUrl = resolved;
+                    // 缓存解析结果到线路表，避免重复解析
+                    selLine[3] = resolved;
+                    LogBridge.i(TAG, "源5点播：解析型线路解析成功 [" + selLine[0] + "] -> " + resolved);
+                } else {
+                    LogBridge.w(TAG, "源5点播：解析型线路解析失败 [" + selLine[0] + "]，尝试其他线路");
+                    // 解析失败，自动测速选择其他直链线路
+                    int bestIdx = selectBestLineBySpeed(lines);
+                    if (bestIdx >= 0 && bestIdx != idx) {
+                        userUrl = lines.get(bestIdx)[3];
+                        sVodLineSel.put(vodId, bestIdx);
+                        LogBridge.i(TAG, "源5点播：解析失败回退到直链线路 [" + lines.get(bestIdx)[0] + "]");
+                    }
+                }
+            }
+            // 先探测用户选择的线路的实际传输速度（仅对直链线路测速）
+            if (userUrl != null && !userUrl.isEmpty()) {
+                long userSpeed = probeSpeed(userUrl);
+                if (userSpeed >= MIN_ACCEPTABLE_SPEED_KBPS) {
+                    u = userUrl;
+                    LogBridge.i(TAG, "源5点播：用户线路速度正常 [" + selLine[0] + "] 速度=" + userSpeed + "KB/s");
+                } else {
+                    // 用户线路不可达或速度过低，自动测速选择最快的可达线路
+                    String reason = (userSpeed <= 0) ? "不可达" : "速度过低(" + userSpeed + "KB/s)";
+                    LogBridge.w(TAG, "源5点播：用户线路" + reason + " [" + selLine[0] + "]，启动自动测速选线");
+                    int bestIdx = selectBestLineBySpeed(lines);
+                    if (bestIdx >= 0) {
+                        u = lines.get(bestIdx)[3];
+                        sVodLineSel.put(vodId, bestIdx); // 更新用户选择为最快线路
+                        LogBridge.i(TAG, "源5点播：自动测速选线成功 [" + lines.get(bestIdx)[0] + "]");
+                    } else {
+                        // 全部不可达，回退用户线路
+                        u = userUrl;
+                        LogBridge.w(TAG, "源5点播：全部线路不可达，回退用户线路 [" + selLine[0] + "]");
+                    }
+                }
+            }
         }
         if (u == null) {
             u = extractPlayUrl(obj);
@@ -746,6 +808,12 @@ public final class RenYiBoVodSourceLoader {
     /** 用户所选线路下标（内存级，与源7 的 sid 切换同规格；默认 0 = 第一条直链源）。 */
     private static final Map<String, Integer> sVodLineSel = new ConcurrentHashMap<>();
 
+    /** 【2026-10-17 失效自动换线】本次失效会话内已尝试过的线路下标（key=vodId；播放恢复后清零）。 */
+    private static final Map<String, HashSet<Integer>> sLineAutoTried = new ConcurrentHashMap<>();
+
+    /** 失效自动换线：解析型线路单次最多尝试条数（每条 0.2~23s，控制总耗时）。 */
+    private static final int MAX_AUTO_LINE_TRIES = 6;
+
     /** 从 video_detail 明文解析并缓存线路表（供设置面板与起播取流共用口径）。 */
     private static void populateVodLines(String vodId, JSONObject vd) {
         JSONObject data = vd == null ? null : vd.optJSONObject("data");
@@ -811,19 +879,73 @@ public final class RenYiBoVodSourceLoader {
         }
     }
 
-    /** 「品质$url#集$url#…」串的第一个直链段 → {品质, url}；无直链返回 null。 */
+    /** 「品质$url#集$url#…」串的第一个可播/可解析段 → {品质, url}；待解析线路返回 {品质, ""}（播时解析）。 */
     private static String[] firstHttpSeg(String u) {
         if (u == null || u.isEmpty()) return null;
         for (String seg : u.split("#")) {
             if (seg.isEmpty()) continue;
             int d = seg.lastIndexOf('$');
             String url = d >= 0 ? seg.substring(d + 1) : seg;
-            if (!isHttpUrl(url)) continue;
             String q = d > 0 ? seg.substring(0, d) : "";
             if (q.isEmpty()) q = "默认";
-            return new String[]{ q, url };
+            if (isHttpUrl(url)) {
+                // 【2026-10-17 增加线路】解析页面（4kvm.top/play 等）不是直链，不能当 m3u8 直播；
+                //   但「带明确视频扩展名的 URL」即便路径含 /play/ 也是真直链（防误伤）。
+                if (!looksLikeVideoFile(url)
+                        && (isParsePage(url) || VodLineResolver.isResolvableToken(url))) {
+                    LogBridge.i(TAG, "源5点播：发现解析型线路 [" + q + "] 待解析=" + truncUrl(url));
+                    return new String[]{ q, "" };  // 直链为空，标记为待解析
+                }
+                return new String[]{ q, url };
+            }
+            // 【2026-10-17 增加线路】服务端解析 token（deja-/ZY-/yzx-/NBY-/co_/Ace_Net-/48B b64）
+            //   由爱其意自带解析服务器直出直链（见 VodLineResolver 全图），播时惰性解析。
+            if (VodLineResolver.isResolvableToken(url)) {
+                LogBridge.i(TAG, "源5点播：发现服务端解析线路 [" + q + "] token=" + truncUrl(url));
+                return new String[]{ q, "" };  // 直链为空，标记为待解析
+            }
         }
         return null;
+    }
+
+    /** 取「集$url#…」串首段的可解析串（剥掉「第N集$」前缀）；空串返回 null。 */
+    private static String firstSegPlayable(String u) {
+        if (u == null || u.isEmpty()) return null;
+        for (String seg : u.split("#")) {
+            if (seg.isEmpty()) continue;
+            int d = seg.lastIndexOf('$');
+            String s = d >= 0 ? seg.substring(d + 1) : seg;
+            if (!s.isEmpty()) return s;
+        }
+        return null;
+    }
+
+    /** url（去 query 后）是否以常见媒体扩展名结尾 —— 真直链不受「解析页面」误判影响。 */
+    private static boolean looksLikeVideoFile(String url) {
+        String s = url.toLowerCase(java.util.Locale.ROOT);
+        int q = s.indexOf('?');
+        if (q >= 0) s = s.substring(0, q);
+        return s.endsWith(".m3u8") || s.endsWith(".mp4") || s.endsWith(".flv")
+                || s.endsWith(".ts") || s.endsWith(".mkv") || s.endsWith(".m3u");
+    }
+
+    /** 日志用 URL 缩写。 */
+    private static String truncUrl(String url) {
+        if (url == null) return "null";
+        return url.length() <= 72 ? url : url.substring(0, 72) + "…(" + url.length() + ")";
+    }
+
+    /** 判断是否是第三方解析页面（非直链，需要 WebView 解析）。 */
+    private static boolean isParsePage(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String lower = url.toLowerCase();
+        return (lower.startsWith("http://") || lower.startsWith("https://")) &&
+               (lower.contains("4kvm.top") ||
+                lower.contains("4kyslink") ||
+                lower.contains("/play/") ||
+                lower.contains("/player/") ||
+                lower.contains("parse") ||
+                lower.contains("jiexi"));
     }
 
     /** 【2026-10-13】线路名是否声明「无水印/无广告」（原 App 服务端线路分级口径）。 */
@@ -884,7 +1006,7 @@ public final class RenYiBoVodSourceLoader {
     }
 
     /**
-     * 切换该片线路并返回该线首条直链（供设置面板重播用）；线路未就绪返回 null。
+     * 切换该片线路并返回可播地址（供设置面板重播用）；线路未就绪返回 null。
      */
     public static String switchVodLine(String vodId, int index) {
         List<String[]> lines = sVodLineCache.get(vodId);
@@ -893,7 +1015,14 @@ public final class RenYiBoVodSourceLoader {
         sVodLineSel.put(vodId, i);
         String[] ln = lines.get(i);
         LogBridge.i(TAG, "源5点播：切线路 vodId=" + vodId + " → [" + ln[0] + " · " + ln[2] + "]");
-        return ln[3];
+        String u = ln[3];
+        if (u == null || u.isEmpty()) {
+            // 【2026-10-17 增加线路】解析型线路（token/解析页面）：UI 线程不做同步 HTTP（会卡界面），
+            //   返回本片协议串 → 播放器走「起播惰性解析」后台通路，用新选区解析当前线路。
+            u = SCHEME + "0:" + vodId;
+            LogBridge.i(TAG, "源5点播：解析型线路转惰性起播 [" + ln[0] + "] → " + u);
+        }
+        return u;
     }
 
     /**
@@ -1133,5 +1262,197 @@ public final class RenYiBoVodSourceLoader {
     /** 供加密接口补齐后复用：安全取 JSON 对象字段。 */
     static String opt(JSONObject o, String key, String def) {
         return o == null ? def : o.optString(key, def);
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-16 源5 CDN测速自动切源】
+    // ------------------------------------------------------------------
+
+    /** 探测超时：建连2.5秒，读取2.5秒（死线路的表现是建连挂死）。 */
+    private static final int PROBE_CONNECT_TIMEOUT_MS = 2500;
+    private static final int PROBE_READ_TIMEOUT_MS = 2500;
+
+    /**
+     * 探测 m3u8 地址的传输速度（KB/s）。
+     *
+     * <p>下载前 100KB 计算实际带宽，不可达或超时返回 -1。
+     * 用短超时：死线路的表现是建连挂死，与其让播放器黑屏重试，
+     * 不如在这里 2.5s 判定后直接换线。</p>
+     *
+     * @return 传输速度 KB/s；不可达返回 -1
+     */
+    private static long probeSpeed(String url) {
+        if (url == null || url.isEmpty()) return -1;
+        java.net.HttpURLConnection conn = null;
+        try {
+            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setConnectTimeout(PROBE_CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(PROBE_READ_TIMEOUT_MS);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
+            conn.setRequestProperty("Referer", "https://www.afhgrj.com/");
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) return -1;
+            // 下载前 100KB 计算传输速度
+            java.io.InputStream is = conn.getInputStream();
+            byte[] buf = new byte[8192];
+            long totalRead = 0;
+            long start = System.currentTimeMillis();
+            int read;
+            while (totalRead < 102400 && (read = is.read(buf)) != -1) {
+                totalRead += read;
+            }
+            long elapsed = System.currentTimeMillis() - start;
+            if (elapsed <= 0) elapsed = 1;
+            long speedKbps = (totalRead / 1024) * 1000 / elapsed;
+            try { is.close(); } catch (Throwable ignored) {}
+            return speedKbps;
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "源5点播：线路测速异常 " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            return -1;
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    /** 兼容旧调用：探测是否可达（速度 > 0 即视为可达）。 */
+    private static boolean probePlayable(String url) {
+        return probeSpeed(url) > 0;
+    }
+
+    /** 最低可接受速度（KB/s），低于此值判定为慢线路。 */
+    private static final long MIN_ACCEPTABLE_SPEED_KBPS = 200;
+
+    /**
+     * 测速选择传输速度最快的线路。
+     *
+     * <p>遍历所有线路，下载前100KB计算实际带宽，返回速度最快的线路下标。
+     * 全部不可达或全部低于最低速度返回 -1。</p>
+     */
+    private static int selectBestLineBySpeed(List<String[]> lines) {
+        if (lines == null || lines.isEmpty()) return -1;
+        int bestIdx = -1;
+        long bestSpeed = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            String[] ln = lines.get(i);
+            if (ln == null || ln.length < 4) continue;
+            String url = ln[3];
+            // 【2026-10-16 增加线路】跳过解析页面线路（直链为空），不测速
+            if (url == null || url.isEmpty()) {
+                LogBridge.d(TAG, "源5点播：测速线路#" + i + " [" + ln[0] + "] 是解析页面，跳过测速");
+                continue;
+            }
+            long speed = probeSpeed(url);
+            if (speed > 0) {
+                LogBridge.i(TAG, "源5点播：测速线路#" + i + " [" + ln[0] + "] 速度=" + speed + "KB/s");
+                if (speed > bestSpeed) {
+                    bestSpeed = speed;
+                    bestIdx = i;
+                }
+            } else {
+                LogBridge.w(TAG, "源5点播：测速线路#" + i + " [" + ln[0] + "] 不可达");
+            }
+        }
+        if (bestIdx >= 0 && bestSpeed < MIN_ACCEPTABLE_SPEED_KBPS) {
+            LogBridge.w(TAG, "源5点播：最快线路速度仅 " + bestSpeed + "KB/s，低于最低阈值 " + MIN_ACCEPTABLE_SPEED_KBPS + "KB/s");
+        }
+        return bestIdx;
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-17 源5点播·线路级失效兜底】失效自动换线
+    // ------------------------------------------------------------------
+
+    /**
+     * 当前线路播放彻底失败后调用：从当前选区轮转遍历线路表，
+     * <b>先试其余直链线路（测速），再试解析型线路（HTTP 单发解析）</b>，
+     * 返回第一个可用直链；成功时同步更新用户选区与线路缓存。
+     *
+     * <p>排他性约束（与红线一致，全部单发串行、不重试）：
+     * <ul>
+     *   <li>跳过水印 host 直链 / 水印解析结果（宁缺毋滥，不把画面切去带烧录水印的兜底线）；</li>
+     *   <li>会话内记忆已试下标（避免在两条死线之间反复横跳），播放恢复后
+     *       由 {@link #resetLineAutoTried(String)} 清零；</li>
+     *   <li>解析型最多试 {@link #MAX_AUTO_LINE_TRIES} 条；WebView 页面型（4kvm 等）不在此链处理。</li>
+     * </ul>
+     *
+     * @return 可播直链；无可用线路返回 null
+     */
+    public static String tryNextVodLineAuto(String vodId) {
+        if (vodId == null || vodId.isEmpty()) return null;
+        List<String[]> lines = sVodLineCache.get(vodId);
+        if (lines == null || lines.isEmpty()) return null;
+        HashSet<Integer> tried = sLineAutoTried.computeIfAbsent(vodId, k -> new HashSet<>());
+        int size = lines.size();
+        int cur = clampVodLineIndex(vodId, size);
+        tried.add(cur);   // 当前线路刚失效，先记上（防止再被选中）
+        // ── 第一轮：直链线路（测速快，成功率最高） ──
+        LogBridge.i(TAG, "源5点播：失效换线开始（vodId=" + vodId + "，当前线路#"
+                + cur + " [" + lines.get(cur)[0] + "]，已试 " + tried.size() + " 条）");
+        String hit = scanLinesForAuto(vodId, lines, tried, cur, true);
+        if (hit != null) return hit;
+        // ── 第二轮：解析型线路（HTTP 解析） ──
+        return scanLinesForAuto(vodId, lines, tried, cur, false);
+    }
+
+    /** 失效换线扫描子例程：directRound=true 扫直链（测速）、false 扫解析型（HTTP 解析）。 */
+    private static String scanLinesForAuto(String vodId, List<String[]> lines,
+                                           HashSet<Integer> tried, int cur, boolean directRound) {
+        int size = lines.size();
+        int parseTried = 0;
+        for (int step = 1; step <= size; step++) {
+            int idx = (cur + step) % size;
+            if (tried.contains(idx)) continue;
+            String[] ln = lines.get(idx);
+            if (ln == null || ln.length < 5) continue;
+            String u = ln[3];
+            boolean isDirect = (u != null && !u.isEmpty());
+            if (directRound != isDirect) continue;   // 第一轮只扫直链、第二轮只扫解析型
+            tried.add(idx);
+            if (isDirect) {
+                if (isWatermarkHost(u)) {
+                    LogBridge.w(TAG, "源5点播：失效换线·跳过水印线路 [" + ln[0] + "]");
+                    continue;
+                }
+                long sp = probeSpeed(u);
+                if (sp > 0) {
+                    sVodLineSel.put(vodId, idx);
+                    LogBridge.i(TAG, "源5点播：失效换线成功 → [" + ln[0]
+                            + "]（直链，速度=" + sp + "KB/s）");
+                    return u;
+                }
+                LogBridge.w(TAG, "源5点播：失效换线·直链不可达 [" + ln[0] + "]");
+            } else {
+                if (parseTried >= MAX_AUTO_LINE_TRIES) break;
+                String tok = firstSegPlayable(ln[4]);
+                if (tok == null || !VodLineResolver.isResolvableToken(tok)) {
+                    continue;   // WebView 页面型不在自动换线链处理（起播链自有通路）
+                }
+                parseTried++;
+                LogBridge.i(TAG, "源5点播：失效换线·尝试解析 [" + ln[0] + "] " + tok);
+                String resolved = VodLineResolver.resolveToken(tok);
+                if (resolved != null && !resolved.isEmpty()) {
+                    if (isWatermarkHost(resolved)) {
+                        LogBridge.w(TAG, "源5点播：失效换线·解析结果带水印 [" + ln[0] + "]，跳过");
+                        continue;
+                    }
+                    ln[3] = resolved;   // 缓存解析结果，避免重复解析
+                    sVodLineSel.put(vodId, idx);
+                    LogBridge.i(TAG, "源5点播：失效换线成功 → [" + ln[0] + "]（解析型）");
+                    return resolved;
+                }
+                LogBridge.w(TAG, "源5点播：失效换线·解析失败 [" + ln[0] + "]");
+            }
+        }
+        LogBridge.w(TAG, "源5点播：失效换线本轮（" + (directRound ? "直链" : "解析型")
+                + "）无可用线路，累计已试 " + tried.size() + " 条");
+        return null;
+    }
+
+    /** 播放恢复后清零某 vod 的「失效换线已试线路」记录（下次再失效允许重新轮转）。 */
+    public static void resetLineAutoTried(String vodId) {
+        if (vodId != null) sLineAutoTried.remove(vodId);
     }
 }

@@ -87,6 +87,39 @@ OBF_DEF(K_API_GITV_KEY,
         "fUw8mWqp0ih8KRPzmgHnoL4fx0X0N78o4Od6D4lFTV32S7uVa2mYSZjRofquHHU16gkpjvInD07bKwb05S0hlJYfYMmUyQprvoEqM2I8Dfe2oX0MTAJEg8DYDul6lJqg",
         0xf3);
 
+// ------------------------------------------------------------------
+// 【2026-10-17 第四批】源5 加密线路「服务端解析」端点密文化。
+// 实证（2026-10-17 真机抓包 + 离线解密）：App 不本地解密这些 token，
+// 而是原样转发给下列自带解析服务器，由服务端出直链（见 Java: VodLineResolver）。
+// 均为第三方解析服务（非自有服务器），明文只留在本 .cpp，不进 dex。
+// ------------------------------------------------------------------
+/** id=18 · 解析: vertify.php（官方① BBA/deja- 线） */
+OBF_DEF(K_VODP_VERTIFY, "http://49.233.180.127:880/vertify.php/?url=",           0x1e);
+/** id=19 · 解析: jxxh.php（官方③ ZY-icial_/ZY-anime_ 线） */
+OBF_DEF(K_VODP_JXXH,    "http://49.233.180.127:880/jxxh.php/?url=",              0x3f);
+/** id=20 · 解析: zsyzx.php（官方⑥ yzx- 线） */
+OBF_DEF(K_VODP_ZSYZX,   "http://49.233.180.127:880/zsyzx.php/?url=",             0x5a);
+/** id=21 · 解析: 4kys.php（高清① 4kvm.top/play 页） */
+OBF_DEF(K_VODP_4KYS,    "http://49.233.180.127:880/4kys.php/?url=",              0x7b);
+/** id=22 · 解析: NBY 两段链第一段（官方②）。
+ *  ⚠ 2026-10-17 实测修正：必须用抓包 Host 域名 api.nbyjson.top:7788（43.248.96.62 只是当时解析 IP，
+ *  直连 IP:80 因虚拟主机不匹配返回 404）。 */
+OBF_DEF(K_VODP_NBY,     "http://api.nbyjson.top:7788/api/?key=c8kz5yCrtpSR7Lz8wY&url=",  0x9d);
+/** id=23 · 解析: coffee /api（官方⑤ co_ 线）。
+ *  ⚠ 2026-10-17 实测修正：必须用抓包 Host 域名 coffee.1ljx.com:32000（43.248.102.96 只是当时解析 IP）。 */
+OBF_DEF(K_VODP_CO,
+        "http://coffee.1ljx.com:32000/api/?key=05224795-d7d1-4ea3-8ae8-c04b8f366d42&url=", 0xbe);
+/** id=24 · 解析: 175.24.181.180:5000 /api/jiexi/common（Ace 线；Host 即 IP:5000） */
+OBF_DEF(K_VODP_ACE,
+        "http://175.24.181.180:5000/api/jiexi/common?Key=qRAFU8027p8kal2Jtv&url=", 0xd1);
+/** id=25 · 解析: /jx（官方④ YKTX 线，48B Base64 token）。
+ *  ⚠ 2026-10-17 实测修正：必须用抓包 Host 域名 jx.nbpicture.xyz（118.107.11.4 只是当时解析 IP）。 */
+OBF_DEF(K_VODP_YKTX,    "http://jx.nbpicture.xyz/jx?url=",                       0xe4);
+
+/** id=26 · 解析: dmm.php（动漫专线 ZY-anime_，2026-10-17 真机抓包确认；端口 7788 非 880）。
+ *  返回两种形态：49.233.180.127:7788/cache/m3u8/<hash>.m3u8 或整集视频直链（xhscdn 伪装）。 */
+OBF_DEF(K_VODP_DMM,     "http://49.233.180.127:7788/dmm.php/?url=",              0xc3);
+
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id) {
@@ -109,6 +142,15 @@ Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id)
         case 15: obf::decode_to(K_API_NOWTV_NET, buf, sizeof(buf)); break;
         case 16: obf::decode_to(K_API_GITV_AUTH, buf, sizeof(buf)); break;
         case 17: obf::decode_to(K_API_GITV_KEY,  buf, sizeof(buf)); break;
+        case 18: obf::decode_to(K_VODP_VERTIFY, buf, sizeof(buf)); break;
+        case 19: obf::decode_to(K_VODP_JXXH,    buf, sizeof(buf)); break;
+        case 20: obf::decode_to(K_VODP_ZSYZX,   buf, sizeof(buf)); break;
+        case 21: obf::decode_to(K_VODP_4KYS,    buf, sizeof(buf)); break;
+        case 22: obf::decode_to(K_VODP_NBY,     buf, sizeof(buf)); break;
+        case 23: obf::decode_to(K_VODP_CO,      buf, sizeof(buf)); break;
+        case 24: obf::decode_to(K_VODP_ACE,     buf, sizeof(buf)); break;
+        case 25: obf::decode_to(K_VODP_YKTX,    buf, sizeof(buf)); break;
+        case 26: obf::decode_to(K_VODP_DMM,     buf, sizeof(buf)); break;
         default: return nullptr;
     }
     jstring s = env->NewStringUTF(buf);

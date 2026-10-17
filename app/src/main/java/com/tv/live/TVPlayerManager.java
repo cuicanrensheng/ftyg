@@ -7015,8 +7015,39 @@ public class TVPlayerManager {
         } catch (Exception ignored) {}
     }
 
-    // ==================== 【2026-10-17 OTT 清晰度切换】 ====================
+    // ==================== 【2026-10-17 OTT 控制栏】 ====================
 
+    /** 已缓冲到的位置（ms）；未知返回 0 */
+    public long getBufferedPosition() {
+        try {
+            return player == null ? 0 : player.getBufferedPosition();
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /** 当前倍速（1.0 = 正常） */
+    public float getPlaybackSpeed() {
+        try {
+            return player == null ? 1f : player.getPlaybackParameters().speed;
+        } catch (Throwable t) {
+            return 1f;
+        }
+    }
+
+    /** 设置倍速；超出 0.25~4.0 会被钳制 */
+    public void setPlaybackSpeed(float speed) {
+        try {
+            if (player == null) return;
+            float s = Math.max(0.25f, Math.min(4.0f, speed));
+            player.setPlaybackSpeed(s);
+            LogBridge.i(TAG, "【倍速】设为 " + s + "×");
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "设置倍速失败: " + t.getMessage());
+        }
+    }
+
+    // ==================== 【2026-10-17 OTT 清晰度切换】 ====================
     /**
      * 当前流里真实存在的视频高度（去重、降序）。
      *

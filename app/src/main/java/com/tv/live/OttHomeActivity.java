@@ -245,11 +245,36 @@ public class OttHomeActivity extends AppCompatActivity {
         setupActions();
         initPlayer();
         initAppCoreManager();
+        initVodControlBar();
 
         // 【2026-10-17 调试入口】am start ... --es debug_vod_id <vodId> 时直接弹该片详情，
         //   避免在混合列表里靠遥控器找源7 条目（正式使用不会带该参数，无副作用）。
         final String debugVodId = getIntent() == null ? null
                 : getIntent().getStringExtra("debug_vod_id");
+        // 【2026-10-17 调试入口2】--es debug_play_name <片名关键字>：直接起播匹配到的频道（测控制栏用）
+        final String debugPlayName = getIntent() == null ? null
+                : getIntent().getStringExtra("debug_play_name");
+        if (!TextUtils.isEmpty(debugPlayName)) {
+            mainHandler.postDelayed(() -> {
+                try {
+                    LogBridge.i(TAG, "【调试起播】候选 shownChannels=" + shownChannels.size()
+                            + " allChannels=" + allChannels.size());
+                    java.util.List<Channel> pool = new java.util.ArrayList<>(allChannels);
+                    pool.addAll(shownChannels);
+                    for (Channel c : pool) {
+                        if (c.getName() != null && c.getName().contains(debugPlayName)) {
+                            LogBridge.i(TAG, "【调试起播】命中 " + c.getName() + " → 直接播放");
+                            playChannel(c);
+                            enterFullscreenImmediately();
+                            return;
+                        }
+                    }
+                    LogBridge.w(TAG, "【调试起播】未命中 " + debugPlayName);
+                } catch (Throwable t) {
+                    LogBridge.w(TAG, "【调试起播】异常: " + t.getMessage());
+                }
+            }, 4500);
+        }
         if (!TextUtils.isEmpty(debugVodId)) {
             LogBridge.i(TAG, "【OTT·详情】调试直达 vodId=" + debugVodId);
             mainHandler.postDelayed(() -> {
@@ -1699,9 +1724,22 @@ public class OttHomeActivity extends AppCompatActivity {
     private static final long CONTROLLER_HIDE_MS = 5000L;
     /** 控制栏是否展示中（仅源7 全屏） */
     private boolean ottControllerShowing = false;
-    private final Runnable hideOttControllerRunnable = () -> {
-        if (ottControllerShowing) hideSource7Controller();
-    };
+    /** 【2026-10-17】自绘点播控制栏（替代 PlayerView 内置控制栏） */
+    private VodControlBar vodBar;
+    /** 画面比例循环下标：0 适应 / 1 填充 / 2 拉伸 */
+    private int mAspectIdx = 1;
+    private static final String[] ASPECT_LABELS = {"适应", "填充", "拉伸"};
+    private final Runnable hideOttControllerRunnable = this::maybeHideController;
+
+    /** 自动收起判定：暂停期间不收起（与主流 TV 端一致） */
+    private void maybeHideController() {
+        if (!ottControllerShowing) return;
+        if (mPlayerManager != null && !mPlayerManager.isPlaying()) {
+            mainHandler.postDelayed(hideOttControllerRunnable, 2000);
+            return;
+        }
+        hideSource7Controller();
+    }
 
     /** 当前频道是否为内置源7（afhgrj 影视点播） */
     private boolean isSource7Playing() {
@@ -1726,45 +1764,225 @@ public class OttHomeActivity extends AppCompatActivity {
      * 其它源因此完全不受影响。
      */
     private void showSource7Controller() {
-        if (!fullscreen || playerView == null) return;
-        if (!isVodControllerEligible()) return;
-        if (playerView.getPlayer() == null) return;
+        if (!fullscreen || !isVodControllerEligible()) return;
+        if (vodBar == null) return;
         mainHandler.removeCallbacks(hideOttControllerRunnable);
-        playerView.setUseController(true);
-        playerView.showController();
+        // 点播=追剧形态（上/下集+进度条+倍速），直播=简化形态（仅播放/清晰度/比例）
+        boolean vod = isSource7Playing() || isRenyiboVodChannel(playingChannel);
+        vodBar.setVodMode(vod);
+        vodBar.show();
         ottControllerShowing = true;
-        // 【2026-10-14】隐藏控制栏的设置按钮，防止误触
-        playerView.post(() -> {
-            try {
-                int settingsId = getResources().getIdentifier("exo_settings", "id", getPackageName());
-                View settingsBtn = (settingsId != 0) ? playerView.findViewById(settingsId) : null;
-                if (settingsBtn != null) settingsBtn.setVisibility(View.GONE);
-            } catch (Throwable ignored) {}
-        });
         mainHandler.postDelayed(hideOttControllerRunnable, CONTROLLER_HIDE_MS);
-        LogBridge.i(TAG, "【OTT·点播】唤起播放器控制栏（源7/源5，5s 后自动收起）");
-        // 遥控用：把焦点落到控制栏上（触摸用不需要焦点，拿不到就跳过）
-        playerView.postDelayed(() -> {
-            if (!ottControllerShowing || playerView == null) return;
-            try {
-                int id = getResources().getIdentifier("exo_controller", "id", getPackageName());
-                View c = (id != 0) ? playerView.findViewById(id) : null;
-                if (c != null) {
-                    c.setFocusable(true);
-                    c.requestFocus();
-                }
-            } catch (Throwable ignored) {
-            }
-        }, 120);
+        LogBridge.i(TAG, "【OTT·控制栏】显示（5s 无操作自动收起，暂停时保持）");
     }
 
-    /** 收起控制栏并复位 useController=false（源7 以外始终为 false） */
+    /** 收起控制栏 */
     private void hideSource7Controller() {
-        if (playerView == null) return;
-        mainHandler.removeCallbacks(hideOttControllerRunnable);
-        playerView.hideController();
-        playerView.setUseController(false);
+        if (vodBar != null) vodBar.hide();
         ottControllerShowing = false;
+        mainHandler.removeCallbacks(hideOttControllerRunnable);
+    }
+
+    // ==================== 【2026-10-17】自绘点播控制栏 ====================
+
+    private void initVodControlBar() {
+        try {
+            FrameLayout root = findViewById(R.id.ott_root);
+            if (root == null) return;
+            vodBar = new VodControlBar(this, new VodControlBar.Host() {
+                @Override public String barTitle() { return buildBarTitle(); }
+                @Override public String barChips() { return buildBarChips(); }
+                @Override public long barPosition() {
+                    return mPlayerManager == null ? 0 : mPlayerManager.getCurrentPosition();
+                }
+                @Override public long barDuration() {
+                    return mPlayerManager == null ? 0 : mPlayerManager.getDuration();
+                }
+                @Override public long barBuffered() {
+                    return mPlayerManager == null ? 0 : mPlayerManager.getBufferedPosition();
+                }
+                @Override public boolean barIsPlaying() {
+                    return mPlayerManager != null && mPlayerManager.isPlaying();
+                }
+                @Override public String barSpeedLabel() {
+                    float s = (mPlayerManager == null) ? 1f : mPlayerManager.getPlaybackSpeed();
+                    return String.format(java.util.Locale.US, "%.1f×", s);
+                }
+                @Override public String barAspectLabel() { return ASPECT_LABELS[mAspectIdx]; }
+
+                @Override public void barTogglePlay() {
+                    if (mPlayerManager == null) return;
+                    mPlayerManager.togglePlayWhenReady();
+                    if (vodBar != null) mainHandler.postDelayed(vodBar::refreshAll, 150);
+                }
+                @Override public void barPrevEpisode() { switchVodEpisode(-1); }
+                @Override public void barNextEpisode() { switchVodEpisode(1); }
+                @Override public void barSeekTo(long positionMs) {
+                    if (mPlayerManager == null) return;
+                    mPlayerManager.seekTo(positionMs);
+                    if (vodBar != null) mainHandler.postDelayed(vodBar::refreshAll, 250);
+                }
+                @Override public void barShowSpeed() { showSpeedDialog(); }
+                @Override public void barShowQuality() { showQualityDialog(); }
+                @Override public void barShowLine() { showLineDialog(); }
+                @Override public void barShowEpisodes() {
+                    hideSource7Controller();
+                    setFullscreen(false);
+                    if (mCurrentAfhgrjEpisodeIdx >= 0) focusAfhgrjEpgRow(mCurrentAfhgrjEpisodeIdx);
+                }
+                @Override public void barCycleAspect() { cycleAspect(); }
+            });
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.gravity = Gravity.BOTTOM;
+            lp.leftMargin = dp(28);
+            lp.rightMargin = dp(28);
+            lp.bottomMargin = dp(20);
+            root.addView(vodBar, lp);
+            vodBar.setVisibility(View.GONE);
+            LogBridge.i(TAG, "【OTT·控制栏】已初始化");
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【OTT·控制栏】初始化失败: " + t.getMessage());
+        }
+    }
+
+    private String buildBarTitle() {
+        String name = (playingChannel == null) ? "未在播放" : playingChannel.getName();
+        if (mCurrentAfhgrjEpisodeIdx < 0 || playingChannel == null) return name;
+        int total = 0;
+        try {
+            java.util.List<Channel.EpgItem> items =
+                    EpgManager.getInstance(getApplicationContext()).getEpg(playingChannel);
+            if (items != null) total = items.size();
+        } catch (Throwable ignored) {
+        }
+        return total > 0
+                ? name + " · 第" + (mCurrentAfhgrjEpisodeIdx + 1) + "集 / 共" + total + "集"
+                : name + " · 第" + (mCurrentAfhgrjEpisodeIdx + 1) + "集";
+    }
+
+    private String buildBarChips() {
+        String q = "自动";
+        try {
+            int setH = appConfig.getVodMaxHeight();
+            q = setH > 0 ? (setH + "P") : "自动";
+        } catch (Throwable ignored) {
+        }
+        int sid = -1;
+        try {
+            String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(playingChannel);
+            if (vodId != null) sid = com.tv.live.afhgrj.AfhgrjUrlResolver.workingSidOf(vodId);
+        } catch (Throwable ignored) {
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(q);
+        if (sid > 0) sb.append(" · 线路").append(sid);
+        if (mPlayerManager != null) {
+            sb.append(String.format(java.util.Locale.US, " · %.1f×", mPlayerManager.getPlaybackSpeed()));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 【2026-10-17】点播全屏上/下键 = 上一集/下一集（原实现是切频道，会误跳片）。
+     * 直播频道仍保持切台语义。
+     */
+    private void switchVodEpisode(int delta) {
+        Channel ch = playingChannel;
+        if (ch == null) return;
+        java.util.List<Channel.EpgItem> items;
+        try {
+            items = EpgManager.getInstance(getApplicationContext()).getEpg(ch);
+        } catch (Throwable t) {
+            items = null;
+        }
+        if (items == null || items.isEmpty()) {
+            Toast.makeText(this, "暂无剧集信息", Toast.LENGTH_SHORT).show();
+            LogBridge.w(TAG, "【OTT·切集】无剧集列表 channel=" + ch.getName());
+            return;
+        }
+        int cur = mCurrentAfhgrjEpisodeIdx;
+        if (cur < 0) cur = 0;
+        int next = cur + delta;
+        if (next < 0) {
+            Toast.makeText(this, "已经是第一集了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (next >= items.size()) {
+            Toast.makeText(this, "已经是最后一集了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        LogBridge.i(TAG, "【OTT·切集】" + (delta > 0 ? "下一集" : "上一集")
+                + " → 第" + (next + 1) + "集 / 共" + items.size() + "集");
+        playAfhgrjEpisodeOtt(items.get(next));
+        if (vodBar != null) mainHandler.postDelayed(vodBar::refreshAll, 400);
+    }
+
+    /** 倍速选择（0.5× ~ 2.0×，与主流 TV 端一致） */
+    private void showSpeedDialog() {
+        final float[] speeds = {0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f};
+        String[] labels = new String[speeds.length];
+        float cur = (mPlayerManager == null) ? 1f : mPlayerManager.getPlaybackSpeed();
+        for (int i = 0; i < speeds.length; i++) {
+            labels[i] = (Math.abs(cur - speeds[i]) < 0.01f ? "✓ " : "")
+                    + String.format(java.util.Locale.US, "%.2f×", speeds[i]);
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("播放速度")
+                .setItems(labels, (d, which) -> {
+                    if (mPlayerManager != null) mPlayerManager.setPlaybackSpeed(speeds[which]);
+                    if (vodBar != null) mainHandler.postDelayed(vodBar::refreshAll, 200);
+                    Toast.makeText(this, String.format(java.util.Locale.US, "倍速 %.2f×", speeds[which]),
+                            Toast.LENGTH_SHORT).show();
+                })
+                .show();
+    }
+
+    /** 线路切换（源7 多 CDN）：与详情页同一套 rememberSid + invalidate + 重播 */
+    private void showLineDialog() {
+        final String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(playingChannel);
+        if (vodId == null) {
+            Toast.makeText(this, "当前频道无多线路信息", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final int[] sids = com.tv.live.afhgrj.AfhgrjUrlResolver.sidsOf(vodId);
+        if (sids.length == 0) {
+            Toast.makeText(this, "线路信息未就绪", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int working = com.tv.live.afhgrj.AfhgrjUrlResolver.workingSidOf(vodId);
+        String[] labels = new String[sids.length];
+        for (int i = 0; i < sids.length; i++) {
+            labels[i] = (sids[i] == working ? "✓ " : "") + "线路" + sids[i];
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("播放线路")
+                .setItems(labels, (d, which) -> {
+                    int sid = sids[which];
+                    com.tv.live.afhgrj.AfhgrjUrlResolver.rememberSid(vodId, sid);
+                    com.tv.live.afhgrj.AfhgrjUrlResolver.invalidate(vodId);
+                    LogBridge.i(TAG, "【OTT·线路】手选 sid=" + sid + " → 重播当前集");
+                    if (playingChannel != null) playChannel(playingChannel, true);
+                })
+                .show();
+    }
+
+    /** 画面比例循环：适应 → 填充 → 拉伸 */
+    private void cycleAspect() {
+        mAspectIdx = (mAspectIdx + 1) % 3;
+        try {
+            TVPlayerManager.ScaleMode mode;
+            switch (mAspectIdx) {
+                case 0: mode = TVPlayerManager.ScaleMode.FIT; break;
+                case 2: mode = TVPlayerManager.ScaleMode.ZOOM; break;
+                default: mode = TVPlayerManager.ScaleMode.FILL; break;
+            }
+            if (mPlayerManager != null) mPlayerManager.setScaleMode(mode);
+            LogBridge.i(TAG, "【OTT·画面比例】切换为 " + ASPECT_LABELS[mAspectIdx]);
+            Toast.makeText(this, "画面比例：" + ASPECT_LABELS[mAspectIdx], Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "切换画面比例失败: " + t.getMessage());
+        }
     }
 
     /**
@@ -2713,10 +2931,19 @@ public class OttHomeActivity extends AppCompatActivity {
             switch (keyCode) {
                 case KeyEvent.KEYCODE_DPAD_UP:
                 case KeyEvent.KEYCODE_CHANNEL_UP:
+                    // 【2026-10-17】点播全屏上键 = 上一集；直播仍为上一个频道
+                    if (isSource7Playing() || isRenyiboVodChannel(playingChannel)) {
+                        switchVodEpisode(-1);
+                        return true;
+                    }
                     playRelativeChannel(-1);
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                 case KeyEvent.KEYCODE_CHANNEL_DOWN:
+                    if (isSource7Playing() || isRenyiboVodChannel(playingChannel)) {
+                        switchVodEpisode(1);
+                        return true;
+                    }
                     playRelativeChannel(1);
                     return true;
                 case KeyEvent.KEYCODE_DPAD_LEFT:

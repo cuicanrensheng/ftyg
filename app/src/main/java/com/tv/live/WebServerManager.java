@@ -59,6 +59,15 @@ public class WebServerManager {
     // ========== 广告剥离m3u8缓存（5分钟过期，LRU 100条） ==========
     private static final int M3U8_CACHE_MAX_SIZE = 100;
     private static final long M3U8_CACHE_TTL_MS = 5 * 60 * 1000L;
+    // 【2026-10-17 直播黑屏修复】直播清单（无 #EXT-X-ENDLIST）绝不能按 5 分钟缓存：
+    //   直播清单是滑动窗口（本例 9 分片×4s≈36s），窗口播完后代理仍返回同一份旧清单，
+    //   播放器拿不到新分片 → 卡 6s → ExoPlaybackException(Source error, 2000) → STATE_IDLE(黑屏)
+    //   → 3s 后自动重试、代理换新实例拿到新清单才恢复（用户看到"黑屏一下又马上出画面"）。
+    //   实测证据：09:39:16/21/26 三次 5s 轮询全部"缓存命中 0ms"，26.95s 报严重卡顿 6317ms +
+    //   Source error，旧位置 88s（正好一个窗口播完）。直播只保留极短缓存，仅用于合并
+    //   起播瞬间的重复请求（不降低上游请求频率：播放器本来就是每 targetDuration 拉一次）。
+    private static final long M3U8_LIVE_CACHE_TTL_MS = 1200L;
+    private static final String TAG_HLS_ENDLIST = "#EXT-X-ENDLIST";
     private static final long STRIP_TIMEOUT_MS = 500L;
 
     // 内存LRU缓存：key=原始URL, value=[剥离后内容, 时间戳]
@@ -623,16 +632,23 @@ public class WebServerManager {
     }
 
     /**
-     * 从缓存获取剥离后的m3u8内容（5分钟TTL）
+     * 从缓存获取剥离后的m3u8内容
+     * 点播（含 #EXT-X-ENDLIST）：5 分钟 TTL
+     * 直播（无 ENDLIST）：1.2s 短 TTL（2026-10-17 修直播窗口过期黑屏）
      */
     private String getM3u8Cache(String url) {
         synchronized (m3u8Cache) {
             Object[] entry = m3u8Cache.get(url);
             if (entry != null) {
                 long timestamp = (Long) entry[1];
-                if (System.currentTimeMillis() - timestamp < M3U8_CACHE_TTL_MS) {
-                    LogBridge.i("WebServer", "[缓存命中] " + url.substring(0, Math.min(60, url.length())));
-                    return (String) entry[0];
+                String content = (String) entry[0];
+                // 【2026-10-17】直播清单只允许 1.2s 短缓存，避免滑动窗口过期后继续发旧清单
+                boolean live = content != null && !content.contains(TAG_HLS_ENDLIST);
+                long ttl = live ? M3U8_LIVE_CACHE_TTL_MS : M3U8_CACHE_TTL_MS;
+                if (System.currentTimeMillis() - timestamp < ttl) {
+                    LogBridge.i("WebServer", "[缓存命中]" + (live ? "(直播短缓存)" : "") + " "
+                            + url.substring(0, Math.min(60, url.length())));
+                    return content;
                 } else {
                     m3u8Cache.remove(url);
                 }

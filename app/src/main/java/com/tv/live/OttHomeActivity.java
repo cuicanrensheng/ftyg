@@ -246,6 +246,30 @@ public class OttHomeActivity extends AppCompatActivity {
         initPlayer();
         initAppCoreManager();
 
+        // 【2026-10-17 调试入口】am start ... --es debug_vod_id <vodId> 时直接弹该片详情，
+        //   避免在混合列表里靠遥控器找源7 条目（正式使用不会带该参数，无副作用）。
+        final String debugVodId = getIntent() == null ? null
+                : getIntent().getStringExtra("debug_vod_id");
+        if (!TextUtils.isEmpty(debugVodId)) {
+            LogBridge.i(TAG, "【OTT·详情】调试直达 vodId=" + debugVodId);
+            mainHandler.postDelayed(() -> {
+                try {
+                    VodDetailDialog dlg = new VodDetailDialog(OttHomeActivity.this, debugVodId,
+                            "调试影片 " + debugVodId, new VodDetailDialog.Callback() {
+                                @Override public void onSwitchLine(String vId, int sid) {
+                                    LogBridge.i(TAG, "【OTT·详情·调试】选择线路 sid=" + sid);
+                                }
+                                @Override public void onPlay() {
+                                    LogBridge.i(TAG, "【OTT·详情·调试】点击播放");
+                                }
+                            });
+                    dlg.show();
+                } catch (Throwable t) {
+                    LogBridge.w(TAG, "【OTT·详情·调试】弹窗失败: " + t.getMessage());
+                }
+            }, 1500);
+        }
+
         AppExecutors.io(() -> {
             if (appCoreManager != null) appCoreManager.loadLiveAndEpg();
         });
@@ -352,6 +376,13 @@ public class OttHomeActivity extends AppCompatActivity {
                 // 【2026-10-13】网格点击频道立即全屏，取消 5s 自动全屏等待
                 enterFullscreenImmediately();
             }
+        });
+        // 【2026-10-17 OTT 详情页】长按 OK：弹出影片详情 + 播放线路切换（仅源7 影视有详情数据）
+        gvChannel.setOnItemLongClickListener((parent, view, position, id) -> {
+            if (position < 0 || position >= shownChannels.size()) return false;
+            Channel ch = shownChannels.get(position);
+            showVodDetail(ch);
+            return true;
         });
 
         // 子分组胶囊条：单行横向滚动，焦点/点按哪个胶囊，下方网格就显示该分组的频道
@@ -1113,6 +1144,11 @@ public class OttHomeActivity extends AppCompatActivity {
         setPreviewLoading(true);
         tvPreviewTip.setVisibility(View.GONE);
         mPlayerManager.playUrl(playUrl, channel.getName(), channel);
+        // 【2026-10-17 清晰度】起播即套用用户上次选择的清晰度封顶（0=自动）
+        try {
+            int maxH = appConfig.getVodMaxHeight();
+            if (maxH > 0) mPlayerManager.setMaxVideoHeight(maxH);
+        } catch (Throwable ignored) {}
         // 【2026-10-14 视频进度续播】播放开始后，恢复到上次保存的位置
         if (resumePos > 5000) {
             mainHandler.postDelayed(() -> {
@@ -1148,6 +1184,92 @@ public class OttHomeActivity extends AppCompatActivity {
         if (base < 0) base = 0;
         int next = (base + delta + shownChannels.size()) % shownChannels.size();
         playChannel(shownChannels.get(next));
+    }
+
+    /**
+     * 【2026-10-17 OTT 清晰度切换】列出当前流里真实存在的视频高度（Tracks 去重降序）+ 自动。
+     *
+     * <p>选择「1080P」= 封顶 1080（弱网仍可在其下自适应降档，不会锁死单档）；
+     * 选择「自动」= 取消封顶。选择结果持久化，下次起播自动套用。
+     */
+    private void showQualityDialog() {
+        try {
+            java.util.List<Integer> heights = (mPlayerManager == null)
+                    ? new java.util.ArrayList<Integer>()
+                    : mPlayerManager.getAvailableVideoHeights();
+            final java.util.List<Integer> values = new java.util.ArrayList<>();
+            final java.util.List<String> labels = new java.util.ArrayList<>();
+            int cur = appConfig.getVodQualityChoice();
+            labels.add((cur <= 0 ? "✓ " : "") + "自动");
+            values.add(0);
+            for (Integer h : heights) {
+                labels.add((cur == h ? "✓ " : "") + h + "P");
+                values.add(h);
+            }
+            if (heights.isEmpty()) {
+                // 轨道尚未就绪（刚起播）→ 给出通用三档，选择后同样生效
+                int[] preset = {1080, 720, 480};
+                for (int h : preset) {
+                    labels.add((cur == h ? "✓ " : "") + h + "P");
+                    values.add(h);
+                }
+            }
+            LogBridge.i(TAG, "【OTT·清晰度】打开菜单，当前=" + (cur <= 0 ? "自动" : cur + "P")
+                    + "，可选轨=" + heights);
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("清晰度")
+                    .setItems(labels.toArray(new String[0]), (d, which) -> {
+                        int h = values.get(which);
+                        appConfig.setVodQualityChoice(h);
+                        appConfig.setVodMaxHeight(h);
+                        if (mPlayerManager != null) mPlayerManager.setMaxVideoHeight(h);
+                        Toast.makeText(this, h <= 0 ? "清晰度：自动" : ("清晰度：最高 " + h + "P"),
+                                Toast.LENGTH_SHORT).show();
+                        LogBridge.i(TAG, "【OTT·清晰度】用户选择 " + (h <= 0 ? "自动" : h + "P"));
+                    })
+                    .show();
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【OTT·清晰度】菜单失败: " + t.getMessage());
+        }
+    }
+
+    /**
+     * 【2026-10-17 OTT 详情页 / 线路切换】长按频道卡片弹出：
+     * 影片简介、主演、年份、地区、评分 + 播放线路选择（源7 才有详情数据）。
+     * 详情复用集数解析已抓的详情页 HTML，不产生额外网络请求。
+     */
+    private void showVodDetail(Channel ch) {
+        if (ch == null) return;
+        final String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
+        if (TextUtils.isEmpty(vodId)) {
+            Toast.makeText(this, "该频道无详情信息（仅源7 影视支持）", Toast.LENGTH_SHORT).show();
+            LogBridge.i(TAG, "【OTT·详情】非源7 频道，跳过: " + ch.getName());
+            return;
+        }
+        final Channel target = ch;
+        try {
+            VodDetailDialog dlg = new VodDetailDialog(this, vodId, ch.getName(),
+                    new VodDetailDialog.Callback() {
+                        @Override
+                        public void onSwitchLine(String vId, int sid) {
+                            // Dialog 内已 rememberSid + invalidate，这里只负责重播当前集
+                            LogBridge.i(TAG, "【OTT·详情】切线路 vodId=" + vId + " sid=" + sid
+                                    + " → 重播 " + target.getName());
+                            playChannel(target, true);
+                            enterFullscreenImmediately();
+                        }
+
+                        @Override
+                        public void onPlay() {
+                            playChannel(target);
+                            enterFullscreenImmediately();
+                        }
+                    });
+            dlg.show();
+            LogBridge.i(TAG, "【OTT·详情】打开详情弹窗 vodId=" + vodId + " 频道=" + ch.getName());
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【OTT·详情】弹窗失败: " + t.getMessage());
+        }
     }
 
     /** 【2026-10-14】全屏快进/快退：按偏移量调整播放位置，边界自动钳制。 */
@@ -2616,14 +2738,20 @@ public class OttHomeActivity extends AppCompatActivity {
                     }
                     setFullscreen(false);
                     return true;
+                case KeyEvent.KEYCODE_MENU:
+                    // 【2026-10-17 清晰度】点播全屏按菜单键 → 清晰度选择（不弹设置，避免误触）
+                    if (isVodControllerEligible()) {
+                        showQualityDialog();
+                        return true;
+                    }
+                    break;
                 case KeyEvent.KEYCODE_BACK:
                     // 【2026-10-11 源7】控制栏展示中 → 先收起控制栏；否则退出全屏
                     if (ottControllerShowing) {
                         hideSource7Controller();
                         return true;
                     }
-                    setFullscreen(false);
-                    return true;
+                    setFullscreen(false);                    return true;
                 default:
                     break;
             }

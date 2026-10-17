@@ -8,6 +8,11 @@ import com.tv.live.util.NetUtil;
 
 import okhttp3.Response;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -202,6 +207,74 @@ public final class AfhgrjUrlResolver {
         if (appContext != null) sAppContext = appContext.getApplicationContext();
         loadResolvedCache();
         loadEpisodeCache();
+        loadDetailCache();
+    }
+
+    /** 详情落盘缓存：集数走磁盘缓存时不会再抓详情页，故详情必须自己持久化 */
+    private static final String DETAIL_CACHE_FILE = "afhgrj_details.json";
+
+    private static void loadDetailCache() {
+        android.content.Context ctx = sAppContext;
+        if (ctx == null) return;
+        try {
+            File f = new File(ctx.getFilesDir(), DETAIL_CACHE_FILE);
+            if (!f.exists()) return;
+            byte[] buf = new byte[(int) f.length()];
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+                int off = 0, n;
+                while (off < buf.length && (n = in.read(buf, off, buf.length - off)) > 0) off += n;
+            }
+            JSONArray arr = new JSONArray(new String(buf, "UTF-8"));
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                Detail d = new Detail();
+                d.vodId = o.optString("id");
+                if (TextUtils.isEmpty(d.vodId)) continue;
+                d.title = o.optString("t");
+                d.year = o.optString("y");
+                d.area = o.optString("a");
+                d.category = o.optString("c");
+                d.actor = o.optString("ac");
+                d.director = o.optString("dr");
+                d.remarks = o.optString("rm");
+                d.score = o.optString("sc");
+                d.content = o.optString("ct");
+                sDetailCache.put(d.vodId, d);
+            }
+            LogBridge.i(TAG, "源7(影视) 详情缓存载入 " + sDetailCache.size() + " 条");
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "详情缓存读取失败: " + t.getMessage());
+        }
+    }
+
+    private static void persistDetailCache() {
+        android.content.Context ctx = sAppContext;
+        if (ctx == null) return;
+        try {
+            JSONArray arr = new JSONArray();
+            for (Detail d : sDetailCache.values()) {
+                if (d == null || TextUtils.isEmpty(d.vodId) || d.isEmpty()) continue;
+                JSONObject o = new JSONObject();
+                o.put("id", d.vodId);
+                o.put("t", d.title);
+                o.put("y", d.year);
+                o.put("a", d.area);
+                o.put("c", d.category);
+                o.put("ac", d.actor);
+                o.put("dr", d.director);
+                o.put("rm", d.remarks);
+                o.put("sc", d.score);
+                o.put("ct", d.content);
+                arr.put(o);
+            }
+            File f = new File(ctx.getFilesDir(), DETAIL_CACHE_FILE);
+            try (FileOutputStream fos = new FileOutputStream(f)) {
+                fos.write(arr.toString().getBytes("UTF-8"));
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "详情缓存写入失败: " + t.getMessage());
+        }
     }
 
     /**
@@ -858,12 +931,179 @@ public final class AfhgrjUrlResolver {
     /**
      * 详情页抓取实际实现。调用方 {@link #fetchEpisodes} 负责缓存短路与 vodId 级单飞。
      */
+    /**
+     * 【2026-10-17 详情页】源7 影片元数据：直接复用「集数解析」已经抓下来的
+     * {@code /yd/{vodId}/} 详情页 HTML 解析，<b>不产生任何额外网络请求</b>。
+     */
+    public static final class Detail {
+        public String vodId = "";
+        public String title = "";
+        public String year = "";
+        public String area = "";
+        public String actor = "";
+        public String director = "";
+        public String remarks = "";
+        public String score = "";
+        public String content = "";
+        /** 类型（国产/动作片/…），详情页「类型：」字段 */
+        public String category = "";
+
+        public boolean isEmpty() {
+            return TextUtils.isEmpty(title) && TextUtils.isEmpty(content)
+                    && TextUtils.isEmpty(actor);
+        }
+
+        /** 「2024 · 大陆 · 国产 · 更新至184集」这样的单行副标题 */
+        public String subtitle() {
+            StringBuilder sb = new StringBuilder();
+            if (!TextUtils.isEmpty(year)) sb.append(year);
+            if (!TextUtils.isEmpty(area)) sb.append(sb.length() > 0 ? " · " : "").append(area);
+            if (!TextUtils.isEmpty(category)) sb.append(sb.length() > 0 ? " · " : "").append(category);
+            if (!TextUtils.isEmpty(remarks)) sb.append(sb.length() > 0 ? " · " : "").append(remarks);
+            if (!TextUtils.isEmpty(score)) sb.append(sb.length() > 0 ? " · " : "").append(score).append("分");
+            return sb.toString();
+        }
+    }
+
+    private static final Map<String, Detail> sDetailCache = new ConcurrentHashMap<>();
+
+    /** 取影片详情：内存 → 磁盘 → 起播解析顺带解析 → （用户主动看详情时）单次补抓详情页。 */
+    public static Detail getDetail(String vodId) {
+        if (TextUtils.isEmpty(vodId)) return null;
+        Detail d = sDetailCache.get(vodId);
+        if (d != null && !d.isEmpty()) return d;
+        fetchEpisodes(vodId);   // 内部会解析并写入 sDetailCache
+        d = sDetailCache.get(vodId);
+        if (d != null && !d.isEmpty()) return d;
+        // 集数已走磁盘缓存时不会重抓详情页 → 用户主动打开详情，允许补一次（单次串行，用户触发）
+        try {
+            String html = getText(BASE + "/yd/" + vodId + "/");
+            if (!TextUtils.isEmpty(html)) {
+                parseDetail(vodId, html);
+                d = sDetailCache.get(vodId);
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "详情补抓失败 vodId=" + vodId + ": " + t.getMessage());
+        }
+        return d;
+    }
+
+    /** 详情页地址（调试/日志用） */
+    public static String detailPageUrl(String vodId) {
+        return BASE + "/yd/" + vodId + "/";
+    }
+
+    /**
+     * 从详情页 HTML 解析元数据。站点是 MacCMS 移动模板，
+     * 因此先把标签剥成纯文本再按「字段名：值」提取，避免模板改版导致正则全失效。
+     */
+    private static void parseDetail(String vodId, String html) {
+        try {
+            Detail d = new Detail();
+            d.vodId = vodId;
+
+            // 标题：<h1>…</h1> 优先，其次 <title>…</title>
+            String h1 = firstGroup(html, "<h1[^>]*>(.*?)</h1>");
+            if (TextUtils.isEmpty(h1)) h1 = firstGroup(html, "<title>(.*?)</title>");
+            d.title = cleanText(h1);
+            int cut = d.title.indexOf(" - ");
+            if (cut > 0) d.title = d.title.substring(0, cut).trim();
+
+            String plain = cleanText(html.replaceAll("<script[\\s\\S]*?</script>", " ")
+                    .replaceAll("<style[\\s\\S]*?</style>", " ")
+                    .replaceAll("<[^>]+>", " "));
+
+            d.year = matchFirst(plain, "年份\\s*[:：]?\\s*(\\d{4})");
+            if (TextUtils.isEmpty(d.year)) d.year = matchFirst(plain, "\\b(19|20)\\d{2}\\b");
+            d.area = matchFirst(plain, "地区\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z]{2,10})");
+            d.category = matchFirst(plain, "类型\\s*[:：]?\\s*([\\u4e00-\\u9fa5A-Za-z、/]{2,20})");
+            // ⚠ 2026-10-17 修正：这两条正则原先少了一个右括号（lookahead 未闭合），
+            //   编译失败被 firstGroup 吞掉 → 主演/导演恒为空。
+            d.director = matchFirst(plain, "导演\\s*[:：]?\\s*([^\\s]{2,40}?)(?=\\s*(?:主演|地区|年份|简介|更新|$))");
+            d.actor = matchFirst(plain, "主演\\s*[:：]?\\s*(.{2,120}?)(?=\\s*(?:导演|地区|年份|简介|更新|$))");
+            d.remarks = matchFirst(plain, "(更新至\\s*\\d+\\s*[集话期]|全\\s*\\d+\\s*集|已完结|HD|BD|TC|TS)");
+            d.score = matchFirst(plain, "(\\d\\.\\d)\\s*分");
+            // 简介：抓到「第01集 / 立即播放 / 在线观看」之前就停，避免把剧集列表并进正文
+            String content = matchFirst(plain,
+                    "(?:剧情简介|简介|内容简介)\\s*[:：]?\\s*(.{20,800}?)(?=\\s*(?:第\\s*\\d+\\s*集|立即播放|在线观看|详情|下载|$))");
+            if (TextUtils.isEmpty(content)) {
+                content = matchFirst(plain, "(?:剧情简介|简介|内容简介)\\s*[:：]?\\s*(.{20,800})");
+            }
+            if (!TextUtils.isEmpty(content)) {
+                content = content.replace("...[已截断]", "").trim();
+                // 【2026-10-17】不做自动去重：站点把「短简介 + 完整简介」连着输出，
+                //   去重会误截掉正文本体（实测只剩一半）；重复段落不影响阅读，仅限长即可。
+                if (content.length() > 600) content = content.substring(0, 600) + "…";
+            }
+            d.content = content;
+
+            sDetailCache.put(vodId, d);
+            persistDetailCache();
+            LogBridge.i(TAG, "源7(影视) 详情解析 vodId=" + vodId + " 标题=" + d.title
+                    + " 年份=" + d.year + " 地区=" + d.area
+                    + " 备注=" + d.remarks + " 主演长度=" + d.actor.length()
+                    + " 简介长度=" + d.content.length());
+            if (d.actor.isEmpty() || d.content.isEmpty()) {
+                // 模板改版兜底：把含关键字段名的片段打出来，便于对着真机日志调正则
+                String probe = plain.length() > 600 ? plain.substring(0, 600) : plain;
+                LogBridge.d(TAG, "源7(影视) 详情字段缺失探针: " + probe);
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "源7(影视) 详情解析异常: " + t.getMessage());
+        }
+    }
+
+    private static String firstGroup(String src, String regex) {
+        if (TextUtils.isEmpty(src)) return "";
+        try {
+            Matcher m = Pattern.compile(regex, Pattern.DOTALL).matcher(src);
+            return m.find() ? m.group(1) : "";
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    private static String matchFirst(String src, String regex) {
+        return firstGroup(src, regex);
+    }
+
+    /**
+     * 【2026-10-17】源7 详情页的简介常整段重复（模板把短简介与完整简介连着输出，
+     * 且两次的起始措辞可能不同）。这里用「30 字窗口在正文前段已出现过」判定重复起点，
+     * 找到就截断到该起点。
+     */
+    private static String dedupeRepeatedTail(String s) {
+        if (s == null || s.length() < 120) return s;
+        try {
+            final int win = 30;
+            for (int i = 60; i + win <= s.length(); i++) {
+                String chunk = s.substring(i, i + win);
+                if (s.indexOf(chunk) < i - 10) {
+                    if (i < s.length() * 0.85) return s.substring(0, i).trim();
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return s;
+    }
+
+    /** 去标签残留 + 压缩空白 */
+    private static String cleanText(String s) {
+        if (s == null) return "";
+        return s.replaceAll("&nbsp;?", " ")
+                .replaceAll("&amp;", "&")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
     private static List<Channel.EpgItem> doFetchEpisodes(String vodId) {
         String html = getText(BASE + "/yd/" + vodId + "/");
         if (TextUtils.isEmpty(html)) {
             LogBridge.w(TAG, "源7(影视) 详情页取空 vodId=" + vodId);
             return null;
         }
+        // 【2026-10-17 详情页】同一份 HTML 顺带解析元数据（零额外请求）
+        parseDetail(vodId, html);
 
         Pattern p = Pattern.compile("/yplay/" + Pattern.quote(vodId) + "-(\\d+)-(\\d+)/");
 

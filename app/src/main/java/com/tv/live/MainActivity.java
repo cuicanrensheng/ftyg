@@ -231,7 +231,11 @@ public class MainActivity extends AppCompatActivity {
         if (!getIntent().getBooleanExtra(EXTRA_SKIP_SOURCE_ROUTE, false)
                 && AppConfig.getInstance(this).getSourceMode() == AppConfig.SOURCE_MODE_OTT) {
             LogBridge.i("MainActivity", "源模式=OTT，跳转 OTT 首页");
-            startActivity(new Intent(this, OttHomeActivity.class));
+            // 【2026-10-17】透传调试参数 debug_vod_id（仅调试用，正式启动不带该 extra）
+            android.content.Intent ottIntent = new Intent(this, OttHomeActivity.class);
+            String dbgVod = getIntent() == null ? null : getIntent().getStringExtra("debug_vod_id");
+            if (dbgVod != null) ottIntent.putExtra("debug_vod_id", dbgVod);
+            startActivity(ottIntent);
             finish();
             return;
         }

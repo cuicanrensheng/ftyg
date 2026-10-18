@@ -494,6 +494,108 @@ public class M3u8AdStripper {
         LogBridge.d(TAG, "【算法选择①】URL长度统计: 主流长度=" + dominantUrlLen + ", 占比=" + String.format("%.1f%%", dominantUrlLenRatio * 100));
         LogBridge.d(TAG, "【算法选择①】块统计: 有效块=" + validBlockCount + ", 平均分片数=" + avgSegCount + ", 平均时长=" + avgDuration + "s");
 
+        // 【2026-10-17 优化】块大小一致性检测：如果所有有效块的分片数都接近平均值，
+        // 说明这是正常的视频分片（编码器按固定大小切分），不是广告+正片混合结构，直接跳过剥离。
+        if (validBlockCount >= 3 && avgSegCount > 0) {
+            int minSeg = Integer.MAX_VALUE, maxSeg = 0;
+            int smallBlockCount = 0;
+            int largeBlockCount = 0;
+            for (int bi = 0; bi < blocks.length; bi++) {
+                if (blockSegCounts[bi] > 0) {
+                    if (blockSegCounts[bi] < minSeg) minSeg = blockSegCounts[bi];
+                    if (blockSegCounts[bi] > maxSeg) maxSeg = blockSegCounts[bi];
+                    if (blockSegCounts[bi] <= avgSegCount * 0.75) smallBlockCount++;
+                    if (blockSegCounts[bi] >= avgSegCount * 1.4) largeBlockCount++;
+                }
+            }
+            double sizeRatio = maxSeg > 0 ? (double) maxSeg / minSeg : 1.0;
+            LogBridge.d(TAG, "【算法选择①】块大小范围: min=" + minSeg + ", max=" + maxSeg
+                    + ", 比值=" + String.format("%.1f", sizeRatio)
+                    + ", 小块数=" + smallBlockCount + ", 大块数=" + largeBlockCount);
+
+            // 【2026-10-17 优化2】统计3分片小块占比：广告混合结构中广告块通常是3分片，
+            // 但正片块应该是50+分片。如果3分片块占比>40%且最大块<30分片，
+            // 说明这是正常视频分片（编码器按固定大小切分），不是广告混合结构。
+            int threeSegBlockCount = 0;
+            for (int bi = 0; bi < blocks.length; bi++) {
+                if (blockSegCounts[bi] == 3) threeSegBlockCount++;
+            }
+            double threeSegRatio = validBlockCount > 0 ? (double) threeSegBlockCount / validBlockCount : 0;
+            LogBridge.d(TAG, "【算法选择①】3分片块占比: " + threeSegBlockCount + "/" + validBlockCount
+                    + " = " + String.format("%.1f%%", threeSegRatio * 100) + ", 最大块=" + maxSeg);
+
+            // 【2026-10-17 优化3】文件名跳变检测：相邻块的文件名前缀不一致（如正片000073→广告943290），
+            // 说明是不同CDN源，极可能是广告插入，不跳过一致性检测
+            boolean filenameJump = false;
+            int filenameJumpCount = 0;
+            int filenameCompareCount = 0;
+            String prevBlockFirstFile = "";
+            for (int bi = 0; bi < blocks.length; bi++) {
+                if (blockSegCounts[bi] > 0) {
+                    // 从块文本中提取第一个分片URL
+                    String firstFile = "";
+                    for (String line : blocks[bi].split("\\n")) {
+                        line = line.trim();
+                        if (!line.isEmpty() && !line.startsWith("#")) {
+                            firstFile = line;
+                            break;
+                        }
+                    }
+                    if (firstFile.isEmpty()) continue;
+                    String fileName = firstFile.substring(firstFile.lastIndexOf("/") + 1);
+                    if (!prevBlockFirstFile.isEmpty() && !fileName.isEmpty()) {
+                        // 【2026-10-17 优化】公共前缀长度检测：比较两个文件名的公共前缀，
+                        // 如果公共前缀占比<70%，说明文件名跳变（不同CDN源/广告插入）
+                        int commonLen = 0;
+                        int minLen = Math.min(prevBlockFirstFile.length(), fileName.length());
+                        for (int ci = 0; ci < minLen; ci++) {
+                            if (prevBlockFirstFile.charAt(ci) == fileName.charAt(ci)) {
+                                commonLen++;
+                            } else {
+                                break;
+                            }
+                        }
+                        double commonRatio = minLen > 0 ? (double) commonLen / minLen : 1.0;
+                        if (commonRatio < 0.7) {
+                            filenameJumpCount++;
+                            if (filenameJumpCount <= 3) {
+                                LogBridge.d(TAG, "【算法选择①】文件名跳变: 块" + (bi-1) + "->" + bi 
+                                    + " 公共前缀=" + commonLen + "/" + minLen + "(" + String.format("%.0f%%", commonRatio * 100) + ")"
+                                    + " " + prevBlockFirstFile.substring(0, Math.min(16, prevBlockFirstFile.length())) 
+                                    + " -> " + fileName.substring(0, Math.min(16, fileName.length())));
+                            }
+                        }
+                        filenameCompareCount++;
+                    }
+                    prevBlockFirstFile = fileName;
+                }
+            }
+            // 【2026-10-17 优化】跳变占比检测：如果>50%的相邻块都跳变，说明所有文件名都是随机哈希，
+            // 不是广告插入（广告插入应该是少数块跳变），此时禁用文件名跳变信号
+            double jumpRatio = filenameCompareCount > 0 ? (double) filenameJumpCount / filenameCompareCount : 0;
+            if (jumpRatio > 0.5) {
+                filenameJump = false;
+                LogBridge.d(TAG, "【算法选择①】文件名跳变占比=" + String.format("%.0f%%", jumpRatio * 100) 
+                    + " >50%，判定为随机哈希命名，禁用跳变信号");
+            } else if (filenameJumpCount > 0) {
+                filenameJump = true;
+                LogBridge.d(TAG, "【算法选择①】文件名跳变占比=" + String.format("%.0f%%", jumpRatio * 100) 
+                    + "，存在广告插入跳变");
+            }
+            boolean uniformBlockSize = sizeRatio < 5.0 && !filenameJump;
+            boolean noClearAdPattern = (smallBlockCount < validBlockCount * 0.1)
+                    || (largeBlockCount < validBlockCount * 0.05);
+            // 新增：3分片小块占比高且无大段正片（max<30），判定为正常分片
+            boolean normalSmallSegmentVideo = threeSegRatio > 0.4 && maxSeg < 30;
+            if ((uniformBlockSize && noClearAdPattern) || normalSmallSegmentVideo) {
+                LogBridge.i(TAG, "【算法选择①】块大小一致性检测通过（比值=" + String.format("%.1f", sizeRatio)
+                        + "，3分片占比=" + String.format("%.1f%%", threeSegRatio * 100)
+                        + "，max=" + maxSeg
+                        + "），判定为正常视频分片，跳过DISCONTINUITY算法");
+                return null;
+            }
+        }
+
         LinkedList<String> keepBlocks = new LinkedList<>();  // 保留的块（正片）
         LinkedList<String> adBlocks = new LinkedList<>();    // 广告块
         ArrayList<String> keepUrls = new ArrayList<>();      // 正片分片URL
@@ -942,6 +1044,46 @@ public class M3u8AdStripper {
         // 计算平均时长
         BigDecimal avgDuration = totalDuration.divide(
                 new BigDecimal(validBlockCount), 2, RoundingMode.HALF_UP);
+
+        // 【2026-10-17 优化】时长一致性检测：如果所有块时长差异不大（max/min<3），
+        // 说明是正常视频分片（编码器按固定时长切分），不是广告混合结构，跳过。
+        if (validBlockCount >= 3) {
+            BigDecimal minDuration = blockDurations.get(0);
+            BigDecimal maxDuration = blockDurations.get(0);
+            for (BigDecimal d : blockDurations) {
+                if (d.compareTo(minDuration) < 0) minDuration = d;
+                if (d.compareTo(maxDuration) > 0) maxDuration = d;
+            }
+            double durationRatio = maxDuration.doubleValue() / Math.max(minDuration.doubleValue(), 0.1);
+            // 【2026-10-17 优化】统计时长在平均值±30%范围内的块数（更严格）
+            int normalDurationCount = 0;
+            int veryShortBlockCount = 0; // 明显短块（<平均70%）
+            for (BigDecimal d : blockDurations) {
+                if (d.compareTo(avgDuration.multiply(new BigDecimal("0.7"))) >= 0 &&
+                    d.compareTo(avgDuration.multiply(new BigDecimal("1.3"))) <= 0) {
+                    normalDurationCount++;
+                }
+                if (d.compareTo(avgDuration.multiply(new BigDecimal("0.7"))) < 0) {
+                    veryShortBlockCount++;
+                }
+            }
+            double normalDurationRatio = (double) normalDurationCount / validBlockCount;
+            LogBridge.d(TAG, "【算法选择②】时长范围: min=" + minDuration + "s, max=" + maxDuration
+                    + "s, 比值=" + String.format("%.1f", durationRatio)
+                    + ", 正常时长块=" + normalDurationCount + "/" + validBlockCount
+                    + " (" + String.format("%.1f%%", normalDurationRatio * 100) + ")"
+                    + ", 明显短块=" + veryShortBlockCount);
+            // 条件1：max/min比值 < 2.5（时长差异不大，更严格）
+            // 条件2：大部分块（>80%）的时长在平均值±30%范围内（时长分布集中）
+            // 条件3：没有明显短块（<平均70%）
+            // 满足条件1+条件3，或条件2+条件3，才判定为正常视频分片
+            if ((durationRatio < 2.5 || normalDurationRatio > 0.8) && veryShortBlockCount == 0) {
+                LogBridge.i(TAG, "【算法选择②】时长一致性检测通过（比值=" + String.format("%.1f", durationRatio)
+                        + "，正常时长占比=" + String.format("%.1f%%", normalDurationRatio * 100)
+                        + "），判定为正常视频分片，跳过时长异常算法");
+                return null;
+            }
+        }
 
         // 找出时长异常偏短的块
         ArrayList<Integer> adBlockIndices = new ArrayList<>();

@@ -35,6 +35,25 @@ public class PlaylistParser {
         return parseInternal(br, channelMap);
     }
 
+    /**
+     * 解析 M3U 内容，不做去重/合并（源8专用）。
+     *
+     * <p>标准 {@link #parseContent(String)} 用 tvgId/name 作为 key，相同 key 的条目会
+     * 合并为一个频道（addBackupUrl）。源8的片单分组包含大量重复视频（24个片单内容相同），
+     * 用户要求「是多少视频就显示多少视频」，因此提供此不去重版本。
+     *
+     * @param content M3U 文本
+     * @return 频道列表（包含重复条目）
+     */
+    public static List<Channel> parseContentNoDedup(String content) throws Exception {
+        if (content == null || content.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Channel> channels = new ArrayList<>();
+        BufferedReader br = new BufferedReader(new StringReader(content));
+        return parseInternalNoDedup(br, channels);
+    }
+
     private static List<Channel> parseInternal(BufferedReader br, Map<String, Channel> channelMap) throws Exception {
         String line;
         String currentGroup = "未分类";
@@ -133,6 +152,106 @@ public class PlaylistParser {
         return new ArrayList<>(channelMap.values());
     }
 
+    /**
+     * 不去重版本的 M3U 解析（源8片单分组专用）。
+     * 相同 tvgId/name 的条目不会合并，每条都作为独立频道保留。
+     */
+    private static List<Channel> parseInternalNoDedup(BufferedReader br, List<Channel> channels) throws Exception {
+        String line;
+        String currentGroup = "未分类";
+
+        String m3uName = "";
+        String m3uTvgId = "";
+        String m3uGroup = "";
+        String m3uLogo = "";
+        boolean pendingM3uUri = false;
+
+        while ((line = br.readLine()) != null) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+
+            if (line.endsWith(",#genre#") || line.endsWith("#genre#")) {
+                String group = line;
+                if (group.endsWith(",#genre#")) {
+                    group = group.substring(0, group.length() - ",#genre#".length()).trim();
+                } else if (group.endsWith("#genre#")) {
+                    int idx = group.lastIndexOf("#genre#");
+                    if (idx > 0) group = group.substring(0, idx).trim();
+                    if (group.endsWith(",")) group = group.substring(0, group.length() - 1).trim();
+                }
+                if (!group.isEmpty()) currentGroup = group;
+                pendingM3uUri = false;
+                m3uName = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
+                continue;
+            }
+
+            int diypComma = findFirstHttpComma(line);
+            if (diypComma > 0) {
+                String diypName = line.substring(0, diypComma).trim();
+                String diypUri = line.substring(diypComma + 1).trim();
+                if (!diypName.isEmpty() && diypUri.startsWith("http")) {
+                    channels.add(new Channel(diypName, diypUri, currentGroup, ""));
+                    pendingM3uUri = false;
+                    m3uName = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
+                    continue;
+                }
+            }
+
+            if (line.startsWith("#EXTM3U")) continue;
+
+            if (line.startsWith("#EXTGRP:")) {
+                currentGroup = line.substring(8).trim();
+                continue;
+            }
+
+            if (line.startsWith("#EXTINF:")) {
+                m3uName = "";
+                m3uTvgId = "";
+                m3uGroup = currentGroup;
+                m3uLogo = "";
+
+                if (line.contains("tvg-id=\"")) {
+                    try {
+                        m3uTvgId = line.split("tvg-id=\"")[1].split("\"")[0].trim();
+                    } catch (Exception ignored) {}
+                }
+                if (line.contains("group-title=\"")) {
+                    try {
+                        m3uGroup = line.split("group-title=\"")[1].split("\"")[0].trim();
+                    } catch (Exception ignored) {}
+                }
+                if (line.contains("tvg-logo=\"")) {
+                    try { m3uLogo = line.split("tvg-logo=\"")[1].split("\"")[0].trim(); } catch (Exception ignored) {}
+                }
+                if (line.contains(",")) {
+                    m3uName = line.substring(line.indexOf(",") + 1).trim();
+                }
+                pendingM3uUri = true;
+                continue;
+            }
+
+            if (!line.startsWith("#") && pendingM3uUri) {
+                String uri = line;
+                if (isSupportedUri(uri)) {
+                    Channel ch = new Channel(m3uName, uri, m3uGroup, m3uTvgId);
+                    if (m3uLogo != null && !m3uLogo.isEmpty()) {
+                        ch.setLogoUrl(m3uLogo);
+                    }
+                    channels.add(ch);
+                }
+                pendingM3uUri = false;
+                m3uName = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
+                continue;
+            }
+
+            if (!line.startsWith("#") && isSupportedUri(line)) {
+                channels.add(new Channel(line, line, currentGroup, ""));
+            }
+        }
+        br.close();
+        return channels;
+    }
+
     private static void addOrMergeChannel(Map<String, Channel> channelMap,
                                           String name, String uri,
                                           String group, String tvgId, String logo) {
@@ -174,6 +293,8 @@ public class PlaylistParser {
      *       —— 同为待解析协议串；本期播放地址待加密接口补齐，解析返回 null。</li>
      *   <li>内置源7（afhgrj 影视）{@code afhgrj://<vodId>}（2026-10-10 新增）—— 待解析地址，
      *       起播时抓播放页 player_aaaa 取真实 m3u8（惰性解析）。</li>
+     *   <li>内置源8（4kvm 精选片单）{@code kvm4://<playId>}（2026-10-18 新增）—— 待解析地址，
+     *       起播时用 WebView 加载播放页取 video.currentSrc（惰性解析）。</li>
      * </ul>
      */
     public static boolean isSupportedUri(String uri) {
@@ -183,7 +304,8 @@ public class PlaylistParser {
                 || uri.startsWith(com.tv.live.migu.MiguSourceLoader.SCHEME_NOWTV)
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoVodSourceLoader.SCHEME)
-                || uri.startsWith(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME);
+                || uri.startsWith(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME)
+                || uri.startsWith(com.tv.live.kvm4.Kvm4UrlResolver.SCHEME);
     }
 
     private static int findFirstHttpComma(String line) {

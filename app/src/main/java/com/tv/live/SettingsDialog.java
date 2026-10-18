@@ -471,6 +471,9 @@ public class SettingsDialog extends android.app.Dialog {
                 if (activity != null && !activity.isFinishing()) {
                     activity.switchingToOtt = true;
                     Intent intent = new Intent(activity, OttHomeActivity.class);
+                    // 【2026-10-18 启动图】热切换：播放器还在播，不会再回调 onPlayReady，
+                    //   若不跳过启动图，覆盖层会一直挂到 9s 保底才放行
+                    intent.putExtra(OttHomeActivity.EXTRA_WARM_START, true);
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     activity.startActivity(intent);
                     activity.finish();
@@ -988,6 +991,26 @@ public class SettingsDialog extends android.app.Dialog {
                     tv_channel_line.setText((afi >= 0 && afi < afLines.size())
                             ? afLines.get(afi) : "未识别");
                 }
+                tv_resolution_status.setText("自适应");
+                return;
+            }
+
+            // 【2026-10-18】源8（4kvm 影视点播）频道：线路 = 播放页 data-line；
+            //   清晰度 = 该源在 AppConfig 里按源持久化的档位（0=自动）。
+            String kvm4PlayId = currentChannel != null
+                    ? com.tv.live.kvm4.Kvm4UrlResolver.playIdOfChannel(currentChannel) : null;
+            if (!TextUtils.isEmpty(kvm4PlayId)) {
+                List<Integer> kvmLines =
+                        com.tv.live.kvm4.Kvm4UrlResolver.getLineNumbers(kvm4PlayId);
+                if (kvmLines.isEmpty()) {
+                    tv_channel_line.setText("加载中…");
+                } else {
+                    // 【2026-10-18】只显示线路号：`源8 · 线路1（185 集）` 太长会把
+                    // 「频道线路」这一行撑换行、压到标签上，这里只留最短形式。
+                    int curLine = com.tv.live.kvm4.Kvm4UrlResolver.getSelectedLine(kvm4PlayId);
+                    tv_channel_line.setText("线路" + curLine);
+                }
+                // 源8 不做清晰度档位暴露：站点播放器自适应，这里如实写「自适应」
                 tv_resolution_status.setText("自适应");
                 return;
             }

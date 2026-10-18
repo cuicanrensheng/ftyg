@@ -109,7 +109,7 @@ public class LiveSourceLoader {
             List<String> sources = Arrays.asList(
                     UrlConfig.LIVE_URL, UrlConfig.LIVE_URL_2, UrlConfig.LIVE_URL_CHANXIANG,
                     UrlConfig.LIVE_URL_4, UrlConfig.LIVE_URL_5, UrlConfig.LIVE_URL_6,
-                    UrlConfig.LIVE_URL_7);
+                    UrlConfig.LIVE_URL_7, UrlConfig.LIVE_URL_8);
             // 【2026-10-11 切源修复】用户显式选择的源不得被静默替换成另一个源。
             // 仅当生效源是「内置源1」（默认源，地址多变才需要镜像/多源兜底）时才启用依次兜底链；
             // 用户显式选择了源2~源7 或自定义源时只加载该源，失败即走本地永久兜底/报错。
@@ -156,7 +156,8 @@ public class LiveSourceLoader {
                 final boolean isRenyibo = url.startsWith("renyibo://");
                 final boolean isMigu = url.startsWith("migu://");
                 final boolean isAfhgrj = url.startsWith("afhgrj://");
-                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj) ? url : getAcceleratedUrl(url);
+                final boolean isKvm4 = url.startsWith("kvm4://");
+                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isKvm4) ? url : getAcceleratedUrl(url);
                 LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 开始加载：" + acceleratedUrl);
                 LogBridge.d(TAG, "LOAD: source #" + (i+1) + " downloading: " + acceleratedUrl);
                 try {
@@ -177,6 +178,9 @@ public class LiveSourceLoader {
                     } else if (isAfhgrj) {
                         LogBridge.i(TAG, "【影视源7】走内置源7分支，抓 5 个分组生成 M3U（地址为 afhgrj:// 惰性解析）");
                         rawContent = com.tv.live.afhgrj.AfhgrjSourceLoader.loadAllLiveAsM3u(context);
+                    } else if (isKvm4) {
+                        LogBridge.i(TAG, "【4kvm源8】走内置源8分支，抓 5 个片单分组生成 M3U（地址为 kvm4:// 惰性解析）");
+                        rawContent = com.tv.live.kvm4.Kvm4SourceLoader.loadAllLiveAsM3u(context);
                     } else {
                         rawContent = downloadRawContent(acceleratedUrl);
                     }
@@ -186,7 +190,18 @@ public class LiveSourceLoader {
                         throw new IOException("下载为空");
                     }
                     long tParseStart = System.currentTimeMillis();
-                    List<Channel> channels = PlaylistParser.parseContent(rawContent);
+                    // 源8（4kvm）片单分组包含大量重复视频，用户要求不去重，是多少显示多少
+                    List<Channel> channels;
+                    if (isKvm4) {
+                        LogBridge.i(TAG, "【4kvm源8】使用不去重解析 parseContentNoDedup，rawContent长度=" + rawContent.length());
+                        channels = PlaylistParser.parseContentNoDedup(rawContent);
+                    } else {
+                        channels = PlaylistParser.parseContent(rawContent);
+                    }
+                    // 【2026-10-18 修日志误导】这里原来无条件写「【4kvm源8】解析完成」，
+                    // 连源1 的成功日志也被贴上源8 前缀，排查时极易误判。
+                    LogBridge.i(TAG, (isKvm4 ? "【4kvm源8】" : "【网络】")
+                            + "解析完成，频道数=" + (channels == null ? 0 : channels.size()));
                     if (channels == null || channels.isEmpty()) {
                         LogBridge.e(TAG, "LOAD: source #" + (i+1) + " parsed 0 channels");
                         throw new IOException("解析后频道数=0");

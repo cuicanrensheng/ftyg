@@ -1451,6 +1451,55 @@ public class TVPlayerManager {
         }, "Afhgrj-Resolve").start();
     }
 
+    /**
+     * 【2026-10-18 新增】源8（4kvm 精选片单）待解析地址解析后起播 —— 参照源7 {@link #resolveAfhgrjAndPlay} 模式。
+     *
+     * <p>M3U 里存的是 {@code kvm4://<playId>}，
+     * 在起播这一刻才用 WebView 加载播放页 {@code https://4kvm.top/play/<playId>}，
+     * 从 video 元素提取真实 m3u8 直链，完成后回主线程播放。
+     */
+    private void resolveKvm4AndPlay(String rawUrl, long initialSeekPosition) {
+        synchronized (this) {
+            if (rawUrl.equals(kvm4ResolvingUrl)) {
+                LogBridge.d(TAG, "【4kvm源8】解析进行中，忽略重复请求");
+                return;
+            }
+            kvm4ResolvingUrl = rawUrl;
+        }
+        LogBridge.i(TAG, "【4kvm源8】起播解析待解析地址 → " + rawUrl);
+        new Thread(() -> {
+            String finalUrl = null;
+            try {
+                finalUrl = com.tv.live.kvm4.Kvm4UrlResolver.resolve(rawUrl, context);
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "【4kvm源8】解析异常: " + t.getMessage());
+            }
+            final String resolved = finalUrl;
+            mHandler.post(() -> {
+                kvm4ResolvingUrl = "";
+                // 频道已被切换 → 丢弃本次结果
+                if (!TextUtils.equals(currentUrl, rawUrl)) {
+                    LogBridge.d(TAG, "【4kvm源8】解析完成但已切换，丢弃");
+                    return;
+                }
+                if (TextUtils.isEmpty(resolved)) {
+                    LogBridge.w(TAG, "【4kvm源8】解析失败，转自动重试切台");
+                    autoRetry("源8解析失败");
+                    return;
+                }
+                LogBridge.i(TAG, "【4kvm源8】落地地址就绪 → " + resolved);
+                try {
+                    com.tv.live.MyApplication.prewarmStreamAsync(resolved);
+                } catch (Throwable ignored) {
+                }
+                doPlay(resolved, initialSeekPosition);
+            });
+        }, "Kvm4-Resolve").start();
+    }
+
+    /** 源8（4kvm）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
+    private volatile String kvm4ResolvingUrl = "";
+
     /** 源7（afhgrj 影视）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
     private volatile String afhgrjResolvingUrl = "";
 
@@ -2650,6 +2699,19 @@ public class TVPlayerManager {
         }
     }
 
+    /**
+     * 【源8 4kvm】当前频道是源8时，失效其 m3u8 缓存，
+     * 4kvm 的 m3u8 地址有时效性，播放失败说明缓存已过期，下次重解析。
+     */
+    private void invalidateKvm4ResolvedCache() {
+        Channel ch = currentChannel;
+        if (ch == null) return;
+        String url = ch.getMainPlayUrl();
+        if (com.tv.live.kvm4.Kvm4UrlResolver.isKvm4Url(url)) {
+            com.tv.live.kvm4.Kvm4UrlResolver.invalidateByUrl(url);
+        }
+    }
+
     private void autoRetry(String reason, Throwable cause) {
         // ★【2026-10-08】缓存回放直链一旦触发重试 → 立即作废该缓存，
         //   避免重试再次回放同一条死链（后台解析链结果会无缝接管）
@@ -2657,6 +2719,9 @@ public class TVPlayerManager {
         // ★【方案1b】源7落地缓存亦同理：播放失败说明缓存 m3u8 已不可达，
         //   立即失效，让后台解析链重新走完整换线（探活避开死 sid）。
         invalidateAfhgrjResolvedCache();
+        // ★【源8 4kvm】播放失败说明 m3u8 地址已过期（4kvm 地址有时效性），
+        //   立即失效缓存，下次重解析获取新地址。
+        invalidateKvm4ResolvedCache();
         if (cause != null) {
             Throwable t = cause;
             int depth = 0;
@@ -4462,13 +4527,15 @@ public class TVPlayerManager {
             // 【2026-10-10】内置源7（afhgrj 影视）：afhgrj://<vodId> 或 afhgrj://<vodId>-<sid>-<nid>
             //   是待解析地址，不能被「频道线路表」覆盖（EPG 切集时传的是具体某一集）。
             boolean isAfhgrjPending = com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(playUrl);
+            // 【2026-10-18】内置源8（4kvm 精选片单）：kvm4://<playId> 是待解析地址
+            boolean isKvm4Pending = com.tv.live.kvm4.Kvm4UrlResolver.isKvm4Url(playUrl);
             LogBridge.d(TAG, "doPlay: url=" + playUrl.substring(0, Math.min(100, playUrl.length())) + " isHls=" + isHlsUrl(playUrl) + " isRealStream=" + isRealStream);
 
             String finalUrl;
             // 【2026-10-07】mMiguDirectPlay：咪咕切线路/切清晰度时置位 —— 本次起播必须
             // 直接采用传入的源串，不能被「频道线路表」覆盖（咪咕频道 backupUrls 不含这些源）。
             if (currentChannel != null && !isRealStream && !isZgyjVod && !isYunTuLb
-                    && !isRenyiboPending && !isAfhgrjPending && !isRenyiboResolvedStream
+                    && !isRenyiboPending && !isAfhgrjPending && !isKvm4Pending && !isRenyiboResolvedStream
                     && !mHuyaDirectPlay && !mMiguDirectPlay) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                 String channelKey = currentChannel.getChannelId();
@@ -4559,6 +4626,13 @@ public class TVPlayerManager {
                 return;
             }
 
+            // ★内置源8（4kvm 精选片单）：M3U 里存的是 kvm4://<playId>，
+            //   起播这一刻才用 WebView 解析播放页取真实 m3u8（惰性解析，参照源7 模式）。
+            if (isKvm4Pending) {
+                resolveKvm4AndPlay(finalUrl, initialSeekPosition);
+                return;
+            }
+
             // ★内置源6（咪咕）：M3U 里存的是待解析地址 miguhd://<pID> 或 nowtv://<tvId>，
             //   在起播这一刻才换成带签名的真实 m3u8，避免预解析导致签名过期 / 批量请求。
             //   轮播 / 回看（tvnow://、lunbolbk://、lunboParser_…）同属咪咕解析链，一并分流。
@@ -4645,6 +4719,7 @@ public class TVPlayerManager {
         if (u == null || u.isEmpty()) return false;
         return com.tv.live.renyibo.RenYiBoVodSourceLoader.isVodSchemeUrl(u)
                 || com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(u)
+                || com.tv.live.kvm4.Kvm4UrlResolver.isKvm4Url(u)
                 || com.tv.live.migu.source.ZgyjVodApi.isZgyjVodUrl(u)
                 || com.tv.live.migu.source.CarouselApi.isYunTuLookBackUrl(u);
     }
@@ -4691,12 +4766,12 @@ public class TVPlayerManager {
                 String proxyUrl = webServer.getAdStripProxyUrl(url, currentChannelName);
                 LogBridge.i(TAG, "【广告剥离】代理重定向: " + url.substring(0, Math.min(60, url.length())) + " -> " + proxyUrl.substring(0, Math.min(80, proxyUrl.length())));
                 // 【2026-10-16】播放前预剥离：提前下载+剥离m3u8，播放器请求时缓存已命中
-                // 与代理请求共享 pendingStripRequests，避免重复下载，减少起播延迟
-                try {
-                    webServer.preStrip(url);
-                } catch (Exception preStripEx) {
-                    LogBridge.w(TAG, "预剥离触发失败: " + preStripEx.getMessage());
-                }
+                // 【2026-10-17】关闭预剥离：preStrip与播放器请求几乎同时开始，提前效果有限
+                // WebServer自身有缓存机制，第一次播放后也会缓存，第二次秒开
+                //     webServer.preStrip(url);
+                // } catch (Exception preStripEx) {
+                //     LogBridge.w(TAG, "预剥离触发失败: " + preStripEx.getMessage());
+                // }
                 url = proxyUrl;
                 // 【优化3】异步预加载：后台提前下载+剥离并存入缓存，重复切换秒开
                 // try {

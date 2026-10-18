@@ -294,12 +294,12 @@ public class WebServerManager {
                 if (existingFuture != null && !existingFuture.isDone()) {
                     LogBridge.i("WebServer", "请求去重：等待相同URL的处理结果");
                     try {
-                        String dedupResult = existingFuture.get(15, TimeUnit.SECONDS);
+                        String dedupResult = existingFuture.get(3, TimeUnit.SECONDS);
                         LogBridge.i("WebServer", "请求去重：获取到共享结果，耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
                         sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", dedupResult);
                         return;
                     } catch (Exception e) {
-                        LogBridge.w("WebServer", "请求去重等待失败，自行处理: " + e.getMessage());
+                        LogBridge.w("WebServer", "请求去重等待超时(" + (System.currentTimeMillis() - stripStartTime) + "ms)，自行处理: " + e.getMessage());
                     }
                 }
 
@@ -351,7 +351,7 @@ public class WebServerManager {
                 pendingStripRequests.put(targetUrl, future);
 
                 try {
-                    String result = future.get(15, TimeUnit.SECONDS);
+                    String result = future.get(5, TimeUnit.SECONDS);
                     if (result == null) {
                         sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to download m3u8");
                         return;

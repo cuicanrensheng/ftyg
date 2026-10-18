@@ -91,6 +91,8 @@
     <string name="ott_menu">菜单</string>
     <string name="ott_fullscreen">全屏</string>
     <string name="ott_exit_fullscreen">退出全屏</string>
+    <!-- 【2026-10-18】顶栏原「全屏」按钮改为 直播/OTT 模式一键切换（点击切回直播模式） -->
+    <string name="ott_switch_live">直播</string>
     <string name="ott_preview_loading">正在起播…</string>
     <string name="ott_preview_idle">选一个频道开始播放</string>
     <!-- 【2026-09-29 播放器获焦】播放器获焦时显示的提示 -->
@@ -108,4 +110,14 @@
     <!-- 【2026-10-11】OTT 小窗口下方的播放历史（最多 10 条，最新在前；点击续播） -->
     <string name="ott_history_title">播放记录</string>
     <string name="ott_history_empty">暂无记录</string>
+
+    <!-- 【2026-10-17 界面重构 v2】一级导航 + 「我的」板块 -->
+    <string name="ott_top_live">直播</string>
+    <string name="ott_top_vod">点播</string>
+    <string name="ott_top_mine">我的</string>
+    <string name="ott_mine_history">播放记录</string>
+    <string name="ott_mine_favorite">收藏</string>
+    <string name="ott_mine_empty_history">还没有播放记录</string>
+    <string name="ott_mine_empty_favorite">还没有收藏的频道</string>
+    <string name="ott_vod_empty">点播内容加载中…</string>
 </resources>

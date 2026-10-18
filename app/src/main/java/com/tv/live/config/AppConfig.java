@@ -69,6 +69,35 @@ public class AppConfig {
         appSp.edit().putInt("vod_max_height", height).apply();
     }
 
+    // ==================== 【2026-10-17 收藏】频道/影片收藏 ====================
+
+    private static final String KEY_FAVORITES = "fav_channels";
+
+    public java.util.Set<String> getFavorites() {
+        return new java.util.HashSet<>(appSp.getStringSet(KEY_FAVORITES,
+                new java.util.HashSet<String>()));
+    }
+
+    public boolean isFavorite(String key) {
+        return key != null && getFavorites().contains(key);
+    }
+
+    /** 切换收藏并返回切换后的状态（true=已收藏） */
+    public boolean toggleFavorite(String key) {
+        if (key == null) return false;
+        java.util.Set<String> set = getFavorites();
+        boolean added;
+        if (set.contains(key)) {
+            set.remove(key);
+            added = false;
+        } else {
+            set.add(key);
+            added = true;
+        }
+        appSp.edit().putStringSet(KEY_FAVORITES, set).apply();
+        return added;
+    }
+
     /** 记住用户上次选择的清晰度档位（用于菜单打勾） */
     public int getVodQualityChoice() {
         return appSp.getInt("vod_quality_choice", 0);
@@ -78,8 +107,42 @@ public class AppConfig {
         appSp.edit().putInt("vod_quality_choice", height).apply();
     }
 
+    // ==================== 【2026-10-17 按源清晰度】 直播/点播各自独立记忆 ====================
+
+    /** 按源记忆的清晰度键前缀：`vod_quality_src_<源号>`，0 = 自动（不封顶） */
+    private static final String KEY_QUALITY_SRC = "vod_quality_src_";
+
+    /**
+     * 取「某个源」上次选择的清晰度封顶值。
+     *
+     * <p>源号口径见 OttHomeActivity#sourceIndexOf：1/2/3=普通直播，4=影视点播，
+     * 5=renyibo（直播+点播双形态），6=咪咕，7=afhgrj 点播。
+     * 每个源独立存一份，切源时才能显示/应用「该源自己的」档位。
+     */
+    public int getQualityForSource(int src) {
+        if (src <= 0) return getVodQualityChoice();
+        return appSp.getInt(KEY_QUALITY_SRC + src, 0);
+    }
+
+    /**
+     * 记住「某个源」的清晰度选择。
+     *
+     * <p>同时把选择写回全局键（vod_quality_choice / vod_max_height），
+     * 因为起播瞬间还没解析出源号时，播放器要先套用一个生效值。
+     */
+    public void setQualityForSource(int src, int height) {
+        if (src > 0) appSp.edit().putInt(KEY_QUALITY_SRC + src, height).apply();
+        setVodQualityChoice(height);
+        setVodMaxHeight(height);
+    }
+
     public String getScreenRatio() {
         return appSp.getString("screen_ratio", "全屏");
+    }
+
+    /** 【2026-10-18 OTT两级设置弹窗】屏幕比例写入（画面比例二级弹窗用），调用方负责 setScaleMode */
+    public void setScreenRatio(String ratio) {
+        appSp.edit().putString("screen_ratio", ratio).apply();
     }
 
     public int getLastPlayIndex() {
@@ -169,21 +232,36 @@ public class AppConfig {
         public final int episodeOrdinal;
         public final long timestamp;
         public final long positionMs;
+        /**
+         * 【2026-10-17 广告剥离适配】保存进度时的**片长**。
+         *
+         * <p>点播走本地代理时会做广告剥离（剔除广告分片），时间轴因此被压缩。
+         * 下次起播若剥离结果不同（缓存/阈值边界差异），同一个"秒数"会落到不同画面。
+         * 恢复时用「当前片长 ÷ 保存时片长」做比例校正，即可消除这种漂移。
+         * 0 = 未知（旧数据），不做校正。
+         */
+        public final long durationMs;
 
         public OttHistory(String name, String vodId, int episodeOrdinal) {
-            this(name, vodId, episodeOrdinal, System.currentTimeMillis(), 0);
+            this(name, vodId, episodeOrdinal, System.currentTimeMillis(), 0, 0);
         }
 
         public OttHistory(String name, String vodId, int episodeOrdinal, long timestamp) {
-            this(name, vodId, episodeOrdinal, timestamp, 0);
+            this(name, vodId, episodeOrdinal, timestamp, 0, 0);
         }
 
         public OttHistory(String name, String vodId, int episodeOrdinal, long timestamp, long positionMs) {
+            this(name, vodId, episodeOrdinal, timestamp, positionMs, 0);
+        }
+
+        public OttHistory(String name, String vodId, int episodeOrdinal, long timestamp,
+                          long positionMs, long durationMs) {
             this.name = name == null ? "" : name;
             this.vodId = vodId == null ? "" : vodId;
             this.episodeOrdinal = episodeOrdinal;
             this.timestamp = timestamp;
             this.positionMs = positionMs;
+            this.durationMs = durationMs;
         }
 
         /** 展示文案：频道名 · 第N集 · 进度mm:ss */
@@ -214,6 +292,10 @@ public class AppConfig {
                 ord = Integer.parseInt(f[2].trim());
             } catch (Exception ignored) {
             }
+            // 【2026-10-17 用户口径】播放记录**只保留点播**：直播条目没有集数（ordinal=0），
+            // 在读取出口统一过滤 —— 老版本残留的直播记录也不会再显示，
+            // 并在下一次 addOttHistory 写回时被永久清掉（与上面的成人屏蔽同一套自愈逻辑）。
+            if (ord <= 0) continue;
             long ts = 0;
             if (f.length >= 4) {
                 try { ts = Long.parseLong(f[3].trim()); } catch (Exception ignored) {}
@@ -222,19 +304,45 @@ public class AppConfig {
             if (f.length >= 5) {
                 try { pos = Long.parseLong(f[4].trim()); } catch (Exception ignored) {}
             }
-            out.add(new OttHistory(f[0], f[1], ord, ts, pos));
+            long dur = 0;
+            if (f.length >= 6) {
+                try { dur = Long.parseLong(f[5].trim()); } catch (Exception ignored) {}
+            }
+            out.add(new OttHistory(f[0], f[1], ord, ts, pos, dur));
         }
         return out;
     }
 
     /** 记一条播放历史：同名去重（就地更新集数）→ 置顶 → 超过 10 条挤掉最旧 */
     public void addOttHistory(String channelName, String vodId, int episodeOrdinal) {
+        addOttHistory(channelName, vodId, episodeOrdinal, 0);
+    }
+
+    /**
+     * 【2026-10-17】带播放进度写入。
+     *
+     * <p>原实现新建记录时 {@code positionMs} 恒为 0 —— 而 `playChannel()` 每次起播都会调它，
+     * 于是"已保存的位置"在起播瞬间就被清零；一旦起播后被杀/seek 失败，进度就永久丢了。
+     * 起播路径现在把读到的 position 一起传进来，保证历史里的位置不被抹掉。
+     *
+     * @param positionMs 已知的播放位置；0 表示从头开始（切集时用 0 是正确的）
+     */
+    public void addOttHistory(String channelName, String vodId, int episodeOrdinal, long positionMs) {
+        addOttHistory(channelName, vodId, episodeOrdinal, positionMs, 0);
+    }
+
+    /**
+     * @param durationMs 保存时的片长；用于下次续播做「时间轴比例校正」（广告剥离会改变片长）
+     */
+    public void addOttHistory(String channelName, String vodId, int episodeOrdinal,
+                              long positionMs, long durationMs) {
         if (channelName == null || channelName.isEmpty()) return;
         List<OttHistory> list = getOttHistory();
         for (int i = list.size() - 1; i >= 0; i--) {
             if (channelName.equals(list.get(i).name)) list.remove(i);
         }
-        list.add(0, new OttHistory(channelName, vodId, episodeOrdinal));
+        list.add(0, new OttHistory(channelName, vodId, episodeOrdinal,
+                System.currentTimeMillis(), Math.max(0, positionMs), Math.max(0, durationMs)));
         while (list.size() > MAX_OTT_HISTORY) {
             list.remove(list.size() - 1);
         }
@@ -245,19 +353,31 @@ public class AppConfig {
             sb.append(h.name).append(HISTORY_FIELD).append(h.vodId)
                     .append(HISTORY_FIELD).append(h.episodeOrdinal)
                     .append(HISTORY_FIELD).append(h.timestamp)
-                    .append(HISTORY_FIELD).append(h.positionMs);
+                    .append(HISTORY_FIELD).append(h.positionMs)
+                    .append(HISTORY_FIELD).append(h.durationMs);
         }
         appSp.edit().putString(KEY_OTT_HISTORY, sb.toString()).apply();
     }
 
     /** 更新某频道历史记录的播放进度（毫秒） */
     public void updateOttHistoryPosition(String channelName, long positionMs) {
+        updateOttHistoryPosition(channelName, positionMs, 0);
+    }
+
+    /**
+     * 更新播放进度，并记录当时的片长（广告剥离会改变片长，续播时据此做比例校正）。
+     *
+     * @param durationMs 0 = 保留记录里原来的片长
+     */
+    public void updateOttHistoryPosition(String channelName, long positionMs, long durationMs) {
         if (channelName == null || channelName.isEmpty()) return;
         List<OttHistory> list = getOttHistory();
         for (int i = 0; i < list.size(); i++) {
             OttHistory h = list.get(i);
             if (channelName.equals(h.name)) {
-                list.set(i, new OttHistory(h.name, h.vodId, h.episodeOrdinal, h.timestamp, positionMs));
+                long dur = (durationMs > 0) ? durationMs : h.durationMs;
+                list.set(i, new OttHistory(h.name, h.vodId, h.episodeOrdinal, h.timestamp,
+                        positionMs, dur));
                 // 写回
                 StringBuilder sb = new StringBuilder();
                 for (int j = 0; j < list.size(); j++) {
@@ -266,7 +386,8 @@ public class AppConfig {
                     sb.append(hh.name).append(HISTORY_FIELD).append(hh.vodId)
                             .append(HISTORY_FIELD).append(hh.episodeOrdinal)
                             .append(HISTORY_FIELD).append(hh.timestamp)
-                            .append(HISTORY_FIELD).append(hh.positionMs);
+                            .append(HISTORY_FIELD).append(hh.positionMs)
+                            .append(HISTORY_FIELD).append(hh.durationMs);
                 }
                 appSp.edit().putString(KEY_OTT_HISTORY, sb.toString()).apply();
                 return;
@@ -279,6 +400,15 @@ public class AppConfig {
         if (channelName == null || channelName.isEmpty()) return 0;
         for (OttHistory h : getOttHistory()) {
             if (channelName.equals(h.name)) return h.positionMs;
+        }
+        return 0;
+    }
+
+    /** 【2026-10-17】取保存进度时的片长（毫秒）；无记录/旧数据返回 0 */
+    public long getOttHistoryDuration(String channelName) {
+        if (channelName == null || channelName.isEmpty()) return 0;
+        for (OttHistory h : getOttHistory()) {
+            if (channelName.equals(h.name)) return h.durationMs;
         }
         return 0;
     }

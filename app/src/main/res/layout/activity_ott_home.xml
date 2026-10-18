@@ -47,22 +47,24 @@
                 android:textColor="#993AA0FF"
                 android:textSize="18sp" />
 
-            <HorizontalScrollView
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="16dp"
-                android:focusable="false"
-                android:scrollbars="none">
+            <!--
+              【2026-10-17 界面重构 v2·一级导航】直播 / 点播 / 我的
+              这三项是**内容形态**，固定不变；原来的「频道分组 / 点播分类」下移成二级分组条。
+              一级导航项由 OttHomeActivity.buildTopNav() 程序化创建（便于统一焦点样式与选中态）。
+            -->
+            <LinearLayout
+                android:id="@+id/ll_ott_top_nav"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="26dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
 
-                <LinearLayout
-                    android:id="@+id/ll_ott_category"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal" />
-            </HorizontalScrollView>
+            <!-- 弹性占位：把「全屏 / 菜单」推到最右 -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
 
             <TextView
                 android:id="@+id/btn_ott_fullscreen"
@@ -75,7 +77,7 @@
                 android:gravity="center"
                 android:paddingStart="18dp"
                 android:paddingEnd="18dp"
-                android:text="@string/ott_fullscreen"
+                android:text="@string/ott_switch_live"
                 android:textColor="#FFFFFFFF"
                 android:textSize="18sp" />
 
@@ -94,6 +96,28 @@
                 android:textSize="18sp" />
         </LinearLayout>
 
+        <!--
+          【2026-10-17 界面重构 v2·二级分组条】
+          直播板块 = 频道分组（全部/央视/卫视/…/虎牙）；点播板块 = 内容分类（电影/电视剧/…）。
+          只在「直播 / 点播」板块显示，「我的」板块整条隐藏。
+        -->
+        <HorizontalScrollView
+            android:id="@+id/sv_ott_category"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:clipToPadding="false"
+            android:focusable="false"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/ll_ott_category"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <!-- ============ 主体：左侧播放预览 + 右侧频道网格 ============ -->
         <LinearLayout
             android:id="@+id/ott_content_row"
@@ -103,12 +127,12 @@
             android:layout_marginTop="14dp"
             android:orientation="horizontal">
 
-            <!-- 左侧：播放器预览卡 -->
+            <!-- 左侧：播放器预览卡（weight 1.35 → 1.2，给右侧 6 列网格让出宽度） -->
             <LinearLayout
                 android:id="@+id/ott_left_panel"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="1.35"
+                android:layout_weight="1.2"
                 android:orientation="vertical">
 
                 <FrameLayout
@@ -346,22 +370,24 @@
                                 android:paddingEnd="8dp" />
                         </HorizontalScrollView>
 
+                        <!-- 【2026-10-17 界面重构 v2】4 列 → 6 列：一屏 24 个频道，配合卡片上的
+                             「当前节目 + 进度」实现「看内容选台」；屏外露一部分提示可滚动。 -->
                         <GridView
                             android:id="@+id/gv_ott_channel"
                             android:layout_width="match_parent"
                             android:layout_height="0dp"
                             android:layout_weight="1"
                             android:clipToPadding="false"
-                            android:columnWidth="150dp"
+                            android:columnWidth="96dp"
                             android:descendantFocusability="beforeDescendants"
-                            android:horizontalSpacing="12dp"
+                            android:horizontalSpacing="10dp"
                             android:listSelector="@drawable/ott_channel_focus"
                             android:nextFocusLeft="@+id/fl_ott_preview"
-                            android:numColumns="4"
+                            android:numColumns="6"
                             android:paddingEnd="8dp"
                             android:scrollbars="none"
                             android:stretchMode="columnWidth"
-                            android:verticalSpacing="12dp" />
+                            android:verticalSpacing="10dp" />
                     </LinearLayout>
 
                     <TextView
@@ -374,6 +400,82 @@
                         android:textSize="18sp"
                         android:visibility="gone" />
                 </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!--
+          【2026-10-17 界面重构 v2·「我的」板块】
+          直播/点播之外的第三块：播放记录 + 收藏（两列，与直播页的左右分栏一致）。
+          仅在 topSection=MINE 时可见，此时 content_row 与二级分组条同时隐藏。
+        -->
+        <LinearLayout
+            android:id="@+id/ll_ott_mine"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="18dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ott_mine_history"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_weight="1"
+                    android:focusable="false"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/ll_ott_mine_history"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </ScrollView>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="28dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/ott_mine_favorite"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_weight="1"
+                    android:focusable="false"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/ll_ott_mine_favorite"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </ScrollView>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
@@ -410,5 +512,27 @@
         android:textColor="#FFFFFFFF"
         android:textSize="50sp"
         android:visibility="gone" />
+
+    <!-- 【2026-10-18 启动图】App 内启动覆盖层：与直播模式 MainActivity.splash_overlay 同口径。
+         系统预览窗（Theme windowBackground=splash_window_bg）覆盖「点击图标 → Activity 首帧」，
+         本层覆盖「首帧 → 播放就绪」，两段衔接无黑屏，淡出即画面。三路信号淡出：
+         ① 首次 onPlayReady；② 保底 9s（停留「我的」板块/播放异常）；③ 用户按键/点击
+         （首次按键被消费，第二下起正常操作）。淡出后整层 GONE + 释放图片引用。
+         必须是 ott_root 的最后一个子节点，才能绘制在 ll_ott_outer 与各浮层之上。 -->
+    <FrameLayout
+        android:id="@+id/ott_splash_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF070A0F"
+        android:clickable="true">
+
+        <ImageView
+            android:id="@+id/ott_splash_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:src="@drawable/splash_launch" />
+    </FrameLayout>
 
 </FrameLayout>

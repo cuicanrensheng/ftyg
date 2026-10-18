@@ -24,7 +24,9 @@
          消费触摸且无 OnClickListener，导致触摸点海报区时卡片根 LinearLayout（挂 OnClickListener）收不到
          click → 点频道卡片无反应。改为 false 让触摸冒泡到根布局的 OnClickListener。
          【2026-10-13 图标放大】88dp → 104dp：台标偏小，等比放大约 18%，介于初版 118dp 与
-         10-11 的 88dp 之间，兼顾台标辨识度与 4 列网格的纵向空间。 -->
+         10-11 的 88dp 之间，兼顾台标辨识度与 4 列网格的纵向空间。
+         【2026-10-17 界面重构 v2】底部叠 3dp 节目进度条（仅直播卡显示），
+         让用户不进全屏也能看出「这台现在播到哪」。 -->
     <FrameLayout
         android:id="@+id/fl_ott_item_poster"
         android:layout_width="match_parent"
@@ -39,9 +41,21 @@
             android:layout_height="match_parent"
             android:contentDescription="@null"
             android:scaleType="centerCrop" />
+
+        <ProgressBar
+            android:id="@+id/pb_ott_item_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_gravity="bottom"
+            android:max="100"
+            android:progress="0"
+            android:progressBackgroundTint="#33000000"
+            android:progressTint="#FFFFD166"
+            android:visibility="gone" />
     </FrameLayout>
 
-    <!-- 剧名：移出卡片，位于卡片下方 -->
+    <!-- 名称：移出卡片，位于卡片下方 -->
     <TextView
         android:id="@+id/tv_ott_item_name"
         android:layout_width="match_parent"
@@ -51,5 +65,18 @@
         android:gravity="center"
         android:singleLine="true"
         android:textColor="#FFFFFFFF"
-        android:textSize="13sp" />
+        android:textSize="16sp" />
+
+    <!-- 当前节目（仅直播卡）：EPG 正在播的节目名，未就绪时显示「直播中」 -->
+    <TextView
+        android:id="@+id/tv_ott_item_program"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:singleLine="true"
+        android:textColor="#99B9C4D8"
+        android:textSize="12sp"
+        android:visibility="gone" />
 </LinearLayout>

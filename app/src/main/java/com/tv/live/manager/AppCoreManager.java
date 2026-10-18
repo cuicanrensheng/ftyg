@@ -538,6 +538,12 @@ public class AppCoreManager {
 
     private List<Channel> parseLiveSource(String content) {
         Map<String, Channel> channelMap = new LinkedHashMap<>();
+        // 【2026-10-18 源8】4kvm 片单分组要求「M3U 有多少条就显示多少条」，
+        // 不能按 tvgId/name 合并。网络抓取路径已改用 PlaylistParser.parseContentNoDedup，
+        // 但本方法（缓存快显路径）此前仍在无条件合并 → 168 条被塌成 7 条。
+        // 这里按内容是否含 kvm4:// 协议串分流：源8 走直列表，其余来源保持原去重语义。
+        final boolean noDedup = content != null && content.contains("kvm4://");
+        List<Channel> plainList = noDedup ? new ArrayList<>() : null;
         if (TextUtils.isEmpty(content)) {
             return new ArrayList<>();
         }
@@ -581,7 +587,8 @@ public class AppCoreManager {
                     String diypUri = line.substring(diypComma + 1).trim();
                     // 【2026-10-07】接受协议串（renyibo:// 等），否则源5缓存永远解析失败 → 首播被网络刷新卡死
                     if (!diypName.isEmpty() && com.tv.live.PlaylistParser.isSupportedUri(diypUri)) {
-                        mergeChannelInto(channelMap, diypName, diypUri, currentGroup, "", "");
+                        addParsedChannel(channelMap, plainList, noDedup,
+                                diypName, diypUri, currentGroup, "", "");
                         pendingM3uUri = false;
                         currentName = ""; currentTvgId = ""; currentLogo = "";
                         continue;
@@ -634,7 +641,8 @@ public class AppCoreManager {
             if (pendingM3uUri && com.tv.live.PlaylistParser.isSupportedUri(line)) {
                 String playUrl = line;
                 if (!TextUtils.isEmpty(currentName)) {
-                    mergeChannelInto(channelMap, currentName, playUrl, currentGroup, currentTvgId, currentLogo);
+                    addParsedChannel(channelMap, plainList, noDedup,
+                            currentName, playUrl, currentGroup, currentTvgId, currentLogo);
                 }
                 pendingM3uUri = false;
                 currentName = ""; currentTvgId = ""; currentLogo = "";
@@ -642,7 +650,7 @@ public class AppCoreManager {
             }
 
             if (!pendingM3uUri && com.tv.live.PlaylistParser.isSupportedUri(line)) {
-                mergeChannelInto(channelMap, line, line, currentGroup, "", "");
+                addParsedChannel(channelMap, plainList, noDedup, line, line, currentGroup, "", "");
             }
         }
         // 【2026-10-12 屏蔽名单】本方法是「本地缓存快显」路径的解析出口
@@ -650,7 +658,31 @@ public class AppCoreManager {
         // 它<b>不经过</b> LiveSourceLoader.postSuccess，所以屏蔽必须在这里也过一遍，否则
         // 7 天缓存有效期内冷启动会重新看到被屏蔽的频道。
         // 注：网络路径已在 LiveSourceLoader.postSuccess 里过滤，此处重复过滤是幂等的。
-        return com.tv.live.util.ChannelBlocklist.filter(new ArrayList<>(channelMap.values()));
+        // 【2026-10-18 源8】noDedup 时返回直列表（保留重复条目），否则返回按 key 合并后的结果。
+        return com.tv.live.util.ChannelBlocklist.filter(
+                noDedup ? plainList : new ArrayList<>(channelMap.values()));
+    }
+
+    /**
+     * 【2026-10-18 源8】缓存快显路径的入库分发。
+     *
+     * <p>源8（4kvm）片单分组要求「M3U 有多少条就显示多少条」，不能按 tvgId/name 合并；
+     * 其余来源保持原有语义：相同 key 追加为备用线路（addBackupUrl）。
+     */
+    private static void addParsedChannel(Map<String, Channel> channelMap, List<Channel> plainList,
+                                         boolean noDedup, String name, String uri,
+                                         String group, String tvgId, String logo) {
+        if (!noDedup) {
+            mergeChannelInto(channelMap, name, uri, group, tvgId, logo);
+            return;
+        }
+        if (TextUtils.isEmpty(name) || TextUtils.isEmpty(uri)
+                || !com.tv.live.PlaylistParser.isSupportedUri(uri)) return;
+        Channel ch = new Channel(name, uri, group, tvgId);
+        if (!TextUtils.isEmpty(logo)) {
+            ch.setLogoUrl(logo);
+        }
+        plainList.add(ch);
     }
 
     private static void mergeChannelInto(Map<String, Channel> channelMap,

@@ -132,6 +132,87 @@ public class EpgManager {
         this.epgUrl = url;
     }
 
+    // ==================================================================
+    // 【2026-10-17】时移回看线路（直播模式 EPG 与 OTT 节目单共用同一套规则）
+    // ------------------------------------------------------------------
+    //   规则与直播模式 EPG 面板点击「回看」时完全一致：
+    //     ① IPTV 时移流：PLTV → TVOD（已是 TVOD 则原样）；
+    //     ② 追加 playseek=<起>-<止>，格式 yyyyMMddHHmmss；
+    //     ③ 起止时间优先用 EPG 自带时间戳(startTs/endTs)；
+    //        没有则用「本档 time 的结束部分」或「下一档 time」推算，末档 +30min 兜底。
+    //   OTT 节目单（OttHomeActivity.showEpgPanel）直接调这两个方法，
+    //   避免两边各写一份导致行为漂移。
+    // ==================================================================
+
+    /** 该直播地址是否支持时移回看（IPTV PLTV/TVOD 时移流，或已带 playseek） */
+    public static boolean isTimeshiftCapable(String liveUrl) {
+        if (TextUtils.isEmpty(liveUrl)) return false;
+        String u = liveUrl.toLowerCase(Locale.ROOT);
+        return u.contains("pltv") || u.contains("tvod") || u.contains("playseek");
+    }
+
+    /**
+     * 构建时移回看地址。
+     *
+     * @param liveUrl 频道当前直播地址
+     * @param list    EPG 列表（用于推算本档结束时间）
+     * @param idx     本档下标
+     * @return 可用地址；不支持时移或算不出起始时间时返回 null
+     */
+    public static String buildTimeshiftUrl(String liveUrl, List<Channel.EpgItem> list, int idx) {
+        if (!isTimeshiftCapable(liveUrl) || list == null || idx < 0 || idx >= list.size()) return null;
+        try {
+            Channel.EpgItem it = list.get(idx);
+            long start = it.startTs;
+            long end = it.endTs;
+
+            // ② 从 "HH:mm - HH:mm" 这种区间文案里同时取起止
+            String startHm = it.time;
+            String endHm = null;
+            if (!TextUtils.isEmpty(startHm) && startHm.contains("-")) {
+                String[] parts = startHm.contains(" - ") ? startHm.split(" - ") : startHm.split("-");
+                startHm = parts[0].trim();
+                if (parts.length > 1) endHm = parts[1].trim();
+            }
+
+            if (start <= 0) start = hmToTodayTs(startHm);
+            if (end <= 0) {
+                if (!TextUtils.isEmpty(endHm)) end = hmToTodayTs(endHm);
+                if (end <= start && idx + 1 < list.size()) end = hmToTodayTs(list.get(idx + 1).time);
+                if (end <= start) end = start + 30L * 60L;
+            }
+            if (start <= 0) return null;
+
+            SimpleDateFormat f = new SimpleDateFormat("yyyyMMddHHmmss", Locale.CHINA);
+            String startStr = f.format(new Date(start * 1000L));
+            String endStr = f.format(new Date(end * 1000L));
+
+            String u = liveUrl.contains("PLTV") ? liveUrl.replace("PLTV", "TVOD") : liveUrl;
+            return u + (u.contains("?") ? "&" : "?") + "playseek=" + startStr + "-" + endStr;
+        } catch (Throwable t) {
+            LogBridge.w("EpgManager", "【回看】拼地址失败: " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** "HH:mm"（或 "HH:mm - HH:mm"）→ 今天该时刻的 Unix 秒；失败返回 0 */
+    private static long hmToTodayTs(String hm) {
+        try {
+            if (TextUtils.isEmpty(hm)) return 0;
+            String s = hm.contains(" - ") ? hm.split(" - ")[0] : hm;
+            if (!s.contains(":")) return 0;
+            String[] p = s.split(":");
+            Calendar c = Calendar.getInstance();
+            c.set(Calendar.HOUR_OF_DAY, Integer.parseInt(p[0].trim()));
+            c.set(Calendar.MINUTE, Integer.parseInt(p[1].trim()));
+            c.set(Calendar.SECOND, 0);
+            c.set(Calendar.MILLISECOND, 0);
+            return c.getTimeInMillis() / 1000L;
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
     public void loadEpgFromM3u(String m3uUrl, Runnable callback) {
         AppExecutors.io(() -> {
             String extractedEpgUrl = extractEpgUrlFromM3u(m3uUrl);
@@ -623,6 +704,28 @@ public class EpgManager {
                         com.tv.live.afhgrj.AfhgrjUrlResolver.fetchEpisodes(vid);
                 if (l != null && !l.isEmpty()) {
                     LogBridge.i("EpgManager", "【EPG·源7】集数列表就绪 vodId=" + vid
+                            + " 共 " + l.size() + " 集");
+                    notifyEpgDataReady();
+                }
+            });
+            return new ArrayList<>();
+        }
+
+        // 【2026-10-18】内置源8（4kvm 影视）：频道即一部影片，EPG 面板改为「集数列表」，
+        //   点击某一集即播放该集（参照源7 模式）。集数走 HTTP 直取播放页 HTML 里的
+        //   a[data-line][data-episode] 锚点；未命中缓存时后台抓一次，完成后通知面板重渲染。
+        String kvm4PlayId = com.tv.live.kvm4.Kvm4UrlResolver.playIdOfChannel(channel);
+        if (!TextUtils.isEmpty(kvm4PlayId)) {
+            List<Channel.EpgItem> episodes =
+                    com.tv.live.kvm4.Kvm4UrlResolver.getEpisodes(kvm4PlayId);
+            if (episodes != null && !episodes.isEmpty()) {
+                return episodes;
+            }
+            final String pid = kvm4PlayId;
+            AppExecutors.io(() -> {
+                List<Channel.EpgItem> l = com.tv.live.kvm4.Kvm4UrlResolver.fetchEpisodes(pid);
+                if (l != null && !l.isEmpty()) {
+                    LogBridge.i("EpgManager", "【EPG·源8】集数列表就绪 playId=" + pid
                             + " 共 " + l.size() + " 集");
                     notifyEpgDataReady();
                 }

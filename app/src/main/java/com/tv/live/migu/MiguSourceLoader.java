@@ -194,6 +194,12 @@ public final class MiguSourceLoader {
      * @return M3U 文本；全部来源都失败时返回空串
      */
     public static String loadAllLiveAsM3u(Context context) {
+        // 【2026-10-18 台标接入】统一出站后处理：三条路径（缓存/服务端下发/官方目录/assets 兜底）
+        //   产出的 M3U 若无 tvg-logo，按频道名补 catvod 台标库链接（幂等：已含则原样返回）
+        return ensureMiguLogos(loadAllLiveAsM3uInner(context));
+    }
+
+    private static String loadAllLiveAsM3uInner(Context context) {
         // ---- ① 磁盘缓存新鲜且频道数正常 → 直接用，不联网 ----
         String cached = readDiskCache(context);
         if (!TextUtils.isEmpty(cached) && countM3uChannels(cached) < MIN_CHANNELS) {
@@ -583,13 +589,32 @@ public final class MiguSourceLoader {
             String group = esc(r[0]);
             String name = esc(r[1]);
             String pid = esc(r[2]);
+            // 【2026-10-18 台标接入】咪咕官方接口不下发图片 URL → 用 catvod 台标库
+            // （logo.catvod.com/{标准名}.png，CCTV/卫视系全覆盖；未命中 404 落占位图，无害）
+            String logoName = esc(catvodLogoName(name));
             sb.append("#EXTINF:-1 tvg-id=\"").append(MiguUrlResolver.TVG_PREFIX).append(pid)
               .append("\" tvg-name=\"").append(name)
-              .append("\" group-title=\"").append(group)
+              .append("\" tvg-logo=\"https://logo.catvod.com/").append(logoName)
+              .append(".png\" group-title=\"").append(group)
               .append("\",").append(name).append("\n");
             sb.append(MiguUrlResolver.SCHEME).append(pid).append("\n");
         }
         return sb.toString();
+    }
+
+    /**
+     * 【2026-10-18 台标接入】咪咕频道名 → catvod 台标库标准名。
+     * CCTV3综艺→CCTV3、CCTV5+体育→CCTV5+、广东卫视→广东卫视；
+     * 咪咕特有频道（未命中台标库）404 → 卡片自动回退占位图，无害。
+     */
+    private static String catvodLogoName(String name) {
+        if (name == null || name.isEmpty()) return "";
+        String n = name.replace("-", "").replace("－", "").trim();
+        java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("^(CCTV\\d+\\+?)").matcher(n);
+        if (m.find()) return m.group(1);
+        if (n.endsWith("卫视")) return n;
+        return n;
     }
 
     /** M3U 属性值转义；顺便把逗号替换掉，避免破坏 {@code #EXTINF:...,频道名} 的解析 */
@@ -656,6 +681,36 @@ public final class MiguSourceLoader {
     // ------------------------------------------------------------------
     // HTTP
     // ------------------------------------------------------------------
+
+    /**
+     * 【2026-10-18 台标接入】咪咕 M3U 统一补台标：#EXTINF 行若无 tvg-logo，
+     * 按频道名标准化后补 catvod 台标库链接（logo.catvod.com/{名}.png）。
+     * 幂等：文本中已含 tvg-logo= 则原样返回（新版缓存/官方目录路径）。
+     */
+    private static String ensureMiguLogos(String m3u) {
+        if (m3u == null || m3u.isEmpty() || m3u.contains("tvg-logo=")) return m3u;
+        StringBuilder sb = new StringBuilder(m3u.length() + m3u.length() / 6 + 64);
+        for (String line : m3u.split("\\n", -1)) {
+            String t = line.trim();
+            if (t.startsWith("#EXTINF") && !t.contains("tvg-logo=\"")) {
+                int comma = t.lastIndexOf(",");
+                String chName = comma >= 0 ? t.substring(comma + 1).trim() : "";
+                String logoName = catvodLogoName(esc(chName));
+                if (!logoName.isEmpty()) {
+                    int attr = t.indexOf(" tvg-name=");
+                    if (attr < 0) attr = t.indexOf(" tvg-id=");
+                    if (attr > 0) {
+                        sb.append(t.substring(0, attr).trim())
+                          .append(" tvg-logo=\"https://logo.catvod.com/").append(logoName)
+                          .append(".png\"").append(t.substring(attr)).append("\n");
+                        continue;
+                    }
+                }
+            }
+            sb.append(line).append("\n");
+        }
+        return sb.toString();
+    }
 
     private static String getText(String url) {
         try (Response resp = NetUtil.getInstance().syncGet(url)) {

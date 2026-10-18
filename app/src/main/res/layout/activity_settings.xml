@@ -136,7 +136,7 @@
                     android:clickable="false" />
             </LinearLayout>
 
-            <!-- 频道线路选择 -->
+            <!-- 频道线路选择 【2026-10-18 去重】控制栏已有「线路」按钮 → 本行隐藏（视图保留防逻辑 NPE） -->
             <LinearLayout
                 android:id="@+id/item_channel_line"
                 android:layout_width="match_parent"
@@ -164,7 +164,7 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- 清晰度选择 -->
+            <!-- 清晰度选择 【2026-10-18 去重】控制栏已有「清晰度」按钮 → 本行隐藏（视图保留防逻辑 NPE） -->
             <LinearLayout
                 android:id="@+id/item_resolution"
                 android:layout_width="match_parent"

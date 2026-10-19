@@ -156,8 +156,8 @@ public class LiveSourceLoader {
                 final boolean isRenyibo = url.startsWith("renyibo://");
                 final boolean isMigu = url.startsWith("migu://");
                 final boolean isAfhgrj = url.startsWith("afhgrj://");
-                final boolean isKvm4 = url.startsWith("kvm4://");
-                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isKvm4) ? url : getAcceleratedUrl(url);
+                final boolean isRyb = url.startsWith("ryb://");
+                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isRyb) ? url : getAcceleratedUrl(url);
                 LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 开始加载：" + acceleratedUrl);
                 LogBridge.d(TAG, "LOAD: source #" + (i+1) + " downloading: " + acceleratedUrl);
                 try {
@@ -178,11 +178,17 @@ public class LiveSourceLoader {
                     } else if (isAfhgrj) {
                         LogBridge.i(TAG, "【影视源7】走内置源7分支，抓 5 个分组生成 M3U（地址为 afhgrj:// 惰性解析）");
                         rawContent = com.tv.live.afhgrj.AfhgrjSourceLoader.loadAllLiveAsM3u(context);
-                    } else if (isKvm4) {
-                        LogBridge.i(TAG, "【4kvm源8】走内置源8分支，抓 5 个片单分组生成 M3U（地址为 kvm4:// 惰性解析）");
-                        rawContent = com.tv.live.kvm4.Kvm4SourceLoader.loadAllLiveAsM3u(context);
+                    } else if (isRyb) {
+                        LogBridge.i(TAG, "【源8 renyibo】走内置源8分支，抓 8 个分组生成 M3U（地址为 ryb:// 惰性解析）");
+                        rawContent = com.tv.live.ryb.RybSourceLoader.loadAllLiveAsM3u(context);
                     } else {
                         rawContent = downloadRawContent(acceleratedUrl);
+                    }
+                    // 【2026-10-19 用户口径】给「没有自家直播频道」的源补上「央视」分组：
+                    //   源4（影视轮播）/源7/源8 切过去后「直播」板块是空的，补一份内置央视列表
+                    //   （取自内置源1 的央视条目，31 个频道，带 catvod 台标，随包离线可用）。
+                    if (isAsset || isAfhgrj || isRyb) {
+                        rawContent = appendCctvGroup(rawContent);
                     }
                     long dlMs = System.currentTimeMillis() - tDlStart;
                     if (rawContent == null || rawContent.isEmpty()) {
@@ -190,18 +196,10 @@ public class LiveSourceLoader {
                         throw new IOException("下载为空");
                     }
                     long tParseStart = System.currentTimeMillis();
-                    // 源8（4kvm）片单分组包含大量重复视频，用户要求不去重，是多少显示多少
                     List<Channel> channels;
-                    if (isKvm4) {
-                        LogBridge.i(TAG, "【4kvm源8】使用不去重解析 parseContentNoDedup，rawContent长度=" + rawContent.length());
-                        channels = PlaylistParser.parseContentNoDedup(rawContent);
-                    } else {
-                        channels = PlaylistParser.parseContent(rawContent);
-                    }
-                    // 【2026-10-18 修日志误导】这里原来无条件写「【4kvm源8】解析完成」，
-                    // 连源1 的成功日志也被贴上源8 前缀，排查时极易误判。
-                    LogBridge.i(TAG, (isKvm4 ? "【4kvm源8】" : "【网络】")
-                            + "解析完成，频道数=" + (channels == null ? 0 : channels.size()));
+                    channels = PlaylistParser.parseContent(rawContent);
+                    LogBridge.i(TAG, "【网络】解析完成，频道数="
+                            + (channels == null ? 0 : channels.size()));
                     if (channels == null || channels.isEmpty()) {
                         LogBridge.e(TAG, "LOAD: source #" + (i+1) + " parsed 0 channels");
                         throw new IOException("解析后频道数=0");
@@ -631,6 +629,51 @@ public class LiveSourceLoader {
 
     private File getFallbackFile() {
         return new File(context.getFilesDir(), FALLBACK_FILE);
+    }
+
+    // ==================== 【2026-10-19】央视分组补入（源4/源7/源8 缺直播频道） ====================
+
+    /** 内置央视片段（assets/cctv_group.m3u）：取自内置源1 的央视条目，group-title="央视"、带 catvod 台标 */
+    private static final String CCTV_GROUP_ASSET = "cctv_group.m3u";
+    private String sCctvFragment;
+
+    /**
+     * 读取内置「央视」片段（只读一次并常驻；离线可用，不额外联网）。
+     * 片段格式与网络源一致：{@code #EXTINF:-1 tvg-name=… tvg-logo=… group-title="央视",频道名} + 地址行。
+     */
+    private String cctvFragment() {
+        if (sCctvFragment != null) return sCctvFragment;
+        try {
+            String t = readAssetSource(CCTV_GROUP_ASSET);
+            sCctvFragment = (t == null) ? "" : t.trim();
+        } catch (Throwable e) {
+            LogBridge.w(TAG, "【央视分组】内置片段读取失败: " + e.getMessage());
+            sCctvFragment = "";
+        }
+        return sCctvFragment;
+    }
+
+    /**
+     * 【2026-10-19 用户口径】给「没有自家直播频道」的源补上「央视」分组。
+     *
+     * <p>源4（影视轮播）/源7/源8 切过去后「直播」板块是空的，用户要求把内置源1 的央视分组
+     * 补进这三个源。片段随包内置（{@code assets/cctv_group.m3u}，31 个频道，央视系全覆盖，
+     * 带 catvod 台标），不依赖源1 的实时抓取。
+     *
+     * <p><b>幂等</b>：M3U 里已含 {@code group-title="央视"} 时原样返回（补过的不再补；
+     * 该组名在这三个源里本就不存在，不会误判）。
+     */
+    private String appendCctvGroup(String m3u) {
+        if (m3u == null || m3u.isEmpty()) return m3u;
+        if (m3u.contains("group-title=\"央视\"")) return m3u;
+        String frag = cctvFragment();
+        if (frag.isEmpty()) return m3u;
+        int n = 0;
+        for (String line : frag.split("\n")) {
+            if (line.startsWith("#EXTINF")) n++;
+        }
+        LogBridge.i(TAG, "【央视分组】已补入直播频道 " + n + " 个（源4/源7/源8 补齐直播源）");
+        return m3u + (m3u.endsWith("\n") ? "" : "\n") + frag + "\n";
     }
 
     private void saveFallback(String content) {

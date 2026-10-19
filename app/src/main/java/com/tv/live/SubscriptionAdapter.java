@@ -120,6 +120,9 @@ public class SubscriptionAdapter extends ArrayAdapter<SourceManager.SourceItem> 
                  || SourceManager.BUILTIN_NAME_LIVE_5_LEGACY.equals(n)
                  || SourceManager.BUILTIN_NAME_LIVE_6.equals(n)
                  || SourceManager.BUILTIN_NAME_LIVE_7.equals(n)
+                 // 【2026-10-19】补上源8：这份"内置保护名单"是本类自己维护的副本，
+                 //   当初加源8 时漏了更新 → 复制/删除按钮对内置源8 也显示了。
+                 || SourceManager.BUILTIN_NAME_LIVE_8.equals(n)
                  || SourceManager.BUILTIN_NAME_EPG_1.equals(n)
                  || SourceManager.BUILTIN_NAME_EPG_2.equals(n);
             boolean urlHit = !u.isEmpty() && (
@@ -130,6 +133,7 @@ public class SubscriptionAdapter extends ArrayAdapter<SourceManager.SourceItem> 
                  || u.equals(UrlConfig.LIVE_URL_5)
                  || u.equals(UrlConfig.LIVE_URL_6)
                  || u.equals(UrlConfig.LIVE_URL_7)
+                 || u.equals(UrlConfig.LIVE_URL_8)   // 【2026-10-19】同上，补源8
                  || u.equals(UrlConfig.EPG_URL)
                  || u.equals(UrlConfig.EPG_URL_2)
             );

@@ -692,8 +692,7 @@ public class EpgManager {
         //   点击某一集即播放该集。只依赖 channelId 前缀 afhgrj: 判定，源1~6 行为零变化。
         //   只读内存缓存（不联网）；未命中则后台抓一次详情页，完成后通知面板重渲染。
         String afhgrjVodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(channel);
-        if (!TextUtils.isEmpty(afhgrjVodId)) {
-            List<Channel.EpgItem> episodes =
+        if (!TextUtils.isEmpty(afhgrjVodId)) {            List<Channel.EpgItem> episodes =
                     com.tv.live.afhgrj.AfhgrjUrlResolver.getEpisodes(afhgrjVodId);
             if (episodes != null && !episodes.isEmpty()) {
                 return episodes;
@@ -711,27 +710,51 @@ public class EpgManager {
             return new ArrayList<>();
         }
 
-        // 【2026-10-18】内置源8（4kvm 影视）：频道即一部影片，EPG 面板改为「集数列表」，
-        //   点击某一集即播放该集（参照源7 模式）。集数走 HTTP 直取播放页 HTML 里的
-        //   a[data-line][data-episode] 锚点；未命中缓存时后台抓一次，完成后通知面板重渲染。
-        String kvm4PlayId = com.tv.live.kvm4.Kvm4UrlResolver.playIdOfChannel(channel);
-        if (!TextUtils.isEmpty(kvm4PlayId)) {
+        // 【2026-10-19】内置源8（renyibo）：频道即一部影片，EPG 面板改为「集数列表」，
+        //   集数来自详情页内联的 PLAY_SOURCES（线路 → episodes），纯 HTTP。
+        //   只读内存缓存；未命中后台抓一次，完成后通知面板重渲染（与源7 完全同构）。
+        com.tv.live.ryb.RybUrlResolver.attach(context);
+        String rybSlug = com.tv.live.ryb.RybUrlResolver.vodIdOf(channel);
+        if (!TextUtils.isEmpty(rybSlug)) {
             List<Channel.EpgItem> episodes =
-                    com.tv.live.kvm4.Kvm4UrlResolver.getEpisodes(kvm4PlayId);
+                    com.tv.live.ryb.RybUrlResolver.getEpisodes(rybSlug);
             if (episodes != null && !episodes.isEmpty()) {
                 return episodes;
             }
-            final String pid = kvm4PlayId;
+            // ⚠️ 只对**当前正在播放**的频道联网预取。
+            //   网格/信息条会对每个频道调 getEpg，若不加这道闸，320 个频道会各自发一次
+            //   详情页请求（实测 2 分钟内 205 次）——既慢又是对站点的批量请求。
+            // 【2026-10-19 集数提速】额外放行「用户正在查看」的那一部（详情页已打开）：
+            //   用户在读简介/挑线路时就抓好集数，不必等按下播放（用户反馈源8 集数加载慢）。
+            final Channel cur = com.tv.live.TVPlayerManager.getInstance(context)
+                    .getCurrentChannel();
+            String curSlug = cur == null ? null
+                    : com.tv.live.ryb.RybUrlResolver.vodIdOf(cur);
+            if (!rybSlug.equals(curSlug)
+                    && !com.tv.live.ryb.RybUrlResolver.isForeground(rybSlug)) {
+                return new ArrayList<>();
+            }
+            // 单飞：同一部片同时只允许一个预取任务（否则并发的多个调用会各自发一次请求，
+            // 并导致 notifyEpgDataReady 被反复触发、面板重复重绘 —— 实测同一 slug 出现 25 次）
+            if (!com.tv.live.ryb.RybUrlResolver.beginFetch(rybSlug)) {
+                return new ArrayList<>();
+            }
+            final String slug = rybSlug;
             AppExecutors.io(() -> {
-                List<Channel.EpgItem> l = com.tv.live.kvm4.Kvm4UrlResolver.fetchEpisodes(pid);
-                if (l != null && !l.isEmpty()) {
-                    LogBridge.i("EpgManager", "【EPG·源8】集数列表就绪 playId=" + pid
-                            + " 共 " + l.size() + " 集");
-                    notifyEpgDataReady();
+                try {
+                    List<Channel.EpgItem> l = com.tv.live.ryb.RybUrlResolver.fetchEpisodes(slug);
+                    if (l != null && !l.isEmpty()) {
+                        LogBridge.i("EpgManager", "【EPG·源8】集数列表就绪 slug=" + slug
+                                + " 共 " + l.size() + " 集");
+                        notifyEpgDataReady();
+                    }
+                } finally {
+                    com.tv.live.ryb.RybUrlResolver.endFetch(slug);
                 }
             });
             return new ArrayList<>();
         }
+
 
         // 【2026-10-12】内置源5（aiqiyi）VOD 频道：EPG 面板改为「选集列表」（参照源7 模式）。
         //   只依赖 channelId 前缀 renyibo-vod: 判定，源1~7 其它频道行为零变化。

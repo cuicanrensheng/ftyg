@@ -46,7 +46,7 @@ public class SourceManager {
     public static final String BUILTIN_NAME_LIVE_5_LEGACY = "内置源5 (爱其意)";
     public static final String BUILTIN_NAME_LIVE_6 = "内置源6 (咪咕)";
     public static final String BUILTIN_NAME_LIVE_7 = "内置源7 (影视)";
-    public static final String BUILTIN_NAME_LIVE_8 = "内置源8 (4kvm)";
+    public static final String BUILTIN_NAME_LIVE_8 = "内置源8 (renyibo)";
     public static final String BUILTIN_NAME_EPG_1  = "内置节目单1 (Catvod)";
     public static final String BUILTIN_NAME_EPG_2  = "内置节目单2 (ERW)";
 
@@ -476,6 +476,7 @@ public class SourceManager {
             src7.autoUpdate = true;
             result.add(src7);
 
+            // 【2026-10-19】源8 换成 renyibo（原 4kvm 已下线，代码不再使用）
             SourceItem src8 = new SourceItem(BUILTIN_NAME_LIVE_8, rawOrFallback(UrlConfig.LIVE_URL_8_RAW, UrlConfig.LIVE_URL_8));
             src8.isDefault = false;
             src8.autoUpdate = true;
@@ -532,7 +533,11 @@ public class SourceManager {
         if (specs.length == 0) return existing;
 
         existing.removeIf(si -> "内置源3 (本地666)".equals(si.name)
-                || (si.url != null && si.url.startsWith("asset://live_source_3")));
+                || (si.url != null && si.url.startsWith("asset://live_source_3"))
+                // 【2026-10-19】清掉旧源8（4kvm）残留：按旧名称与旧协议前缀识别，
+                //   注意不能按 BUILTIN_NAME_LIVE_8 删 —— 那个常量已改指新站点。
+                || "内置源8 (4kvm)".equals(si.name)
+                || (si.url != null && si.url.startsWith("kvm4://")));
 
         // 内置源名称变更一律「就地改名迁移」，
         // 否则旧条目名称不再匹配 → 会被当成自定义源、同时又新增一条同名内置源（重复）。

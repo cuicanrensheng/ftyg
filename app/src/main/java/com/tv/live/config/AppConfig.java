@@ -3,6 +3,8 @@ package com.tv.live.config;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.tv.live.util.LogBridge;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,7 +29,16 @@ public class AppConfig {
     }
 
     public String getCustomLiveUrl() {
-        return appSp.getString("custom_live_url", null);
+        String v = appSp.getString("custom_live_url", null);
+        // 【2026-10-19 源8 移除】4kvm.top 全站 404，整源不可用。
+        //   老用户若把「内置源8」选成了自定义源，这里就地清掉并回落到默认源，
+        //   否则启动会一直卡在拉取一个死地址上。
+        if (v != null && v.startsWith("kvm4://")) {
+            appSp.edit().remove("custom_live_url").apply();
+            LogBridge.i("AppConfig", "【源8 已移除】清除遗留自定义直播源: " + v);
+            return null;
+        }
+        return v;
     }
 
     public String getCustomEpgUrl() {
@@ -420,5 +431,15 @@ public class AppConfig {
             if (channelName.equals(h.name)) return h.episodeOrdinal;
         }
         return 0;
+    }
+
+    /**
+     * 【2026-10-19】清空 OTT 播放历史。
+     *
+     * <p>切换直播源时调用：历史条目只存频道名（如源7/源8 的影片名），换源后这些影片
+     * 在新源里既不存在也点不开，继续展示即为「切换源后仍显示上一个源的播放记录」的BUG。
+     */
+    public void clearOttHistory() {
+        appSp.edit().remove(KEY_OTT_HISTORY).apply();
     }
 }

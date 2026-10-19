@@ -231,7 +231,8 @@ public class VodControlBar extends LinearLayout {
             handler.postDelayed(this::refreshChips, 100);
         }, false);
         // 【2026-10-18 用户需求】「设置」胶囊：点播/直播两种形态都显示，打开 OTT 设置面板
-        btnSettings = addCapsule("设置", v -> host.barOpenSettings(), false);
+        // 【2026-10-19 用户口径】按钮文案改为「更多」（内容不变：打开 OTT 设置面板）
+        btnSettings = addCapsule("更多", v -> host.barOpenSettings(), false);
         // 【2026-10-17 用户口径】删除「比例/填充」按钮（按钮行只保留 6 个：播放/倍速/清晰度/线路/选集）
 
         // 焦点链：进度条 ↔ 按钮行

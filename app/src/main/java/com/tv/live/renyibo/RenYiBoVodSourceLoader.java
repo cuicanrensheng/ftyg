@@ -109,6 +109,12 @@ public final class RenYiBoVodSourceLoader {
      * 某组总页数不足时按实际空页提前停止，不做无限翻页。
      */
     private static final int CATEGORY_FETCH_PAGES = 3;
+    /**
+     * 【2026-10-19 提速】分类抓取并行度上限：同时最多 3 个分类在飞。
+     * 10 分类 × 3 页 = 30 次 video_list 串行太慢，改成有上限并行后耗时约降到 1/3；
+     * 每个分类内部仍串行翻页（下一页依赖上一页判定「是否还有更多」）。
+     */
+    private static final int CATEGORY_FETCH_PARALLEL = 3;
 
     // ------------------------------------------------------------------
     // 【2026-10-13 磁盘缓存】照源7（AfhgrjSourceLoader）模板。
@@ -120,7 +126,8 @@ public final class RenYiBoVodSourceLoader {
     //   仍会写入「分类骨架占位」（vodId 为空），因此这里用真实条目数做下限校验，
     //   低于阈值视为失败 → 不覆盖已有好缓存。
     // ------------------------------------------------------------------
-    private static final long VOD_CACHE_TTL_MS = 6L * 60L * 60L * 1000L;
+    /** 【2026-10-19】6h → 12h：与源5 直播、源8 对齐，刷新频率减半 */
+    private static final long VOD_CACHE_TTL_MS = 12L * 60L * 60L * 1000L;
     private static final long VOD_FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
     /** 真实条目数下限：健康一次约 455 条（7 分类 × 63 + 首页 14）；低于此值视为残表 */
     private static final int MIN_REAL_ITEMS = 20;
@@ -220,13 +227,52 @@ public final class RenYiBoVodSourceLoader {
         }
 
         // ② 各分类骨架（双闸门开启时优先拉多页真实加密接口，失败回落内置明文）
+        //
+        // 【2026-10-19 提速】先把 10 个分类的真实数据**有上限并行**抓回来（3 并发），
+        // 再按 CATEGORIES 原顺序组装 —— 分组展示顺序不变，只是不再一个一个排队等。
+        final Map<String, List<String[]>> realByCat = new java.util.HashMap<>();
+        if (canSendRealRequest()) {
+            java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(
+                    CATEGORY_FETCH_PARALLEL, r -> {
+                        Thread t = new Thread(r, "ryb5-vod");
+                        t.setDaemon(true);
+                        return t;
+                    });
+            try {
+                List<java.util.concurrent.Future<?>> fs = new ArrayList<>();
+                for (final RenYiBoVodCatalog.Category cat : RenYiBoVodCatalog.CATEGORIES) {
+                    fs.add(pool.submit(new Runnable() {
+                        @Override
+                        public void run() {
+                            List<String[]> r = fetchCategoryPagesMerged(cat);
+                            if (r != null && !r.isEmpty()) {
+                                synchronized (realByCat) {
+                                    realByCat.put(cat.name, r);
+                                }
+                            }
+                        }
+                    }));
+                }
+                for (java.util.concurrent.Future<?> f : fs) {
+                    try {
+                        f.get(60, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } finally {
+                pool.shutdownNow();
+            }
+            LogBridge.i(TAG, "源5点播：分类并行抓取完成，命中 " + realByCat.size()
+                    + "/" + RenYiBoVodCatalog.CATEGORIES.length + " 个分类");
+        }
+
         for (RenYiBoVodCatalog.Category cat : RenYiBoVodCatalog.CATEGORIES) {
             int written = 0;
             StringBuilder catSb = new StringBuilder();
 
-            // ① 双闸门开启 → 按 pg=1..CATEGORY_FETCH_PAGES 串行拉多页 video_list，合并去重
+            // ① 双闸门开启 → 用上面并行取回的分类数据（按页串行翻页已在预取阶段完成）
             if (canSendRealRequest()) {
-                List<String[]> real = fetchCategoryPagesMerged(cat);
+                List<String[]> real = realByCat.get(cat.name);
                 if (real != null && !real.isEmpty()) {
                     for (String[] v : real) {
                         if (v[1] == null || v[1].isEmpty()) continue;

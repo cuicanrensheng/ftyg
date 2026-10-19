@@ -106,11 +106,12 @@ public final class UrlConfig {
      */
     public static String LIVE_URL_7 = "afhgrj://all";
     /**
-     * 内置源8：4kvm.top 精选片单（电影/英美剧/国漫/韩剧/电影美学 5个分组）。
-     * 频道表来自用户片单页面（4kvm.top/playlist/xxx），地址写成 kvm4://&lt;playId&gt;，
-     * 起播那一刻才用 Kvm4UrlResolver + WebVideoResolver 解析播放页取真实 m3u8。
+     * 【2026-10-19】内置源8 换成 renyibo.com（原 4kvm.top 已全站 404 下线）。
+     * 架构照源7：频道表由 {@code RybSourceLoader} 纯 HTTP 抓 8 个分组生成，
+     * 地址写成 {@code ryb://<slug>}，起播那一刻由 {@code RybUrlResolver} 解析详情页里的
+     * {@code PLAY_SOURCES}（线路 + 集数 + 直链）拿真实 m3u8。
      */
-    public static String LIVE_URL_8 = "kvm4://all";
+    public static String LIVE_URL_8 = "ryb://all";
     public static String EPG_URL    = "";
     public static String EPG_URL_2  = "";
 
@@ -145,8 +146,8 @@ public final class UrlConfig {
         if (TextUtils.isEmpty(LIVE_URL_7_RAW)) LIVE_URL_7_RAW = LIVE_URL_7;
         LogBridge.i(TAG, "源7 就绪 " + srcKind(LIVE_URL_7));
 
+        // 【2026-10-19】源8 已换为 renyibo.com（原 4kvm 站点全站 404，kvm4 代码已移除）。
         if (TextUtils.isEmpty(LIVE_URL_8_RAW)) LIVE_URL_8_RAW = LIVE_URL_8;
-        LogBridge.i(TAG, "源8 就绪 " + srcKind(LIVE_URL_8));
 
         String e1 = getEpgUrl();   if (e1 != null) { if (TextUtils.isEmpty(EPG_URL)) EPG_URL = e1; if (TextUtils.isEmpty(EPG_URL_1_RAW)) EPG_URL_1_RAW = e1; }
         String e2 = getEpgUrl2();  if (e2 != null) { if (TextUtils.isEmpty(EPG_URL_2)) EPG_URL_2 = e2; if (TextUtils.isEmpty(EPG_URL_2_RAW)) EPG_URL_2_RAW = e2; }

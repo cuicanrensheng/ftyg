@@ -995,23 +995,17 @@ public class SettingsDialog extends android.app.Dialog {
                 return;
             }
 
-            // 【2026-10-18】源8（4kvm 影视点播）频道：线路 = 播放页 data-line；
-            //   清晰度 = 该源在 AppConfig 里按源持久化的档位（0=自动）。
-            String kvm4PlayId = currentChannel != null
-                    ? com.tv.live.kvm4.Kvm4UrlResolver.playIdOfChannel(currentChannel) : null;
-            if (!TextUtils.isEmpty(kvm4PlayId)) {
-                List<Integer> kvmLines =
-                        com.tv.live.kvm4.Kvm4UrlResolver.getLineNumbers(kvm4PlayId);
-                if (kvmLines.isEmpty()) {
-                    tv_channel_line.setText("加载中…");
-                } else {
-                    // 【2026-10-18】只显示线路号：`源8 · 线路1（185 集）` 太长会把
-                    // 「频道线路」这一行撑换行、压到标签上，这里只留最短形式。
-                    int curLine = com.tv.live.kvm4.Kvm4UrlResolver.getSelectedLine(kvm4PlayId);
-                    tv_channel_line.setText("线路" + curLine);
-                }
-                // 源8 不做清晰度档位暴露：站点播放器自适应，这里如实写「自适应」
-                tv_resolution_status.setText("自适应");
+            // 【2026-10-19】源8（renyibo 影视点播）：线路 = 详情页 PLAY_SOURCES 的条目。
+            //   每集只有一条直链，没有清晰度维度 → 清晰度如实写「自适应」。
+            String rybSlug = currentChannel != null
+                    ? com.tv.live.ryb.RybUrlResolver.vodIdOf(currentChannel) : null;
+            if (!TextUtils.isEmpty(rybSlug)) {
+                // 【2026-10-18】这一行很窄：只留最短形式，否则会把「频道线路」标签挤换行
+                int curLine = com.tv.live.ryb.RybUrlResolver.getSelectedLine(rybSlug) + 1;
+                tv_channel_line.setText("线路" + curLine);
+                // 【2026-10-19 清晰度】显示**当前实际生效**的轨道清晰度（单码率流时为「自适应」）
+                String rybRes = playerManager.getCurrentResolutionLabel();
+                tv_resolution_status.setText(TextUtils.isEmpty(rybRes) ? "自适应" : rybRes);
                 return;
             }
 

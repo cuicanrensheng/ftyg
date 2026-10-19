@@ -538,11 +538,9 @@ public class AppCoreManager {
 
     private List<Channel> parseLiveSource(String content) {
         Map<String, Channel> channelMap = new LinkedHashMap<>();
-        // 【2026-10-18 源8】4kvm 片单分组要求「M3U 有多少条就显示多少条」，
-        // 不能按 tvgId/name 合并。网络抓取路径已改用 PlaylistParser.parseContentNoDedup，
-        // 但本方法（缓存快显路径）此前仍在无条件合并 → 168 条被塌成 7 条。
-        // 这里按内容是否含 kvm4:// 协议串分流：源8 走直列表，其余来源保持原去重语义。
-        final boolean noDedup = content != null && content.contains("kvm4://");
+        // 【2026-10-19】源8 已换为 renyibo，M3U 由构建端按 slug 去重，tvg-id 天然唯一，
+        // 这里不再需要「按协议串分流」的特殊路径（原 4kvm 的 noDedup 分支已移除）。
+        final boolean noDedup = false;
         List<Channel> plainList = noDedup ? new ArrayList<>() : null;
         if (TextUtils.isEmpty(content)) {
             return new ArrayList<>();
@@ -769,6 +767,12 @@ public class AppCoreManager {
 
                         SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                         String customLive = sp.getString("custom_live_url", "");
+                        // 【2026-10-19 源8 移除】kvm4:// 死地址不要再当自定义源用
+                        if (customLive != null && customLive.startsWith("kvm4://")) {
+                            sp.edit().remove("custom_live_url").apply();
+                            log("【源8 已移除】清除遗留自定义直播源: " + customLive);
+                            customLive = "";
+                        }
                         if (!TextUtils.isEmpty(customLive)) {
                             UrlConfig.LIVE_URL = customLive;
                             log("【推送】成功读取到网页推送的直播源地址：" + customLive);

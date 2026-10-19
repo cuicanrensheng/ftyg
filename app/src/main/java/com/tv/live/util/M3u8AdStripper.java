@@ -148,6 +148,18 @@ public class M3u8AdStripper {
             LogBridge.d(TAG, "相对URL已转为绝对URL");
         }
 
+        // 【自动选择算法⓪】拼接缝插播广告（【2026-10-19 新增】同源同目录、无文本特征的插播广告）
+        LogBridge.i(TAG, "【算法选择⓪】尝试 拼接缝插播广告识别");
+        String seamResult = stripBySeamSplice(content);
+        if (seamResult != null && !seamResult.equals(content)) {
+            int seamStripped = segmentCount - countSegments(seamResult);
+            LogBridge.i(TAG, "【算法选择⓪】拼接缝算法成功！剔除广告分片 " + seamStripped + " 个");
+            LogBridge.i(TAG, "========== 广告剥离流程结束（拼接缝成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordAdWindows(content, baseUrl);
+            return seamResult;
+        }
+        LogBridge.i(TAG, "【算法选择⓪】拼接缝未命中，继续主算法");
+
         // 【自动选择算法①】DISCONTINUITY 切块 + 同源判定（主算法）
         LogBridge.i(TAG, "【算法选择①】尝试 DISCONTINUITY 切块 + 同源判定（主算法）");
         String result = stripByDiscontinuity(content);
@@ -155,6 +167,7 @@ public class M3u8AdStripper {
             int strippedCount = segmentCount - countSegments(result);
             LogBridge.i(TAG, "【算法选择①】主算法成功！剔除广告分片 " + strippedCount + " 个");
             LogBridge.i(TAG, "========== 广告剥离流程结束（主算法成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordAdWindows(content, baseUrl);
             return result;
         }
         LogBridge.i(TAG, "【算法选择①】主算法未命中，降级到备用算法");
@@ -201,6 +214,102 @@ public class M3u8AdStripper {
         LogBridge.i(TAG, "【算法选择⑤】所有算法均未命中，返回原文，不影响播放");
         LogBridge.i(TAG, "========== 广告剥离流程结束（未命中）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
         return content;
+    }
+
+
+    // ========================================================================
+    // 【2026-10-19 顶部横幅广告遮罩】广告时间窗登记
+    // ========================================================================
+
+    /**
+     * 源8（renyibo）这类站点会把博彩横幅**烧进画面**，剥离代理去掉分片后横幅仍在
+     * （横幅是按时间出现的）。这里把广告块在<b>原始时间轴</b>上的起止时间记录下来，
+     * 供 UI 侧在对应时段显示顶部遮罩。
+     *
+     * <p>存的是三元组 {@code {startMs, endMs, removedBeforeMs}}：
+     * {@code removedBeforeMs} 是本段之前已被剔除的广告总时长，
+     * UI 侧用它把「原始时间」换算成「剥离后的播放时间」。
+     */
+    private static final java.util.Map<String, long[]> sAdWindows =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 取某条 m3u8 的广告时间窗；没有返回 null。
+     *
+     * <p>⚠️ 登记用的是<b>媒体列表</b>地址（{@code .../1200k/hls/mixed.m3u8}），
+     * 而调用方手里常是<b>主列表</b>地址（{@code .../index.m3u8}）——两者同属一条流、
+     * 目录相同，直接精确匹配会落空（实测导致遮罩永远不显示）。
+     * 这里精确未命中时回退到「同目录前缀」匹配。
+     */
+    public static long[] getAdWindows(String url) {
+        if (url == null) return null;
+        long[] w = sAdWindows.get(url);
+        if (w != null) return w;
+        int cut = url.lastIndexOf('/');
+        if (cut > 0) {
+            String dir = url.substring(0, cut + 1);
+            for (java.util.Map.Entry<String, long[]> e : sAdWindows.entrySet()) {
+                if (e.getKey().startsWith(dir)) return e.getValue();
+            }
+        }
+        return null;
+    }
+
+    private static void recordAdWindows(String content, String baseUrl) {
+        if (content == null || baseUrl == null) return;
+        try {
+            String[] blocks = content.split("#EXT-X-DISCONTINUITY");
+            double[] dur = new double[blocks.length];
+            int[] cnt = new int[blocks.length];
+            for (int i = 0; i < blocks.length; i++) {
+                double d = 0;
+                int c = 0;
+                for (String line : blocks[i].split("\n")) {
+                    line = line.trim();
+                    if (line.startsWith("#EXTINF:")) {
+                        try {
+                            d += Double.parseDouble(line.substring(8).split(",")[0]);
+                            c++;
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                }
+                dur[i] = d;
+                cnt[i] = c;
+            }
+            int max = 0;
+            for (int c : cnt) if (c > max) max = c;
+            if (max <= 0) return;
+
+            // 少数派块 = 广告：分片数不到最大块的 10%
+            java.util.List<long[]> win = new java.util.ArrayList<>();
+            double cum = 0, removedBefore = 0;
+            for (int i = 0; i < blocks.length; i++) {
+                boolean isAd = cnt[i] > 0 && cnt[i] < max * 0.10;
+                if (isAd) {
+                    win.add(new long[]{Math.round(cum * 1000),
+                            Math.round((cum + dur[i]) * 1000),
+                            Math.round(removedBefore * 1000)});
+                    removedBefore += dur[i];
+                }
+                cum += dur[i];
+            }
+            if (win.isEmpty()) return;
+            long[] flat = new long[win.size() * 3];
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < win.size(); i++) {
+                flat[i * 3] = win.get(i)[0];
+                flat[i * 3 + 1] = win.get(i)[1];
+                flat[i * 3 + 2] = win.get(i)[2];
+                long ss = (win.get(i)[0] - win.get(i)[2]) / 1000;   // 剥离后时间轴上的起点
+                sb.append(String.format("%02d:%02d(%ds) ", ss / 60, ss % 60,
+                        (win.get(i)[1] - win.get(i)[0]) / 1000));
+            }
+            sAdWindows.put(baseUrl, flat);
+            LogBridge.i(TAG, "【广告时间窗】登记 " + win.size() + " 段 → 播放轴起点: " + sb);
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【广告时间窗】登记失败 " + t.getMessage());
+        }
     }
 
     // ========================================================================
@@ -400,6 +509,68 @@ public class M3u8AdStripper {
     // ========================================================================
     // 算法一：DISCONTINUITY 切块 + 同源判定 + 多数决反转
     // ========================================================================
+
+    // ========================================================================
+    // 算法⓪【2026-10-19 新增】：拼接缝插播广告（同源同目录、无任何文本特征）
+    // ========================================================================
+
+    /** 拼接缝分片阈值：块内出现 <1.0s 的"非整秒极短分片"即视为拼接痕迹 */
+    private static final double SEAM_TINY_SEG_SEC = 1.0;
+
+    /** 拼接缝广告块的时长上限：超过此值不再整块剔除（避免把长块中间的正常截断整块删掉） */
+    private static final double SEAM_AD_BLOCK_MAX_SEC = 15.0;
+
+    /**
+     * 【2026-10-19 源8 实测】按「拼接缝」识别<b>同源插播广告</b>块。
+     *
+     * <p>实测样本（源8《魅影神捕》733 分片 / 185 块）：插播的赌博广告与正片
+     * <b>同域名、同目录、随机哈希命名</b>，既没有外源 URL、没有 cue 标签，也没有命名规律，
+     * 时长同样落在正片区间内，所以「同源判定（主算法）」与「时长异常（备用算法）」都抓不到
+     * （用户报障：广告剥离失效）。
+     *
+     * <p>唯一留下的痕迹是<b>拼接缝</b>：广告与正片拼接处会留下一个"非整秒的极短分片"
+     * （实测 0.233s，另有 0.48 / 0.6 / 0.88 / 0.92s 等）。规则：
+     * 块内存在 &lt; {@link #SEAM_TINY_SEG_SEC} 的分片，且该块总时长 ≤
+     * {@link #SEAM_AD_BLOCK_MAX_SEC} → 判为插播广告块，<b>整块剔除</b>。
+     *
+     * @return 剔除后的 m3u8；未命中返回 null（交给后续算法）
+     */
+    private static String stripBySeamSplice(String content) {
+        String[] blocks = content.split("#EXT-X-DISCONTINUITY");
+        if (blocks.length < 3) return null;
+        ArrayList<Integer> adIdx = new ArrayList<>();
+        for (int bi = 0; bi < blocks.length; bi++) {
+            double sum = 0;
+            int segs = 0;
+            boolean tiny = false;
+            for (String line : blocks[bi].split("\n")) {
+                String t = line.trim();
+                if (t.isEmpty()) continue;
+                if (t.startsWith("#EXTINF")) {
+                    java.util.regex.Matcher m = EXTINF_DURATION_PATTERN.matcher(t);
+                    if (m.find()) {
+                        try {
+                            double d = Double.parseDouble(m.group(1));
+                            sum += d;
+                            if (d > 0 && d < SEAM_TINY_SEG_SEC) tiny = true;
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                } else if (!t.startsWith("#")) {
+                    segs++;
+                }
+            }
+            if (tiny && segs > 0 && sum > 0 && sum <= SEAM_AD_BLOCK_MAX_SEC) {
+                adIdx.add(bi);
+                LogBridge.i(TAG, "【拼接缝】块#" + bi + " 判为插播广告：分片=" + segs
+                        + " 块时长=" + String.format(java.util.Locale.US, "%.2f", sum)
+                        + "s（含 <1s 的拼接缝分片）");
+            }
+        }
+        if (adIdx.isEmpty()) return null;
+        LogBridge.i(TAG, "【拼接缝】命中插播广告块 " + adIdx.size() + " 个（共 " + blocks.length + " 块）");
+        return filterBlocks(content, blocks, adIdx);
+    }
 
     /**
      * 按 #EXT-X-DISCONTINUITY 切块，通过同源判定识别广告块

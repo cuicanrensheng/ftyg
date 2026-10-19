@@ -54,6 +54,24 @@ public class PlaylistParser {
         return parseInternalNoDedup(br, channels);
     }
 
+    /**
+     * 剥离行首 BOM（U+FEFF）。
+     *
+     * <p>内置「央视」片段（{@code assets/cctv_group.m3u}）若带 UTF-8 BOM，拼接进直播源后
+     * 该片段首行会变成 {@code "\uFEFF#EXTINF…"}；{@link String#trim()} 不会去掉 \uFEFF，
+     * 于是这一行被当成「普通行」丢弃 —— 紧随其后的地址行沦为空有 URL 的野频道
+     * （名字=URL、无台标、group=未分类）。实测：源7/源8 的「央视」分组里 CCTV1 就这么丢的。
+     *
+     * <p>在解析入口统一剥离，兼容内置资产 / {@code live_source} 缓存 / 永久兜底三种来源，
+     * 使内置源与网络源（源1，无 BOM）解析口径一致。
+     */
+    private static String stripBom(String line) {
+        if (line != null && !line.isEmpty() && line.charAt(0) == '\uFEFF') {
+            return line.substring(1).trim();
+        }
+        return line;
+    }
+
     private static List<Channel> parseInternal(BufferedReader br, Map<String, Channel> channelMap) throws Exception {
         String line;
         String currentGroup = "未分类";
@@ -65,7 +83,7 @@ public class PlaylistParser {
         boolean pendingM3uUri = false;
 
         while ((line = br.readLine()) != null) {
-            line = line.trim();
+            line = stripBom(line.trim());
             if (line.isEmpty()) continue;
 
             if (line.endsWith(",#genre#") || line.endsWith("#genre#")) {
@@ -167,7 +185,7 @@ public class PlaylistParser {
         boolean pendingM3uUri = false;
 
         while ((line = br.readLine()) != null) {
-            line = line.trim();
+            line = stripBom(line.trim());
             if (line.isEmpty()) continue;
 
             if (line.endsWith(",#genre#") || line.endsWith("#genre#")) {
@@ -293,8 +311,8 @@ public class PlaylistParser {
      *       —— 同为待解析协议串；本期播放地址待加密接口补齐，解析返回 null。</li>
      *   <li>内置源7（afhgrj 影视）{@code afhgrj://<vodId>}（2026-10-10 新增）—— 待解析地址，
      *       起播时抓播放页 player_aaaa 取真实 m3u8（惰性解析）。</li>
-     *   <li>内置源8（4kvm 精选片单）{@code kvm4://<playId>}（2026-10-18 新增）—— 待解析地址，
-     *       起播时用 WebView 加载播放页取 video.currentSrc（惰性解析）。</li>
+     *   <li>内置源8（renyibo 影视）{@code ryb://<slug>}（2026-10-19 换源）—— 待解析地址，
+     *       起播时抓详情页 PLAY_SOURCES 取真实 m3u8（惰性解析，纯 HTTP）。</li>
      * </ul>
      */
     public static boolean isSupportedUri(String uri) {
@@ -305,7 +323,7 @@ public class PlaylistParser {
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoVodSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME)
-                || uri.startsWith(com.tv.live.kvm4.Kvm4UrlResolver.SCHEME);
+                || uri.startsWith(com.tv.live.ryb.RybUrlResolver.SCHEME);
     }
 
     private static int findFirstHttpComma(String line) {

@@ -1451,54 +1451,53 @@ public class TVPlayerManager {
         }, "Afhgrj-Resolve").start();
     }
 
+    /** 【2026-10-19】源8（renyibo）当前正在解析的地址（去重用） */
+    private volatile String rybResolvingUrl = "";
+
     /**
-     * 【2026-10-18 新增】源8（4kvm 精选片单）待解析地址解析后起播 —— 参照源7 {@link #resolveAfhgrjAndPlay} 模式。
+     * 【源8 renyibo】惰性解析并播放 —— 与 {@link #resolveAfhgrjAndPlay} 同构，纯 HTTP：
+     * 抓详情页 {@code /video/<slug>/}，从内联的 {@code PLAY_SOURCES} 里取线路/集数的直链。
      *
-     * <p>M3U 里存的是 {@code kvm4://<playId>}，
-     * 在起播这一刻才用 WebView 加载播放页 {@code https://4kvm.top/play/<playId>}，
-     * 从 video 元素提取真实 m3u8 直链，完成后回主线程播放。
+     * @param rawUrl {@code ryb://<slug>} 或 {@code ryb://<slug>@<src>-<ep>}
      */
-    private void resolveKvm4AndPlay(String rawUrl, long initialSeekPosition) {
+    private void resolveRybAndPlay(String rawUrl, long initialSeekPosition) {
+        com.tv.live.ryb.RybUrlResolver.attach(context);
         synchronized (this) {
-            if (rawUrl.equals(kvm4ResolvingUrl)) {
-                LogBridge.d(TAG, "【4kvm源8】解析进行中，忽略重复请求");
+            if (rawUrl.equals(rybResolvingUrl)) {
+                LogBridge.d(TAG, "【源8 renyibo】解析进行中，忽略重复请求");
                 return;
             }
-            kvm4ResolvingUrl = rawUrl;
+            rybResolvingUrl = rawUrl;
         }
-        LogBridge.i(TAG, "【4kvm源8】起播解析待解析地址 → " + rawUrl);
+        LogBridge.i(TAG, "【源8 renyibo】起播解析 → " + rawUrl);
         new Thread(() -> {
             String finalUrl = null;
             try {
-                finalUrl = com.tv.live.kvm4.Kvm4UrlResolver.resolve(rawUrl, context);
+                finalUrl = com.tv.live.ryb.RybUrlResolver.resolve(rawUrl);
             } catch (Throwable t) {
-                LogBridge.w(TAG, "【4kvm源8】解析异常: " + t.getMessage());
+                LogBridge.w(TAG, "【源8 renyibo】解析异常: " + t.getMessage());
             }
             final String resolved = finalUrl;
             mHandler.post(() -> {
-                kvm4ResolvingUrl = "";
-                // 频道已被切换 → 丢弃本次结果
+                rybResolvingUrl = "";
                 if (!TextUtils.equals(currentUrl, rawUrl)) {
-                    LogBridge.d(TAG, "【4kvm源8】解析完成但已切换，丢弃");
+                    LogBridge.d(TAG, "【源8 renyibo】解析完成但已切台，丢弃");
                     return;
                 }
                 if (TextUtils.isEmpty(resolved)) {
-                    LogBridge.w(TAG, "【4kvm源8】解析失败，转自动重试切台");
-                    autoRetry("源8解析失败");
+                    LogBridge.w(TAG, "【源8 renyibo】解析失败，转自动重试");
+                    autoRetry("源8(renyibo)解析失败");
                     return;
                 }
-                LogBridge.i(TAG, "【4kvm源8】落地地址就绪 → " + resolved);
+                LogBridge.i(TAG, "【源8 renyibo】落地地址就绪 → " + resolved);
                 try {
                     com.tv.live.MyApplication.prewarmStreamAsync(resolved);
                 } catch (Throwable ignored) {
                 }
                 doPlay(resolved, initialSeekPosition);
             });
-        }, "Kvm4-Resolve").start();
+        }, "Ryb-Resolve").start();
     }
-
-    /** 源8（4kvm）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
-    private volatile String kvm4ResolvingUrl = "";
 
     /** 源7（afhgrj 影视）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
     private volatile String afhgrjResolvingUrl = "";
@@ -2703,12 +2702,13 @@ public class TVPlayerManager {
      * 【源8 4kvm】当前频道是源8时，失效其 m3u8 缓存，
      * 4kvm 的 m3u8 地址有时效性，播放失败说明缓存已过期，下次重解析。
      */
-    private void invalidateKvm4ResolvedCache() {
+    /** 【源8 renyibo】播放失败时作废本片解析缓存，下次重解析。 */
+    private void invalidateRybResolvedCache() {
         Channel ch = currentChannel;
         if (ch == null) return;
         String url = ch.getMainPlayUrl();
-        if (com.tv.live.kvm4.Kvm4UrlResolver.isKvm4Url(url)) {
-            com.tv.live.kvm4.Kvm4UrlResolver.invalidateByUrl(url);
+        if (com.tv.live.ryb.RybUrlResolver.isRybUrl(url)) {
+            com.tv.live.ryb.RybUrlResolver.invalidateByUrl(url);
         }
     }
 
@@ -2719,9 +2719,9 @@ public class TVPlayerManager {
         // ★【方案1b】源7落地缓存亦同理：播放失败说明缓存 m3u8 已不可达，
         //   立即失效，让后台解析链重新走完整换线（探活避开死 sid）。
         invalidateAfhgrjResolvedCache();
-        // ★【源8 4kvm】播放失败说明 m3u8 地址已过期（4kvm 地址有时效性），
-        //   立即失效缓存，下次重解析获取新地址。
-        invalidateKvm4ResolvedCache();
+        // ★【源8 renyibo】同理：作废本片缓存，下次重解析（线路/集数可能已变）
+        invalidateRybResolvedCache();
+
         if (cause != null) {
             Throwable t = cause;
             int depth = 0;
@@ -4527,15 +4527,16 @@ public class TVPlayerManager {
             // 【2026-10-10】内置源7（afhgrj 影视）：afhgrj://<vodId> 或 afhgrj://<vodId>-<sid>-<nid>
             //   是待解析地址，不能被「频道线路表」覆盖（EPG 切集时传的是具体某一集）。
             boolean isAfhgrjPending = com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(playUrl);
-            // 【2026-10-18】内置源8（4kvm 精选片单）：kvm4://<playId> 是待解析地址
-            boolean isKvm4Pending = com.tv.live.kvm4.Kvm4UrlResolver.isKvm4Url(playUrl);
+            // 【2026-10-19】内置源8（renyibo）：ryb://<slug> 是待解析地址（纯 HTTP 惰性解析）
+            boolean isRybPending = com.tv.live.ryb.RybUrlResolver.isRybUrl(playUrl);
             LogBridge.d(TAG, "doPlay: url=" + playUrl.substring(0, Math.min(100, playUrl.length())) + " isHls=" + isHlsUrl(playUrl) + " isRealStream=" + isRealStream);
 
             String finalUrl;
             // 【2026-10-07】mMiguDirectPlay：咪咕切线路/切清晰度时置位 —— 本次起播必须
             // 直接采用传入的源串，不能被「频道线路表」覆盖（咪咕频道 backupUrls 不含这些源）。
             if (currentChannel != null && !isRealStream && !isZgyjVod && !isYunTuLb
-                    && !isRenyiboPending && !isAfhgrjPending && !isKvm4Pending && !isRenyiboResolvedStream
+                    && !isRenyiboPending && !isAfhgrjPending && !isRybPending
+                    && !isRenyiboResolvedStream
                     && !mHuyaDirectPlay && !mMiguDirectPlay) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
                 String channelKey = currentChannel.getChannelId();
@@ -4626,10 +4627,10 @@ public class TVPlayerManager {
                 return;
             }
 
-            // ★内置源8（4kvm 精选片单）：M3U 里存的是 kvm4://<playId>，
-            //   起播这一刻才用 WebView 解析播放页取真实 m3u8（惰性解析，参照源7 模式）。
-            if (isKvm4Pending) {
-                resolveKvm4AndPlay(finalUrl, initialSeekPosition);
+            // ★内置源8（renyibo）：M3U 里存的是 ryb://<slug>（EPG 切集时为 @src-ep），
+            //   起播这一刻才抓详情页 PLAY_SOURCES 取真实 m3u8 —— 纯 HTTP，照源7 的做法。
+            if (com.tv.live.ryb.RybUrlResolver.isRybUrl(finalUrl)) {
+                resolveRybAndPlay(finalUrl, initialSeekPosition);
                 return;
             }
 
@@ -4719,7 +4720,8 @@ public class TVPlayerManager {
         if (u == null || u.isEmpty()) return false;
         return com.tv.live.renyibo.RenYiBoVodSourceLoader.isVodSchemeUrl(u)
                 || com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(u)
-                || com.tv.live.kvm4.Kvm4UrlResolver.isKvm4Url(u)
+                // 【2026-10-19 源8 renyibo】点播形态，同样走本地代理剥离广告
+                || com.tv.live.ryb.RybUrlResolver.isRybUrl(u)
                 || com.tv.live.migu.source.ZgyjVodApi.isZgyjVodUrl(u)
                 || com.tv.live.migu.source.CarouselApi.isYunTuLookBackUrl(u);
     }

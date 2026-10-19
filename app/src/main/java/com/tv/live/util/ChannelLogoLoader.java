@@ -48,13 +48,13 @@ public class ChannelLogoLoader {
     private static final String TAG = "ChannelLogoLoader";
 
     /** 磁盘缓存上限：32MB（【2026-10-10 台标性能】原 8MB 对 OTT 首页 611 个房间的台标覆盖不足，扩容） */
-    private static final long DISK_CACHE_MAX_BYTES = 32L * 1024 * 1024;
+    private static final long DISK_CACHE_MAX_BYTES = 16L * 1024 * 1024;
     /**
      * 【2026-10-10 台标性能】裁剪触发线：仅当磁盘占用超过上限的 1.25 倍时才真正执行裁剪。
      * 原实现「每次保存都 listFiles()+全量排序+删除」，缓存顶满后每次保存都抖动；加入 1.25 倍
      * 缓冲后，绝大多数保存走估算值、不再触发全量遍历。
      */
-    private static final long DISK_TRIM_TRIGGER_BYTES = DISK_CACHE_MAX_BYTES * 5L / 4L; // 1.25 倍 = 40MB
+    private static final long DISK_TRIM_TRIGGER_BYTES = DISK_CACHE_MAX_BYTES * 11L / 10L; // 1.1 倍 = 17.6MB
     /** 解码后位图长边上限（px） */
     private static final int MAX_EDGE_PX = 200;
     /** 永久失败负缓存容量上限 */

@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Handler;
@@ -1241,10 +1240,17 @@ public class EpgManager {
         private final Map<Channel.EpgItem, String> epgEndTimeMap = new HashMap<>();
         private static final String ACTION_REMINDER = "com.tv.live.EPG_REMINDER";
 
-        private static final int COLOR_BLUE = 0xFF40A9FF;
-        private static final int COLOR_BG_BLUE = 0x3340A9FF;
+        // 【2026-10-20 焦点降亮 / 八次调整】焦点为暗金橄榄底，选中态已去除橄榄底：
+        //   焦点（focused）  → 暗金（橄榄）底 #FF3C3525 + 2dp 白描边 + 黄字 #FFFFD166（list_item_focused）
+        //   选中但未聚焦     → 默认底 #212121 + 黄字 #FFFFD166（"当前"节目）
+        //   其余            → 默认底 #212121 + 白字 / 次级字
+        //   焦点靠橄榄底 + 那圈 2dp 白描边区分（原亮金底 #FFD166 用户反馈太亮）。
+        // ListView 中 item 的 state_focused / state_selected 实测均不生效，故按
+        // 「本列表是否持有焦点 && 本行是否被选中」显式指定（见构造函数的焦点监听重绘）。
         private static final int COLOR_WHITE = 0xFFFFFFFF;
-        private static final int COLOR_GRAY = 0xFFCCCCCC;
+        private static final int COLOR_GRAY = 0x99B9C4D8;    // 次信息色（同 OTT 卡片节目文字）
+        private static final int COLOR_CURRENT = 0xFFFFD166; // 「当前」黄字（同 OTT 焦点金 #FFD166）
+        private static final int COLOR_FOCUS = 0xFFFFD166; // 焦点态黄字（与选中态同色，底为暗金橄榄）
 
         private int selectedPosition = 0;
         private int playingIndex = -1;
@@ -1259,6 +1265,12 @@ public class EpgManager {
             lvEpg.setFocusable(true);
             lvEpg.setFocusableInTouchMode(false);
             lvEpg.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+
+            // 【2026-10-20 焦点改为金色】焦点态（金底）由适配器按「本列表是否持有焦点」决定，
+            // ListView 自身不会因焦点进出重跑 getView → 手动触发重绘。
+            lvEpg.setOnFocusChangeListener((v, hasFocus) -> {
+                if (adapter != null) adapter.notifyDataSetChanged();
+            });
 
             lvEpg.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override
@@ -1850,23 +1862,23 @@ public class EpgManager {
 
                 boolean isSelected = (position == selectedPosition);
 
-                if (isSelected) {
-                    holder.tv_dayName.setTextColor(COLOR_BLUE);
-                    holder.tv_time.setTextColor(COLOR_BLUE);
-                    holder.tv_title.setTextColor(COLOR_BLUE);
-                    holder.tv_dayName.setTypeface(null, Typeface.BOLD);
-                    holder.tv_time.setTypeface(null, Typeface.BOLD);
-                    holder.tv_title.setTypeface(null, Typeface.BOLD);
-                    convertView.setBackgroundColor(COLOR_BG_BLUE);
-                } else {
-                    holder.tv_dayName.setTextColor(COLOR_WHITE);
-                    holder.tv_time.setTextColor(COLOR_GRAY);
-                    holder.tv_title.setTextColor(COLOR_WHITE);
-                    holder.tv_dayName.setTypeface(null, Typeface.NORMAL);
-                    holder.tv_time.setTypeface(null, Typeface.NORMAL);
-                    holder.tv_title.setTypeface(null, Typeface.NORMAL);
-                    convertView.setBackgroundColor(Color.TRANSPARENT);
-                }
+                // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
+                //   focused（本列表有焦点且本行选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
+                //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（当前节目）
+                //   其余                             → 默认底 #212121 + 白字 / 次级字
+                boolean focused = lvEpg.hasFocus() && isSelected;
+                convertView.setBackgroundResource(focused
+                        ? R.drawable.list_item_focused
+                        : R.drawable.list_item_default);
+                holder.tv_dayName.setTextColor(focused ? COLOR_FOCUS : COLOR_WHITE);
+                holder.tv_time.setTextColor(focused ? COLOR_FOCUS : COLOR_GRAY);
+                holder.tv_title.setTextColor(focused ? COLOR_FOCUS
+                        : (isSelected ? COLOR_CURRENT : COLOR_WHITE));
+                holder.tv_dayName.setTypeface(null, (focused || isSelected)
+                        ? Typeface.BOLD : Typeface.NORMAL);
+                holder.tv_time.setTypeface(null, focused ? Typeface.BOLD : Typeface.NORMAL);
+                holder.tv_title.setTypeface(null, (focused || isSelected)
+                        ? Typeface.BOLD : Typeface.NORMAL);
 
                 String key = currentChannel.getName() + "_" + position;
                 boolean isPast = false;
@@ -1918,6 +1930,10 @@ public class EpgManager {
                     holder.tv_action.setEnabled(true);
                 }
 
+                // 【2026-10-20 焦点改为金色】金底上的功能标签（播放中/回看/预约）文字翻深色，
+                // 否则白字压在金底上不可读；标签底色保留其功能语义色不变。
+                holder.tv_action.setTextColor(focused ? COLOR_FOCUS : COLOR_WHITE);
+
                 return convertView;
             }
 
@@ -1964,9 +1980,13 @@ public class EpgManager {
         /** 【2026-10-08】当前列表是否含过去7天（仅内置咪咕源为 true）。 */
         private boolean showingPastDays = false;
 
-        private static final int COLOR_BLUE = 0xFF40A9FF;
-        private static final int COLOR_BG_BLUE = 0x3340A9FF;
+        // 【2026-10-20 焦点降亮 / 八次调整】焦点为暗金橄榄底，选中态已去除橄榄底：
+        //   焦点（focused）  → 暗金（橄榄）底 #FF3C3525 + 2dp 白描边 + 黄字 #FFFFD166（list_item_focused）
+        //   选中但未聚焦     → 默认底 #212121 + 黄字 #FFFFD166（当前日期）
+        //   其余            → 默认底 #212121 + 白字
         private static final int COLOR_WHITE = 0xFFFFFFFF;
+        private static final int COLOR_CURRENT = 0xFFFFD166; // 「当前」黄字（同 OTT 焦点金 #FFD166）
+        private static final int COLOR_FOCUS = 0xFFFFD166; // 焦点态黄字（与选中态同色，底为暗金橄榄）
 
         public interface OnDateSelectedListener {
             void onDateSelected(int position);
@@ -1987,6 +2007,12 @@ public class EpgManager {
             lvDate.setFocusable(true);
             lvDate.setFocusableInTouchMode(true);
             lvDate.setItemsCanFocus(true);
+
+            // 【2026-10-20 焦点改为金色】焦点态（金底）由适配器按「本列表是否持有焦点」决定，
+            // ListView 自身不会因焦点进出重跑 getView → 手动触发重绘。
+            lvDate.setOnFocusChangeListener((v, hasFocus) -> {
+                if (adapter != null) adapter.notifyDataSetChanged();
+            });
 
             lvDate.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override
@@ -2111,21 +2137,24 @@ public class EpgManager {
 
                     tv.setSingleLine(false);
                     tv.setMaxLines(2);
-                    tv.setTextSize(14);
+                    // 【2026-10-20 统一为 OTT 风格】字号对齐 OTT 列表主文字档（16sp）
+                    tv.setTextSize(16);
                     tv.setGravity(android.view.Gravity.CENTER);
 
                     boolean isSelected = (position == selectedPosition);
                     // LogBridge.d("DateList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
-                    if (isSelected) {
-                        tv.setTextColor(COLOR_BLUE);
-                        tv.setTypeface(null, Typeface.BOLD);
-                        tv.setBackgroundColor(COLOR_BG_BLUE);
-                    } else {
-                        tv.setTextColor(COLOR_WHITE);
-                        tv.setTypeface(null, Typeface.NORMAL);
-                        tv.setBackgroundColor(Color.TRANSPARENT);
-                    }
+                    // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
+                    //   focused（本列表有焦点且本项选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
+                    //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（当前日期）
+                    //   其余                             → 默认底 #212121 + 白字
+                    boolean focused = lvDate.hasFocus() && isSelected;
+                    tv.setBackgroundResource(focused
+                            ? R.drawable.list_item_focused
+                            : R.drawable.list_item_default);
+                    tv.setTextColor(focused ? COLOR_FOCUS
+                            : (isSelected ? COLOR_CURRENT : COLOR_WHITE));
+                    tv.setTypeface(null, (focused || isSelected) ? Typeface.BOLD : Typeface.NORMAL);
                     return tv;
                 }
             };

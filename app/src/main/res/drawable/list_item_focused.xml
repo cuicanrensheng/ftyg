@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 直播模式：列表行「焦点」态。
+     【2026-10-20 焦点降亮】原为亮金底 #FFD166（太亮），现改为与分组选中项
+     「全部(798)」同款的暗金（橄榄）底 #FF3C3525 + 黄字 #FFFFD166；
+     焦点与选中态的区别仅靠这圈 2dp 白描边保留。
+     由各适配器在「该 ListView 持有焦点且本行被选中」时显式指定
+     （ListView 中 item 的 state_focused / state_selected 实测均不生效）。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF3C3525" />
+    <stroke
+        android:width="2dp"
+        android:color="#FFFFFFFF" />
+    <corners android:radius="8dp" />
+</shape>

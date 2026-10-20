@@ -48,6 +48,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -890,6 +891,319 @@ public final class LogBridge {
             }
         }
 
+        /**
+         * 【2026-10-20 新增 /api/cache】各缓存目录占用明细。
+         *
+         * <p>起因：电视端「应用存储」显示 40MB，但应用自报的巡检只有 15MB，
+         * 差值怀疑在 {@code app_webview}（Chromium WebView 数据目录）——
+         * 它在 {@code dataDir} 下，<b>既不在 filesDir 也不在 cacheDir</b>，
+         * 所以既没被 {@code performFullInspection} 统计、也没被及时清理。
+         * 本接口把每个目录单独列出来，避免再猜。
+         *
+         * <p>返回值除 {@code dirs}（目录占用）外，另有 {@code clearables}
+         * （可清理项 + 当前占用），供电脑端日志工具渲染勾选框。
+         */
+        /**
+         * 【2026-10-20 新增】可清理缓存项白名单：id → 显示名。
+         *
+         * <p>{@code cleanCache} 的 {@code target} 取值与此一一对应，两边必须同步改。
+         * 只收「删掉能自动重建」的目录；databases（播放历史/收藏）、shared_prefs（设置）、
+         * filesDir 下各源 M3U 落地缓存（renyibo_vod.m3u 等业务数据）、filesDir/boot_logs.txt
+         * （开机日志，用户还要看）一律不在白名单内。
+         */
+        private static final String[][] CLEARABLE_CACHE_ITEMS = {
+                {"channel_logo", "台标图片缓存"},
+                {"tv_cache", "节目单 / 列表缓存"},
+                {"webview", "WebView 可再生缓存"},
+                {"code_cache", "ART 编译缓存"},
+        };
+
+        /**
+         * WebView（{@code app_webview}）下允许删除的子路径 —— 只列纯可再生缓存，
+         * 不碰 Cookies / Local Storage / IndexedDB / Service Worker 的注册与脚本，
+         * 避免把登录态或离线数据清掉。
+         */
+        private static final String[] WEBVIEW_CACHE_SUBPATHS = {
+                "Default/HTTP Cache",
+                "Default/Code Cache",
+                "Default/GPUCache",
+                "Default/Service Worker/CacheStorage",
+                "Cache",
+                "Code Cache",
+                "GPUCache",
+        };
+
+        /**
+         * 【2026-10-20 新增】清理缓存。
+         *
+         * <p>供电脑端日志工具（log-monitor）调用，避免没有 root 时只能干瞪眼。
+         * <b>只删可再生成的缓存</b>，不碰数据库与用户数据。
+         *
+         * @param target 单个 id、逗号分隔的多个 id，或 {@code all}（= 白名单全部）
+         */
+        private Map<String, Object> cleanCache(Context ctx, String target) {
+            Map<String, Object> r = new LinkedHashMap<>();
+            long freed = 0L;
+            int files = 0;
+            List<String> done = new ArrayList<>();
+            try {
+                File cacheDir = ctx.getCacheDir();
+                File dataDir = new File(ctx.getApplicationInfo().dataDir);
+                String raw = target == null ? "all" : target.trim().toLowerCase(Locale.ROOT);
+                boolean all = raw.isEmpty() || "all".equals(raw);
+
+                // 目标集合：all → 白名单全部；否则按逗号拆，并过滤掉非法 id
+                java.util.LinkedHashSet<String> wanted = new java.util.LinkedHashSet<>();
+                if (all) {
+                    for (String[] item : CLEARABLE_CACHE_ITEMS) wanted.add(item[0]);
+                } else {
+                    for (String t : raw.split(",")) {
+                        String s = t.trim();
+                        if (s.isEmpty()) continue;
+                        for (String[] item : CLEARABLE_CACHE_ITEMS) {
+                            if (item[0].equals(s)) { wanted.add(s); break; }
+                        }
+                    }
+                    if (wanted.isEmpty()) {
+                        r.put("ok", false);
+                        r.put("error", "非法 target（可选：" + clearableIds() + " 或 all）");
+                        return r;
+                    }
+                }
+
+                for (String t : wanted) {
+                    if ("channel_logo".equals(t) || "tv_cache".equals(t) || "code_cache".equals(t)) {
+                        File dir = "code_cache".equals(t) ? new File(dataDir, "code_cache")
+                                : new File(cacheDir, t);
+                        long[] c = new long[1];
+                        freed += deleteRecursively(dir, c);
+                        files += (int) c[0];
+                        done.add(t);
+                    } else if ("webview".equals(t)) {
+                        for (String rel : WEBVIEW_CACHE_SUBPATHS) {
+                            long[] c = new long[1];
+                            freed += deleteRecursively(new File(dataDir, "app_webview/" + rel), c);
+                            files += (int) c[0];
+                        }
+                        done.add(t);
+                    }
+                }
+
+                r.put("target", raw);
+                r.put("cleared", done);
+                r.put("freedBytes", freed);
+                r.put("freedHuman", humanBytes(freed));
+                r.put("files", files);
+                r.put("ok", true);
+                LogBridge.i("LogBridge", "【缓存清理】target=" + raw + " 释放 " + humanBytes(freed)
+                        + "（" + files + " 个文件）");
+            } catch (Throwable e) {
+                r.put("ok", false);
+                r.put("error", String.valueOf(e.getMessage()));
+            }
+            return r;
+        }
+
+        /** 白名单 id 拼串，仅用于报错提示 */
+        private String clearableIds() {
+            StringBuilder sb = new StringBuilder();
+            for (String[] item : CLEARABLE_CACHE_ITEMS) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append(item[0]);
+            }
+            return sb.toString();
+        }
+
+        /**
+         * 【2026-10-20 新增】逐个统计白名单里的可清理项当前占用，供电脑端渲染勾选框。
+         * 与 {@link #cleanCache} 的 target 取值严格对齐，避免"看得见却清不掉"。
+         */
+        private List<Map<String, Object>> buildClearables(Context ctx) {
+            List<Map<String, Object>> out = new ArrayList<>();
+            if (ctx == null) return out;
+            File cacheDir = ctx.getCacheDir();
+            File dataDir = new File(ctx.getApplicationInfo().dataDir);
+
+            for (String[] item : CLEARABLE_CACHE_ITEMS) {
+                String id = item[0];
+                long[] cnt = new long[1];
+                long bytes = 0L;
+                List<String> parts = new ArrayList<>();
+
+                if ("channel_logo".equals(id) || "tv_cache".equals(id)) {
+                    bytes = dirSize(new File(cacheDir, id), cnt);
+                } else if ("code_cache".equals(id)) {
+                    bytes = dirSize(new File(dataDir, "code_cache"), cnt);
+                } else if ("webview".equals(id)) {
+                    for (String rel : WEBVIEW_CACHE_SUBPATHS) {
+                        File f = new File(dataDir, "app_webview/" + rel);
+                        if (f == null || !f.exists()) continue;
+                        long[] c2 = new long[1];
+                        long s = dirSize(f, c2);
+                        if (s > 0) {
+                            bytes += s;
+                            cnt[0] += c2[0];
+                            parts.add(rel + " → " + humanBytes(s));
+                        }
+                    }
+                }
+
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", id);
+                m.put("label", item[1]);
+                m.put("bytes", bytes);
+                m.put("human", humanBytes(bytes));
+                m.put("files", cnt[0]);
+                if (!parts.isEmpty()) m.put("parts", parts);
+                out.add(m);
+            }
+            return out;
+        }
+
+
+        private long deleteRecursively(File f, long[] fileCount) {
+            if (f == null || !f.exists()) return 0L;
+            long sum = 0L;
+            if (f.isFile()) {
+                long sz = f.length();
+                if (f.delete()) {
+                    sum = sz;
+                    fileCount[0]++;
+                }
+                return sum;
+            }
+            File[] arr = f.listFiles();
+            if (arr != null) {
+                for (File c : arr) sum += deleteRecursively(c, fileCount);
+            }
+            // 目录本身删不掉无所谓（内容已清空），但先尝试一下
+            try { f.delete(); } catch (Throwable ignored) {}
+            return sum;
+        }
+
+        private Map<String, Object> buildCacheReport(boolean detail) {
+            Map<String, Object> root = new LinkedHashMap<>();
+            Context ctx = context;   // LogServer 持有的应用上下文
+            if (ctx == null) {
+                root.put("error", "no context");
+                return root;
+            }
+            try {
+                File dataDir = new File(ctx.getApplicationInfo().dataDir);
+                File cacheDir = ctx.getCacheDir();
+                File filesDir = ctx.getFilesDir();
+                File codeCache = new File(dataDir, "code_cache");
+                File webview = new File(dataDir, "app_webview");
+                File databases = new File(dataDir, "databases");
+                File sharedPrefs = new File(dataDir, "shared_prefs");
+                File noBackup = new File(dataDir, "no_backup");
+
+                java.util.LinkedHashMap<String, Object> dirs = new java.util.LinkedHashMap<>();
+                long total = 0L;
+                total += addCacheEntry(dirs, "cacheDir", cacheDir);
+                total += addCacheEntry(dirs, "filesDir", filesDir);
+                total += addCacheEntry(dirs, "code_cache", codeCache);
+                total += addCacheEntry(dirs, "app_webview", webview);
+                total += addCacheEntry(dirs, "databases", databases);
+                total += addCacheEntry(dirs, "shared_prefs", sharedPrefs);
+                total += addCacheEntry(dirs, "no_backup", noBackup);
+                try {
+                    total += addCacheEntry(dirs, "extFiles", ctx.getExternalFilesDir(null));
+                    total += addCacheEntry(dirs, "extCache", ctx.getExternalCacheDir());
+                } catch (Throwable ignored) {}
+
+                root.put("totalBytes", total);
+                root.put("totalHuman", humanBytes(total));
+                root.put("dirs", dirs);
+                // 【2026-10-20 新增】可清理项：电脑端据此渲染勾选框，id 直接作为 clean 的 target
+                root.put("clearables", buildClearables(ctx));
+
+                // 【明细模式】?detail=1：把 cacheDir / filesDir 的一级子目录逐个列出，
+                // 用于确认"到底是哪些目录占空间、能不能安全清理"。
+                if (detail) {
+                    Map<String, Object> sub = new LinkedHashMap<>();
+                    sub.put("cacheDir", listSubDirs(cacheDir));
+                    sub.put("filesDir", listSubDirs(filesDir));
+                    root.put("subdirs", sub);
+                }
+            } catch (Throwable t) {
+                root.put("error", String.valueOf(t.getMessage()));
+            }
+            return root;
+        }
+
+        /** 列出某个目录下的一级子目录/文件（含大小），按占用倒序 */
+        private List<Map<String, Object>> listSubDirs(File dir) {
+            List<Map<String, Object>> out = new ArrayList<>();
+            if (dir == null || !dir.isDirectory()) return out;
+            File[] arr = dir.listFiles();
+            if (arr == null) return out;
+            for (File c : arr) {
+                long[] cnt = new long[1];
+                long size;
+                if (c.isFile()) {
+                    cnt[0] = 1;
+                    size = c.length();
+                } else {
+                    size = dirSize(c, cnt);
+                }
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", c.getName());
+                m.put("dir", c.isDirectory());
+                m.put("bytes", size);
+                m.put("human", humanBytes(size));
+                m.put("files", cnt[0]);
+                m.put("modified", c.lastModified());
+                out.add(m);
+            }
+            java.util.Collections.sort(out, new java.util.Comparator<Map<String, Object>>() {
+                @Override public int compare(Map<String, Object> a, Map<String, Object> b) {
+                    return Long.compare((Long) b.get("bytes"), (Long) a.get("bytes"));
+                }
+            });
+            return out;
+        }
+
+        private long addCacheEntry(Map<String, Object> dirs, String name, File dir) {
+            if (dir == null || !dir.exists()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("exists", false);
+                dirs.put(name, m);
+                return 0L;
+            }
+            long[] cnt = new long[1];   // cnt[0] = 文件数
+            long size = dirSize(dir, cnt);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("exists", true);
+            m.put("path", dir.getAbsolutePath());
+            m.put("bytes", size);
+            m.put("human", humanBytes(size));
+            m.put("files", cnt[0]);
+            dirs.put(name, m);
+            return size;
+        }
+
+        private long dirSize(File f, long[] fileCount) {
+            if (f == null || !f.exists()) return 0L;
+            if (f.isFile()) {
+                fileCount[0]++;
+                return f.length();
+            }
+            long sum = 0L;
+            File[] arr = f.listFiles();
+            if (arr != null) {
+                for (File c : arr) sum += dirSize(c, fileCount);
+            }
+            return sum;
+        }
+
+        private String humanBytes(long b) {
+            if (b < 1024) return b + " B";
+            if (b < 1024 * 1024) return String.format("%.2f KB", b / 1024.0);
+            if (b < 1024L * 1024 * 1024) return String.format("%.2f MB", b / (1024.0 * 1024));
+            return String.format("%.2f GB", b / (1024.0 * 1024 * 1024));
+        }
+
         private void handleHttpRequest(java.net.Socket clientSocket, String request, java.io.OutputStream out) throws Exception {
             String path = extractPath(request);
 
@@ -914,6 +1228,19 @@ public final class LogBridge {
                 health.put("connected_clients", webSockets.size());
                 health.put("pending_logs", pendingLogs.size());
                 sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(health));
+            } else if (path != null && path.startsWith("/api/cache/clean")) {
+                // 【2026-10-20 新增】清理缓存：/api/cache/clean?target=channel_logo|tv_cache|webview|code_cache|all
+                // 支持逗号分隔多选，如 target=channel_logo,tv_cache
+                // 【修复】extractPath() 已经把 query 剥掉了，原实现用 path.indexOf('?') 取 target
+                //         永远取不到（qi 恒为 -1），target 会静默退化成 all。改用 extractQueryString(request)。
+                String target = queryParam(request, "target", "all");
+                sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json",
+                        gson.toJson(cleanCache(context, target)));
+            } else if ("/api/cache".equals(path)) {
+                boolean detail = "1".equals(queryParam(request, "detail", "0"))
+                        || (request != null && request.contains("detail=1"));
+                sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json",
+                        gson.toJson(buildCacheReport(detail)));
             } else if ("/api/perf".equals(path)) {
                 // 本进程性能数据：供日志工具在局域网（无 ADB）模式下做性能分析
                 sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(getPerfInfo()));
@@ -1584,6 +1911,23 @@ public final class LogBridge {
                 }
             } catch (Exception ignored) {}
             return null;
+        }
+
+        /** 【2026-10-20 新增】从 query string 里取一个参数值（URL 解码简化版：只处理 %2C/%20 等常见项） */
+        private String queryParam(String request, String key, String def) {
+            try {
+                String q = extractQueryString(request);
+                if (q == null || q.isEmpty()) return def;
+                for (String kv : q.split("&")) {
+                    int eq = kv.indexOf('=');
+                    if (eq <= 0) continue;
+                    if (key.equals(kv.substring(0, eq))) {
+                        String v = kv.substring(eq + 1);
+                        return v == null || v.isEmpty() ? def : v;
+                    }
+                }
+            } catch (Throwable ignored) {}
+            return def;
         }
 
         private String extractHeader(String request, String headerName) {

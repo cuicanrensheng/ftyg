@@ -1,26 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  频道面板背景
-  【作用】整个频道面板的背景
-  【样式】四个角都是 20dp 圆角，半透明深色背景
-  【设计原则】和设置面板 settings_panel_bg.xml 完全一样，保持风格统一
+  频道面板背景（默认样式 0，运行时由 MainActivity.applyPanelBackground → updatePanelBackground 应用到左右面板）
+  【2026-10-20 参考图对齐】原为 #B30A0A1A（70% 半透明深蓝黑），视频透出导致观感发灰、与胶囊不搭；
+  现改为不透明中性近黑 #FF1A1A1A，与参考图一致（胶囊 #212121、选中 #3C3525、焦点金 #FFD166 搭配）。
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-
-    <!-- 半透明深色背景（和设置面板颜色完全一致） -->
-    <solid android:color="#B30A0A1A" />
-    <!--
-      ✅ 和设置面板 settings_panel_bg.xml 颜色完全一样
-      #B30A0A1A = 深蓝黑色，70% 不透明度
-    -->
-
-    <!-- 四个角都是圆角，半径 20dp（和设置面板一样） -->
+    <solid android:color="#FF1A1A1A" />
     <corners android:radius="20dp" />
-    <!--
-      ✅ 四个角都是圆角
-      之前只有右侧两个角圆角，现在改成四个角都有
-      圆角大小 20dp，和设置面板保持一致
-    -->
-
 </shape>

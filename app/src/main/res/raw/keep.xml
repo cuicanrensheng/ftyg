@@ -9,7 +9,9 @@
     <public type="drawable" name="exit_btn_bg" />
     <public type="drawable" name="info_bar_gradient_bg" />
     <public type="drawable" name="item_settings_bg" />
-    <public type="drawable" name="list_item_bg" />
+    <public type="drawable" name="list_item_default" />
+    <public type="drawable" name="list_item_focused" />
+    <public type="drawable" name="ott_tab_focused" />
     <public type="drawable" name="panel_bg" />
     <public type="drawable" name="player_logo_bg" />
     <public type="drawable" name="setting_item_bg" />

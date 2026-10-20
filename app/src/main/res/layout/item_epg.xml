@@ -9,18 +9,23 @@
     android:paddingTop="10dp"
     android:paddingBottom="10dp"
     android:orientation="horizontal">
+    <!-- 【2026-10-20 焦点暗金橄榄】行背景由 EpgAdapter 显式指定：
+         焦点 → 暗金橄榄底 list_item_focused(#3C3525 + 2dp 白描边 + 黄字 #FFD166)，
+         选中但未聚焦 → 默认底 list_item_default(#212121) + 黄字 #FFD166（已去除橄榄底）；
+         其余 → list_item_default(#212121) + 白字。lv_epg 的 listSelector 已置透明。
+         字号对齐 OTT 主文字档 16sp。 -->
     <TextView
         android:id="@+id/tv_dayName"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="16sp"
         android:textColor="#fff"
         android:minWidth="50dp" />
     <TextView
         android:id="@+id/tv_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="16sp"
         android:textColor="#cccccc"
         android:layout_marginStart="8dp" />
     <TextView
@@ -28,7 +33,7 @@
         android:layout_width="0dp"
         android:layout_weight="1"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
+        android:textSize="16sp"
         android:textColor="#fff"
         android:layout_marginStart="8dp" />
     <TextView

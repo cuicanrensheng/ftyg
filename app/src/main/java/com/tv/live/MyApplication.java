@@ -18,7 +18,7 @@ import com.tv.live.util.LogBridge.LogCollector;
 import com.tv.live.util.LogBridge.LogServer;
 import com.tv.live.util.LogBridge.CrashHandler;
 import com.tv.live.util.NetUtil;
-import com.tv.live.util.CacheManager.HuyaCacheGovernor;
+import com.tv.live.util.CacheManager.AppCacheGovernor;
 import com.tv.live.util.HuyaSDKParser;
 import com.tv.live.util.CacheManager.EncryptedStorage;
 import com.tv.live.util.SecurityCertificatePinner;
@@ -611,9 +611,9 @@ public class MyApplication extends Application {
         }
 
         try {
-            HuyaCacheGovernor.startupCleanup(this);
+            AppCacheGovernor.startupCleanup(this);
         } catch (Exception e) {
-            LogBridge.w("MyApplication", "HuyaCacheGovernor failed: " + e.getMessage());
+            LogBridge.w("MyApplication", "AppCacheGovernor failed: " + e.getMessage());
         }
     }
 

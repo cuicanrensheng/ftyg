@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 频道面板透明背景：几乎透明，不遮挡视频画面 -->
+<!--
+  频道面板背景（左右面板共用）
+  【2026-10-20 参考图对齐】参照用户提供的参考图，面板底改为不透明的中性近黑 #1A1A1A
+  （原为 #1A141828 / #B30A0A1A / #FF0A0A1A 的深蓝黑系，现统一为中性灰黑，与 #212121 胶囊、
+  金色焦点搭配更协调）。完全阻断视频透光，胶囊与文字合成色稳定。保留四角 20dp 圆角。
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#1A141828" />
+    <solid android:color="#FF1A1A1A" />
     <corners android:radius="20dp" />
 </shape>

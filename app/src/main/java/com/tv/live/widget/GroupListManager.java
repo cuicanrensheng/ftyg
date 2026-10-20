@@ -2,7 +2,6 @@ package com.tv.live.widget;
 
 import com.tv.live.util.LogBridge;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -13,6 +12,7 @@ import android.widget.ListView;
 import android.widget.TextView;
 
 import com.tv.live.Channel;
+import com.tv.live.R;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,9 +43,17 @@ public class GroupListManager {
     private static final java.util.regex.Pattern HUYA_CLASSIC_MERGE_PATTERN =
             java.util.regex.Pattern.compile("星爷|英叔|喜剧|搞笑|动作|港片|武侠|热血|警匪|悬疑|盗墓");
 
-    private static final int COLOR_BLUE_TEXT = 0xFF40A9FF;
-    private static final int COLOR_BLUE_BG = 0x3340A9FF;
-    private static final int COLOR_WHITE_TEXT = 0xFFFFFFFF;
+    // 【2026-10-20 焦点降亮 / 八次调整】三态：
+    //   焦点（focused）  → 暗金（橄榄）底 #FF3C3525 + 2dp 白描边 + 黄字 #FFFFD166（ott_tab_focused）
+    //   选中但未聚焦     → 默认底 #FF212121 + 黄字 #FFFFD166（"当前分组"，已去除橄榄底）
+    //   其余            → 中性深灰底 #FF212121（list_item_default）+ 白字
+    //   焦点靠橄榄底 + 那圈 2dp 白描边区分（原亮金底 #FFD166 用户反馈太亮）。
+    // 【2026-10-20 面板/胶囊配色对齐参考图】面板底 #1A1A1A、胶囊底 #212121、焦点底 #3C3525，
+    // 全部改为不透明（原 #33FFFFFF / #660E1E3C / 深蓝黑面板均已作废）。
+    // 间距由 lv_group 的 dividerHeight=8dp 提供，频道 / 日期 / 节目单列表同样加了 8dp。
+    private static final int COLOR_TAB_TEXT = 0xFFFFFFFF;    // 默认字色（同 OTT 分组胶囊常白）
+    private static final int COLOR_TAB_CURRENT = 0xFFFFD166; // 当前分组（选中未聚焦）→ 黄字
+    private static final int COLOR_FOCUS = 0xFFFFD166;       // 焦点态黄字（与选中态同色，底为暗金橄榄）
 
     public static String getNormalizedGroup(Channel c) {
         if (c == null) return "未分类";
@@ -88,6 +96,12 @@ public class GroupListManager {
         lvGroup.setFocusable(true);
         lvGroup.setFocusableInTouchMode(true);
         lvGroup.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+
+        // 【2026-10-20 焦点改为金色】焦点态（金底）由适配器按「本列表是否持有焦点」决定，
+        // ListView 自身不会因焦点进出重跑 getView → 手动触发重绘。
+        lvGroup.setOnFocusChangeListener((v, hasFocus) -> {
+            if (adapter != null) adapter.notifyDataSetChanged();
+        });
 
         lvGroup.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -294,15 +308,20 @@ public class GroupListManager {
                 boolean isSelected = (position == selectedPosition);
                 // LogBridge.d("GroupList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
-                if (isSelected) {
-                    tv.setTextColor(COLOR_BLUE_TEXT);
-                    tv.setTypeface(null, Typeface.BOLD);
-                    tv.setBackgroundColor(COLOR_BLUE_BG);
-                } else {
-                    tv.setTextColor(COLOR_WHITE_TEXT);
-                    tv.setTypeface(null, Typeface.NORMAL);
-                    tv.setBackgroundColor(Color.TRANSPARENT);
-                }
+                // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
+                //   focused（本列表有焦点且本项选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
+                //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（当前分组）
+                //   其余                             → 默认底 #212121 + 白字
+                // 默认底与频道行同为 list_item_default(#212121)，分组列与中列颜色一致；
+                // 胶囊间距由 lv_group 的 dividerHeight 提供（activity_main.xml）。
+                boolean focused = lvGroup.hasFocus() && isSelected;
+                tv.setBackgroundResource(focused
+                        ? R.drawable.ott_tab_focused
+                        : R.drawable.list_item_default);
+                tv.setTextColor(focused ? COLOR_FOCUS
+                        : (isSelected ? COLOR_TAB_CURRENT : COLOR_TAB_TEXT));
+                tv.setTypeface(null, (focused || isSelected) ? Typeface.BOLD : Typeface.NORMAL);
+
                 return convertView;
             }
         };

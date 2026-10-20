@@ -70,26 +70,30 @@
             android:paddingTop="20dp"
             android:paddingBottom="20dp">
 
-            <!-- 分组列表 -->
+            <!-- 分组列表：divider 置透明 + 8dp 高度，给相邻分组胶囊之间留出间距（原先各行紧贴） -->
             <ListView
                 android:id="@+id/lv_group"
                 android:layout_width="150dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent"
                 android:listSelector="@android:color/transparent"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="8dp"
                 android:descendantFocusability="blocksDescendants"
                 android:defaultFocusHighlightEnabled="false"
                 android:paddingStart="16dp"
                 android:paddingEnd="8dp"
                 android:nextFocusRight="@id/lv_channel_list" />
 
-            <!-- 频道列表 -->
+            <!-- 频道列表：间距与分组列表一致（transparent divider 8dp） -->
             <ListView
                 android:id="@+id/lv_channel_list"
                 android:layout_width="220dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent"
                 android:listSelector="@android:color/transparent"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="8dp"
                 android:descendantFocusability="blocksDescendants"
                 android:defaultFocusHighlightEnabled="false"
                 android:paddingStart="8dp"
@@ -97,7 +101,7 @@
                 android:nextFocusLeft="@id/lv_group"
                 android:nextFocusRight="@id/btn_show_epg" />
 
-            <!-- 节目单按钮 -->
+            <!-- 节目单按钮：默认底与列表胶囊一致（list_item_default #212121），焦点金色 -->
             <TextView
                 android:id="@+id/btn_show_epg"
                 android:layout_width="50dp"
@@ -105,7 +109,8 @@
                 android:gravity="center"
                 android:text="@string/epg_button"
                 android:textColor="#ffffff"
-                android:textSize="14sp"
+                android:textSize="18sp"
+                android:background="@drawable/list_item_default"
                 android:focusable="true"
                 android:clickable="true"
                 android:defaultFocusHighlightEnabled="false"
@@ -128,7 +133,7 @@
             android:paddingBottom="20dp"
             android:visibility="gone">
 
-            <!-- 返回按钮 -->
+            <!-- 返回按钮：默认底与列表胶囊一致（list_item_default #212121），焦点金色 -->
             <TextView
                 android:id="@+id/btn_back_group"
                 android:layout_width="50dp"
@@ -136,7 +141,8 @@
                 android:gravity="center"
                 android:text="@string/channel_group_button"
                 android:textColor="#ffffff"
-                android:textSize="14sp"
+                android:textSize="18sp"
+                android:background="@drawable/list_item_default"
                 android:focusable="true"
                 android:clickable="true"
                 android:defaultFocusHighlightEnabled="false"
@@ -144,13 +150,15 @@
                 android:paddingEnd="16dp"
                 android:nextFocusRight="@id/lv_channel_list_epg" />
 
-            <!-- 右侧频道列表 -->
+            <!-- 右侧频道列表：间距与分组列表一致（transparent divider 8dp） -->
             <ListView
                 android:id="@+id/lv_channel_list_epg"
                 android:layout_width="220dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent"
                 android:listSelector="@android:color/transparent"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="8dp"
                 android:descendantFocusability="blocksDescendants"
                 android:defaultFocusHighlightEnabled="false"
                 android:paddingStart="8dp"
@@ -158,13 +166,15 @@
                 android:nextFocusLeft="@id/btn_back_group"
                 android:nextFocusRight="@id/lv_date" />
 
-            <!-- 日期列表 -->
+            <!-- 日期列表：间距与分组列表一致（transparent divider 8dp） -->
             <ListView
                 android:id="@+id/lv_date"
                 android:layout_width="60dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent"
                 android:listSelector="@android:color/transparent"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="8dp"
                 android:descendantFocusability="blocksDescendants"
                 android:defaultFocusHighlightEnabled="false"
                 android:paddingStart="8dp"
@@ -172,13 +182,16 @@
                 android:nextFocusLeft="@id/lv_channel_list_epg"
                 android:nextFocusRight="@id/lv_epg" />
 
-            <!-- EPG列表 -->
+            <!-- 节目单列表：间距与分组列表一致（transparent divider 8dp）；
+                 宽度改回 360dp，与原版一致（之前误改为 match_parent 导致右侧面板过宽） -->
             <ListView
                 android:id="@+id/lv_epg"
                 android:layout_width="360dp"
                 android:layout_height="match_parent"
                 android:background="@android:color/transparent"
                 android:listSelector="@android:color/transparent"
+                android:divider="@android:color/transparent"
+                android:dividerHeight="8dp"
                 android:descendantFocusability="blocksDescendants"
                 android:defaultFocusHighlightEnabled="false"
                 android:paddingStart="8dp"

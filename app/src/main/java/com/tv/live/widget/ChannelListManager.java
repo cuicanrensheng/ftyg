@@ -2,7 +2,6 @@ package com.tv.live.widget;
 
 import com.tv.live.util.LogBridge;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -24,10 +23,17 @@ public class ChannelListManager {
     private int focusedPosition = -1;
     private int currentPlayIndex = 0;
 
-    private static final int COLOR_BLUE = 0xFF40A9FF;
-    private static final int COLOR_BG_BLUE = 0x3340A9FF;
-    private static final int COLOR_WHITE = 0xFFFFFFFF;
-    private static final int COLOR_GRAY = 0xFF888888;
+    // 【2026-10-20 焦点降亮 / 八次调整】三态：
+    //   焦点（focused）  → 暗金（橄榄）底 #FF3C3525 + 2dp 白描边 + 黄字 #FFFFD166（list_item_focused）
+    //   选中但未聚焦     → 默认底 #FF212121 + 黄字 #FFFFD166（"当前"通道，已去除橄榄底）
+    //   其余            → 中性深灰底 #FF212121（list_item_default）+ 白字
+    //   焦点靠橄榄底 + 那圈 2dp 白描边区分（原亮金底 #FFD166 用户反馈太亮）。
+    // ListView 中 item 的 state_focused / state_selected 实测均不生效，故按
+    // 「本列表是否持有焦点 && 本行是否被选中」显式指定（见构造函数的焦点监听重绘）。
+    private static final int COLOR_TEXT = 0xFFFFFFFF;       // 主文字（同 OTT 卡片剧名）
+    private static final int COLOR_MUTED = 0x99B9C4D8;      // 次级文字（同 OTT 卡片节目文字）
+    private static final int COLOR_CURRENT = 0xFFFFD166;    // 「当前」黄字（同 OTT 焦点金 #FFD166）
+    private static final int COLOR_FOCUS = 0xFFFFD166;      // 焦点态黄字（与选中态同色，底为暗金橄榄）
 
     public interface OnChannelClickListener {
         void onChannelClick(int position);
@@ -53,6 +59,15 @@ public class ChannelListManager {
         lvChannelList.setItemsCanFocus(true);
         lvChannelList.setFocusable(true);
         lvChannelList.setFocusableInTouchMode(true);
+
+        // 【2026-10-20 焦点改为金色】焦点态（金底）由适配器按「本列表是否持有焦点」决定，
+        // 而 ListView 自身不会因焦点进出重跑 getView → 这里手动触发一次重绘。
+        lvChannelList.setOnFocusChangeListener((v, hasFocus) -> {
+            android.widget.ListAdapter a = lvChannelList.getAdapter();
+            if (a instanceof android.widget.BaseAdapter) {
+                ((android.widget.BaseAdapter) a).notifyDataSetChanged();
+            }
+        });
 
         lvChannelList.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -133,17 +148,24 @@ public class ChannelListManager {
                 boolean isSelected = (position == selectedPosition);
                 // LogBridge.d("ChannelList", "getView pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
-                if (isSelected) {
-                    holder.tvChannel.setTextColor(COLOR_BLUE);
-                    holder.tvChannel.setTypeface(null, Typeface.BOLD);
-                    convertView.setBackgroundColor(COLOR_BG_BLUE);
-                    holder.tvIndex.setTextColor(COLOR_BLUE);
-                } else {
-                    holder.tvChannel.setTextColor(COLOR_WHITE);
-                    holder.tvChannel.setTypeface(null, Typeface.NORMAL);
-                    convertView.setBackgroundColor(Color.TRANSPARENT);
-                    holder.tvIndex.setTextColor(COLOR_GRAY);
-                }
+                // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
+                //   focused（本列表有焦点且本行选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
+                //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（"当前选中"通道）
+                //   正在播放行                        → 默认底 #212121 + ▶ 序号黄字
+                //   其余                             → 默认底 #212121 + 白字
+                boolean focused = lvChannelList.hasFocus() && isSelected;
+                convertView.setBackgroundResource(focused
+                        ? R.drawable.list_item_focused
+                        : R.drawable.list_item_default);
+                holder.tvChannel.setTextColor(focused ? COLOR_FOCUS
+                        : (isSelected ? COLOR_CURRENT : COLOR_TEXT));
+                holder.tvChannel.setTypeface(null, (focused || isSelected)
+                        ? Typeface.BOLD : Typeface.NORMAL);
+                holder.tvIndex.setTextColor(focused ? COLOR_FOCUS
+                        : (position == currentPlayIndex ? COLOR_CURRENT : COLOR_MUTED));
+                // 序号底：layout 里是深灰 #333333 小方块，暗金底上会变成「深字压深底」不可读，
+                // 故焦点行置为透明（黄字数字直接落在暗金底上），其余行保持原小方块。
+                holder.tvIndex.setBackgroundColor(focused ? 0x00000000 : 0xFF333333);
 
                 return convertView;
             }
@@ -203,17 +225,24 @@ public class ChannelListManager {
                 boolean isSelected = (position == selectedPosition);
                 // LogBridge.d("ChannelList", "getView(byGroup) pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
-                if (isSelected) {
-                    holder.tvChannel.setTextColor(COLOR_BLUE);
-                    holder.tvChannel.setTypeface(null, Typeface.BOLD);
-                    convertView.setBackgroundColor(COLOR_BG_BLUE);
-                    holder.tvIndex.setTextColor(COLOR_BLUE);
-                } else {
-                    holder.tvChannel.setTextColor(COLOR_WHITE);
-                    holder.tvChannel.setTypeface(null, Typeface.NORMAL);
-                    convertView.setBackgroundColor(Color.TRANSPARENT);
-                    holder.tvIndex.setTextColor(COLOR_GRAY);
-                }
+                // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
+                //   focused（本列表有焦点且本行选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
+                //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（"当前选中"通道）
+                //   正在播放行                        → 默认底 #212121 + ▶ 序号黄字
+                //   其余                             → 默认底 #212121 + 白字
+                boolean focused = lvChannelList.hasFocus() && isSelected;
+                convertView.setBackgroundResource(focused
+                        ? R.drawable.list_item_focused
+                        : R.drawable.list_item_default);
+                holder.tvChannel.setTextColor(focused ? COLOR_FOCUS
+                        : (isSelected ? COLOR_CURRENT : COLOR_TEXT));
+                holder.tvChannel.setTypeface(null, (focused || isSelected)
+                        ? Typeface.BOLD : Typeface.NORMAL);
+                holder.tvIndex.setTextColor(focused ? COLOR_FOCUS
+                        : (position == currentPlayIndex ? COLOR_CURRENT : COLOR_MUTED));
+                // 序号底：layout 里是深灰 #333333 小方块，暗金底上会变成「深字压深底」不可读，
+                // 故焦点行置为透明（黄字数字直接落在暗金底上），其余行保持原小方块。
+                holder.tvIndex.setBackgroundColor(focused ? 0x00000000 : 0xFF333333);
 
                 return convertView;
             }
@@ -316,17 +345,24 @@ public class ChannelListManager {
                 boolean isSelected = (position == selectedPosition);
                 // LogBridge.d("ChannelList", "getView(byGroup) pos:" + position + ", selectedPos:" + selectedPosition + ", isSelected:" + isSelected);
 
-                if (isSelected) {
-                    holder.tvChannel.setTextColor(COLOR_BLUE);
-                    holder.tvChannel.setTypeface(null, Typeface.BOLD);
-                    convertView.setBackgroundColor(COLOR_BG_BLUE);
-                    holder.tvIndex.setTextColor(COLOR_BLUE);
-                } else {
-                    holder.tvChannel.setTextColor(COLOR_WHITE);
-                    holder.tvChannel.setTypeface(null, Typeface.NORMAL);
-                    convertView.setBackgroundColor(Color.TRANSPARENT);
-                    holder.tvIndex.setTextColor(COLOR_GRAY);
-                }
+                // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
+                //   focused（本列表有焦点且本行选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
+                //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（"当前选中"通道）
+                //   正在播放行                        → 默认底 #212121 + ▶ 序号黄字
+                //   其余                             → 默认底 #212121 + 白字
+                boolean focused = lvChannelList.hasFocus() && isSelected;
+                convertView.setBackgroundResource(focused
+                        ? R.drawable.list_item_focused
+                        : R.drawable.list_item_default);
+                holder.tvChannel.setTextColor(focused ? COLOR_FOCUS
+                        : (isSelected ? COLOR_CURRENT : COLOR_TEXT));
+                holder.tvChannel.setTypeface(null, (focused || isSelected)
+                        ? Typeface.BOLD : Typeface.NORMAL);
+                holder.tvIndex.setTextColor(focused ? COLOR_FOCUS
+                        : (position == currentPlayIndex ? COLOR_CURRENT : COLOR_MUTED));
+                // 序号底：layout 里是深灰 #333333 小方块，暗金底上会变成「深字压深底」不可读，
+                // 故焦点行置为透明（黄字数字直接落在暗金底上），其余行保持原小方块。
+                holder.tvIndex.setBackgroundColor(focused ? 0x00000000 : 0xFF333333);
 
                 return convertView;
             }

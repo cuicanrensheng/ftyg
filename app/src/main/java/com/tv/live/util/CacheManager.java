@@ -309,9 +309,18 @@ public class CacheManager {
         sp.edit().clear().apply();
     }
 
-    public static class HuyaCacheGovernor {
+        /**
+     * 应用缓存治理器。
+     *
+     * <p>【2026-10-20 改名】原名 {@code HuyaCacheGovernor}，是虎牙 SDK 时代的遗留 ——
+     * 当时收集的是虎牙 SDK 的缓存目录。虎牙相关目录收集逻辑早在 2026-10-15 就删除了，
+     * 现在 {@link #collectCandidateDirs} 返回的 8 个目录**全是应用自身的**
+     * （filesDir / cacheDir / databases / shared_prefs / code_cache / no_backup / 外部目录），
+     * 日志里再写「SDK 候选目录」会严重误导排查，故一并改名为 {@code AppCacheGovernor}。
+     */
+    public static class AppCacheGovernor {
 
-    private static final String TAG = "HuyaCacheGov";
+    private static final String TAG = "AppCacheGov";
 
     private static final long MAX_TOTAL_BYTES = 30L * 1024 * 1024;
     private static final long TARGET_TOTAL_BYTES = 15L * 1024 * 1024;
@@ -332,7 +341,7 @@ public class CacheManager {
             } catch (Throwable t) {
                 LogBridge.w(TAG, "startupCleanup failed: " + t.getMessage());
             }
-        }, "HuyaCacheCleanup").start();
+        }, "AppCacheCleanup").start();
     }
 
 
@@ -344,7 +353,7 @@ public class CacheManager {
         List<FileEntry> all = new ArrayList<>();
         for (File root : candidates) beforeBytes += walkAndCollect(root, all, true);
 
-        LogBridge.i(TAG, "扫描到 SDK 候选目录 " + candidates.size() + " 个, 共 " + all.size()
+        LogBridge.i(TAG, "扫描到应用缓存目录 " + candidates.size() + " 个, 共 " + all.size()
                 + " 个文件, 当前占用 = " + human(beforeBytes));
 
         long deletedStep1 = 0L;

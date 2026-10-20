@@ -11,6 +11,7 @@ import android.widget.Toast;
 
 import com.tv.live.Channel;
 import com.tv.live.MainActivity;
+import com.tv.live.R;
 import com.tv.live.util.HuyaSDKParser;
 import com.tv.live.widget.ChannelListManager;
 import com.tv.live.EpgManager.DateListManager;
@@ -160,6 +161,7 @@ public class ChannelPanelController {
         this.dateListManager = dateListManager;
         this.epgManagerWrapper = epgManagerWrapper;
         this.panelManager = panelManager;
+        applyOttFocusStyle();
         initClickListeners();
 
         try {
@@ -219,6 +221,23 @@ public class ChannelPanelController {
         } catch (Exception ignored) {}
     }
 
+    /**
+     * 【2026-10-20 焦点改为金色（对齐 OTT 面板）】
+     * 直播侧五组列表的焦点视觉改由「行背景」承担 —— 与 OTT 面板
+     * （ChannelListPanel.styleRow / CapsuleChoicePanel.styleCapsule / EpisodePanel.styleCell）
+     * 完全一致：焦点 → 金底 #FFD166 + 2dp 白描边 + 深色字 #111111。
+     * 故此处把 listSelector 置为透明，避免原先复用 OTT 频道网格的蓝色焦点环
+     * （ott_channel_focus）与金色行底叠加成两层框。
+     */
+    private void applyOttFocusStyle() {
+        ListView[] lists = {lvGroup, lvChannelList, lvChannelListEpg, lvDate, lvEpg};
+        for (ListView lv : lists) {
+            if (lv == null) continue;
+            lv.setSelector(new android.graphics.drawable.ColorDrawable(0x00000000));
+            lv.setDrawSelectorOnTop(false);
+        }
+    }
+
     public void updatePanelBackground(int resId) {
         if (llLeftPanel != null) llLeftPanel.setBackgroundResource(resId);
         if (llRightPanel != null) llRightPanel.setBackgroundResource(resId);
@@ -235,10 +254,10 @@ public class ChannelPanelController {
         channelListManagerEpg.setOnChannelLongClickListener((channelName, position) -> handleChannelLongClick(channelName, true));
 
         btnShowEpg.setOnClickListener(v -> onEpgButtonClicked());
-        btnShowEpg.setOnFocusChangeListener((v, hasFocus) -> {
-            btnShowEpg.setTextColor(hasFocus ? 0xFF40A9FF : 0xFFFFFFFF);
-            btnShowEpg.setBackgroundColor(hasFocus ? 0x3340A9FF : 0x00000000);
-        });
+        // 【2026-10-20 面板按钮一并金色化 → 焦点降亮】焦点表现与左侧胶囊项统一：
+        // 焦点 → 暗金（橄榄）底 #3C3525 + 2dp 白描边 + 黄字 #FFFFD166（ott_tab_focused），
+        // 默认 → list_item_default #212121 + 白字。
+        applyGoldFocus(btnShowEpg);
         btnShowEpg.setOnKeyListener((v, keyCode, event) -> {
             LogBridge.d("ChannelPanel", "btnShowEpg onKey keyCode:" + keyCode + ", action:" + event.getAction());
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -251,10 +270,8 @@ public class ChannelPanelController {
         });
 
         btnBackGroup.setOnClickListener(v -> onBackGroupClicked());
-        btnBackGroup.setOnFocusChangeListener((v, hasFocus) -> {
-            btnBackGroup.setTextColor(hasFocus ? 0xFF40A9FF : 0xFFFFFFFF);
-            btnBackGroup.setBackgroundColor(hasFocus ? 0x3340A9FF : 0x00000000);
-        });
+        // 【2026-10-20 面板按钮一并金色化】同 btnShowEpg。
+        applyGoldFocus(btnBackGroup);
         btnBackGroup.setOnKeyListener((v, keyCode, event) -> {
             LogBridge.d("ChannelPanel", "btnBackGroup onKey keyCode:" + keyCode + ", action:" + event.getAction());
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -264,6 +281,24 @@ public class ChannelPanelController {
                 }
             }
             return false;
+        });
+    }
+
+    /**
+     * 【2026-10-20 面板按钮一并金色化 → 焦点降亮】面板按钮（节目单 / 返回组）的焦点态
+     * 与左侧胶囊项统一：焦点 → 暗金（橄榄）底 #3C3525 + 2dp 白描边 + 黄字 #FFFFD166；
+     * 默认底为与列表胶囊同色（list_item_default #212121）+ 白字，不再使用 ott_menu_btn_bg；
+     * OTT 顶栏按钮本身仍用 ott_menu_btn_bg，不受此影响。
+     */
+    private void applyGoldFocus(TextView btn) {
+        if (btn == null) return;
+        btn.setBackgroundResource(R.drawable.list_item_default);
+        btn.setTextColor(0xFFFFFFFF);
+        btn.setOnFocusChangeListener((v, hasFocus) -> {
+            btn.setBackgroundResource(hasFocus
+                    ? R.drawable.ott_tab_focused
+                    : R.drawable.list_item_default);
+            btn.setTextColor(hasFocus ? 0xFFFFD166 : 0xFFFFFFFF);
         });
     }
 

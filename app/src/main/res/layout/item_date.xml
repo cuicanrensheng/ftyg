@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 【2026-10-20 焦点暗金橄榄】行背景由 DateListManager 显式指定：
+     焦点 → 暗金橄榄底 list_item_focused(#3C3525 + 2dp 白描边 + 黄字 #FFD166)，
+     选中但未聚焦 → 默认底 list_item_default(#212121) + 黄字 #FFD166（已去除橄榄底）；
+     其余 → list_item_default(#212121) + 白字。lv_date 的 listSelector 已置透明。 -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/tv_date"
     android:layout_width="match_parent"

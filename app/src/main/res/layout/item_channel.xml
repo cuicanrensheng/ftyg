@@ -27,8 +27,11 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:paddingStart="15dp"
-    android:paddingEnd="15dp"
-    android:background="@drawable/list_item_bg">
+    android:paddingEnd="15dp">
+    <!-- 【2026-10-20 焦点暗金橄榄】行背景不在此声明，由 ChannelListManager
+         显式指定：焦点 → 暗金橄榄底 list_item_focused(#3C3525 + 2dp 白描边 + 黄字 #FFD166)，
+         选中但未聚焦 → 默认底 list_item_default(#212121) + 黄字 #FFD166（已去除橄榄底）；
+         其余 → list_item_default(#212121) + 白字。ListView 的 listSelector 已置透明。 -->
     <!--
       ✅ 【修改说明】删掉了这两行：
       android:focusable="true"

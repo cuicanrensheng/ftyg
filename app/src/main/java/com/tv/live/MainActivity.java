@@ -886,6 +886,8 @@ public class MainActivity extends AppCompatActivity {
 
         dateListManager.initDate();
         dateListManager.setOnDateSelectedListener(pos -> channelPanelController.setCurrentDateIndex(pos));
+        // 【2026-10-21】点击「今天」→ EPG 刷新完成后把焦点定位到当前播放节目行
+        dateListManager.setOnDateClickListener(pos -> channelPanelController.onDateClicked(pos));
 
         channelPanelController = new ChannelPanelController(
                 this, panelLayout, ll_left_panel, ll_right_panel, lvGroup, lvChannelList,

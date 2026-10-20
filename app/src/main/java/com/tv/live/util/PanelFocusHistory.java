@@ -137,6 +137,36 @@ public class PanelFocusHistory {
                 || focus(ZONE_LEFT_EPG_BUTTON, -1);
     }
 
+    /**
+     * 【2026-10-21】日期列「今天」分支：直接把焦点定位到指定区域的某个位置。
+     *
+     * <p>点击日期「今天」后，EPG 刷新完成需要把焦点从日期列移到「正在播放」的节目行。
+     * 这里先把目标行写入该区域的历史位置，再走统一的 {@link #focus(int, int)}；
+     * 否则焦点进入该区域的瞬间，{@link #reapply(int)} 会按旧位置纠偏，把焦点行拉回旧位置。
+     *
+     * @param zone     目标区域（此处为 {@link #ZONE_RIGHT_EPG}）
+     * @param position 目标行下标；小于 0 时按原有历史/回落逻辑处理
+     * @return 是否成功拿到焦点
+     */
+    public boolean focusZoneAt(int zone, int position) {
+        if (zone < 0 || zone >= ZONE_COUNT || zoneViews[zone] == null) return false;
+        // 跳转前先记录当前持有焦点的区域（此处即日期列），否则该区域没有历史位置，
+        // 焦点返回时 ListView 会按自己的记忆漂到别的行（实测从 EPG 返回日期列会漂 4 行）。
+        recordCurrentZone();
+        if (position >= 0) {
+            positions[zone] = position;
+            hasPosition[zone] = true;
+        }
+        return focus(zone, position);
+    }
+
+    /** 记录当前实际持有焦点的区域位置（供主动跳转前保存来源区域）。 */
+    private void recordCurrentZone() {
+        if (root == null) return;
+        int zone = zoneOf(root.findFocus());
+        if (zone != ZONE_NONE) record(zone);
+    }
+
     /** 把焦点放回右侧面板最近停留的位置 */
     public boolean focusLastRight() {
         int zone = (lastRightZone == ZONE_NONE) ? ZONE_RIGHT_CHANNEL : lastRightZone;

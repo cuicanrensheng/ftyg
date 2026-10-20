@@ -305,6 +305,22 @@ public class ChannelPanelController {
         focusHistory.bind(PanelFocusHistory.ZONE_RIGHT_DATE, lvDate);
         focusHistory.bind(PanelFocusHistory.ZONE_RIGHT_EPG, lvEpg);
         focusHistory.attach();
+
+        // 【2026-10-21】日期列「今天」分支：EPG 刷新完成后，把焦点从日期列移到
+        // 「当前正在播放」的节目行。通过 focusZoneAt 先同步历史位置，
+        // 避免焦点进入 EPG 时被 reapply() 按旧位置纠偏拉回去。
+        if (epgManagerWrapper != null) {
+            epgManagerWrapper.setOnPlayingProgramFocusListener(position -> {
+                if (focusHistory != null
+                        && focusHistory.focusZoneAt(PanelFocusHistory.ZONE_RIGHT_EPG, position)) {
+                    return;
+                }
+                if (lvEpg != null && position >= 0) {
+                    lvEpg.setSelection(position);
+                    lvEpg.requestFocus();
+                }
+            });
+        }
     }
 
     /** 焦点回到左侧面板：优先回上次离开的区域与位置，无历史时落到正在播放的频道行 */
@@ -1508,6 +1524,22 @@ public class ChannelPanelController {
                 && currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size()) {
             Channel curr = channelSourceList.get(currentPlayIndex);
             epgManagerWrapper.refresh(curr, channelSourceList, currentDateOffset());
+        }
+    }
+
+    /**
+     * 【2026-10-21】日期列点击分支：点击「今天」后，EPG 刷新完成时把焦点自动定位到
+     * 当前正在播放的节目行（由 {@code PanelFocusHistory.focusZoneAt} 接管右侧 EPG 区域）。
+     *
+     * <p>其它日期仍保持原行为：只刷新节目单，不移动焦点。
+     * 这里只处理「点击」而非选中变化 —— 焦点移入日期列时系统也会改变选中项，
+     * 若按选中变化触发会把焦点误抢到 EPG。
+     */
+    public void onDateClicked(int position) {
+        if (dateListManager == null || !dateListManager.isTodayPosition(position)) return;
+        LogBridge.d("ChannelPanel", "日期列点击「今天」→ 请求定位当前播放节目");
+        if (epgManagerWrapper != null) {
+            epgManagerWrapper.requestFocusPlayingProgram();
         }
     }
 

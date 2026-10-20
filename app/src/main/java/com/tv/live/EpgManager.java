@@ -1258,6 +1258,33 @@ public class EpgManager {
 
         private BroadcastReceiver reminderReceiver;
 
+        /** 【2026-10-21】点击日期「今天」后，等待本次 EPG 刷新完成再请求定位当前播放节目 */
+        private boolean pendingFocusPlaying;
+
+        /** 【2026-10-21】EPG 刷新完成、当前播放节目行已就绪的回调（由 ChannelPanelController 接管焦点） */
+        private OnPlayingProgramFocusListener playingFocusListener;
+
+        public interface OnPlayingProgramFocusListener {
+            void onPlayingProgramReady(int position);
+        }
+
+        public void setOnPlayingProgramFocusListener(OnPlayingProgramFocusListener listener) {
+            this.playingFocusListener = listener;
+        }
+
+        /**
+         * 【2026-10-21】日期列「今天」分支：请求把焦点定位到当前正在播放的节目行。
+         *
+         * <p>点击「今天」时 {@code setCurrentDateIndex} 已经发起一次 EPG 刷新，这里只置起
+         * 待办标记，等该次刷新在 UI 线程装载完数据后，再回调
+         * {@link OnPlayingProgramFocusListener}。这样不会用上一次（可能是别的日期）的
+         * 数据提前定位，也不会和刷新线程抢列表。
+         */
+        public void requestFocusPlayingProgram() {
+            pendingFocusPlaying = true;
+            LogBridge.d("EpgManager", "【EPG】收到「今天」定位请求，等待本次刷新完成");
+        }
+
         public EpgManagerWrapper(Context context, ListView lvEpg) {
             this.context = context;
             this.lvEpg = lvEpg;
@@ -1309,6 +1336,10 @@ public class EpgManager {
             if (currentChannel == null) return;
             playingIndex = -1;
             selectDayIndex = dateIndex;
+            // 【2026-10-21】用户已切到非今天日期 → 作废尚未执行的「今天」定位请求
+            if (dateIndex != 0) {
+                pendingFocusPlaying = false;
+            }
             epgEndTimeMap.clear();
             AppExecutors.io(() -> {
                 List<Channel.EpgItem> originEpgList;
@@ -1468,6 +1499,16 @@ public class EpgManager {
                         lvEpg.post(() -> lvEpg.setSelection(selectedPosition));
                     }
                     scrollToCurrentProgram(finalData);
+                    // 【2026-10-21】「今天」定位：数据装载完成后再把焦点移到当前播放节目行
+                    if (pendingFocusPlaying) {
+                        pendingFocusPlaying = false;
+                        if (dateIndex == 0 && playingIndex >= 0 && playingIndex < finalData.size()
+                                && playingFocusListener != null) {
+                            LogBridge.d("EpgManager", "【EPG】今天分支定位当前播放节目 [" + playingIndex + "] "
+                                    + finalData.get(playingIndex).title);
+                            playingFocusListener.onPlayingProgramReady(playingIndex);
+                        }
+                    }
                 });
             });
         }
@@ -1619,6 +1660,9 @@ public class EpgManager {
             }
             bookedSet.clear();
             epgEndTimeMap.clear();
+            // 【2026-10-21】释放「今天」定位回调，避免持有已销毁的面板
+            playingFocusListener = null;
+            pendingFocusPlaying = false;
             if (lvEpg != null) {
                 lvEpg.setAdapter(null);
                 lvEpg.setOnItemSelectedListener(null);
@@ -1862,6 +1906,11 @@ public class EpgManager {
 
                 boolean isSelected = (position == selectedPosition);
 
+                // 【2026-10-21 新增规则】EPG 黄色字体只允许出现在「今天」的节目内容上；
+                // 其它日期（dayIndex != 0）的节目信息一律白字/灰字，即使处于选中或焦点态
+                // 也不使用黄色，避免把非今天的节目误认成「当前播放」。
+                boolean allowYellow = (dayIndex == 0);
+
                 // 【2026-10-20 焦点暗金橄榄 + 选中态去橄榄底】
                 //   focused（本列表有焦点且本行选中）→ 暗金底 #3C3525 + 白描边 + 黄字 #FFD166
                 //   isSelected 但未聚焦              → 默认底 #212121 + 黄字 #FFD166（当前节目）
@@ -1870,10 +1919,11 @@ public class EpgManager {
                 convertView.setBackgroundResource(focused
                         ? R.drawable.list_item_focused
                         : R.drawable.list_item_default);
-                holder.tv_dayName.setTextColor(focused ? COLOR_FOCUS : COLOR_WHITE);
-                holder.tv_time.setTextColor(focused ? COLOR_FOCUS : COLOR_GRAY);
-                holder.tv_title.setTextColor(focused ? COLOR_FOCUS
-                        : (isSelected ? COLOR_CURRENT : COLOR_WHITE));
+                int focusTextColor = allowYellow ? COLOR_FOCUS : COLOR_WHITE;
+                holder.tv_dayName.setTextColor(focused ? focusTextColor : COLOR_WHITE);
+                holder.tv_time.setTextColor(focused ? focusTextColor : COLOR_GRAY);
+                holder.tv_title.setTextColor(focused ? focusTextColor
+                        : ((isSelected && allowYellow) ? COLOR_CURRENT : COLOR_WHITE));
                 holder.tv_dayName.setTypeface(null, (focused || isSelected)
                         ? Typeface.BOLD : Typeface.NORMAL);
                 holder.tv_time.setTypeface(null, focused ? Typeface.BOLD : Typeface.NORMAL);
@@ -1932,7 +1982,8 @@ public class EpgManager {
 
                 // 【2026-10-20 焦点改为金色】金底上的功能标签（播放中/回看/预约）文字翻深色，
                 // 否则白字压在金底上不可读；标签底色保留其功能语义色不变。
-                holder.tv_action.setTextColor(focused ? COLOR_FOCUS : COLOR_WHITE);
+                // 【2026-10-21】非今天日期不使用黄色文字，保持白字。
+                holder.tv_action.setTextColor((focused && allowYellow) ? COLOR_FOCUS : COLOR_WHITE);
 
                 return convertView;
             }
@@ -1992,8 +2043,28 @@ public class EpgManager {
             void onDateSelected(int position);
         }
 
+        /**
+         * 【2026-10-21】日期项「点击」（DPAD 确认）回调。
+         * 与 {@link OnDateSelectedListener} 区分：后者在焦点移动导致选中变化时也会触发，
+         * 不能作为「用户主动点今天」的依据。
+         */
+        public interface OnDateClickListener {
+            void onDateClicked(int position);
+        }
+
+        private OnDateClickListener clickListener;
+
+        public void setOnDateClickListener(OnDateClickListener listener) {
+            this.clickListener = listener;
+        }
+
         public void setOnDateSelectedListener(OnDateSelectedListener listener) {
             this.listener = listener;
+        }
+
+        /** 该位置是否为日期列表中的「今天」。 */
+        public boolean isTodayPosition(int position) {
+            return position == todayPosition;
         }
 
         public DateListManager(Context context, ListView lvDate) {
@@ -2182,6 +2253,10 @@ public class EpgManager {
                 if (listener != null) {
                     listener.onDateSelected(position);
                 }
+                // 【2026-10-21】只有「用户点击」才通知点击回调；焦点移动不触发，避免误把焦点抢到 EPG
+                if (clickListener != null) {
+                    clickListener.onDateClicked(position);
+                }
             });
         }
 
@@ -2211,6 +2286,7 @@ public class EpgManager {
                 dateDisplayList = null;
             }
             listener = null;
+            clickListener = null;
             context = null;
         }
     }

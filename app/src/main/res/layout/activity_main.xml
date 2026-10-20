@@ -101,11 +101,13 @@
                 android:nextFocusLeft="@id/lv_group"
                 android:nextFocusRight="@id/btn_show_epg" />
 
-            <!-- 节目单按钮：默认底与列表胶囊一致（list_item_default #212121），焦点金色 -->
+            <!-- 节目单按钮：默认底与列表胶囊一致（list_item_default #212121），焦点金色；
+                 外边缘留 16dp 间距，避免胶囊贴住面板边缘 -->
             <TextView
                 android:id="@+id/btn_show_epg"
                 android:layout_width="50dp"
                 android:layout_height="match_parent"
+                android:layout_marginEnd="16dp"
                 android:gravity="center"
                 android:text="@string/epg_button"
                 android:textColor="#ffffff"
@@ -133,11 +135,13 @@
             android:paddingBottom="20dp"
             android:visibility="gone">
 
-            <!-- 返回按钮：默认底与列表胶囊一致（list_item_default #212121），焦点金色 -->
+            <!-- 返回按钮：默认底与列表胶囊一致（list_item_default #212121），焦点金色；
+                 外边缘留 16dp 间距，避免胶囊贴住面板边缘 -->
             <TextView
                 android:id="@+id/btn_back_group"
                 android:layout_width="50dp"
                 android:layout_height="match_parent"
+                android:layout_marginStart="16dp"
                 android:gravity="center"
                 android:text="@string/channel_group_button"
                 android:textColor="#ffffff"

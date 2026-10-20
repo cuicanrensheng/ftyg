@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
 设置页面布局（右侧滑出式菜单风格）
 -->
@@ -43,57 +43,45 @@
             <LinearLayout
                 android:id="@+id/item_boot"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:layout_height="44dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_boot"
-                android:nextFocusDown="@+id/item_reverse"
-                android:clickable="true">
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:layout_height="wrap_content"
-                        android:text="@string/boot_autostart"
-                        android:textColor="@color/setting_item_text_color"
-                        android:textSize="16sp" />
-                    <androidx.appcompat.widget.SwitchCompat
-                        android:id="@+id/sw_boot"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:focusable="false"
-                        android:clickable="false" />
-                </LinearLayout>
+                android:nextFocusDown="@+id/item_pip"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
-                    android:id="@+id/tv_boot_status"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/not_enabled"
+                    android:text="@string/boot_autostart"
                     android:textColor="@color/setting_item_text_color"
-                    android:textSize="12sp" />
+                    android:textSize="16sp" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/sw_boot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:focusable="false"
+                    android:clickable="false" />
             </LinearLayout>
 
-            <!-- 换台反转 -->
+            <!-- 换台反转（一级折叠 → 「其他设置」胶囊；视图保留防逻辑 NPE） -->
             <LinearLayout
                 android:id="@+id/item_reverse"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_boot"
                 android:nextFocusDown="@+id/item_pip"
-                android:clickable="true">
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -113,14 +101,15 @@
             <LinearLayout
                 android:id="@+id/item_pip"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
-                android:nextFocusUp="@+id/item_reverse"
-                android:nextFocusDown="@+id/item_channel_line"
-                android:clickable="true">
+                android:nextFocusUp="@+id/item_boot"
+                android:nextFocusDown="@+id/item_source_mode"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -136,18 +125,84 @@
                     android:clickable="false" />
             </LinearLayout>
 
-            <!-- 频道线路选择 【2026-10-18 去重】控制栏已有「线路」按钮 → 本行隐藏（视图保留防逻辑 NPE） -->
+            <!-- 源模式 -->
             <LinearLayout
-                android:id="@+id/item_channel_line"
+                android:id="@+id/item_source_mode"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_pip"
+                android:nextFocusDown="@+id/item_play_group"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/source_mode"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="16sp" />
+                <TextView
+                    android:id="@+id/tv_source_mode_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/source_mode_live"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- 播放设置（分组入口 → 二级胶囊：解码器选择 / 渲染方式 / 屏幕比例） -->
+            <LinearLayout
+                android:id="@+id/item_play_group"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:focusable="true"
+                android:nextFocusUp="@+id/item_source_mode"
+                android:nextFocusDown="@+id/item_channel_line"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_play_group"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_group_count"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="14sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="6dp"
+                    android:text="@string/settings_group_arrow"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <!-- 频道线路选择 【2026-10-18 去重】控制栏已有「线路」按钮 → 本行隐藏（视图保留防逻辑 NPE） -->
+            <LinearLayout
+                android:id="@+id/item_channel_line"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:gravity="center_vertical"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:focusable="true"
+                android:nextFocusUp="@+id/item_play_group"
                 android:nextFocusDown="@+id/item_resolution"
-                android:clickable="true">
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -168,14 +223,15 @@
             <LinearLayout
                 android:id="@+id/item_resolution"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_channel_line"
-                android:nextFocusDown="@+id/item_decoder"
-                android:clickable="true">
+                android:nextFocusDown="@+id/item_live_subscribe"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -192,18 +248,20 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- 解码器选择 -->
+            <!-- 解码器选择（一级折叠 → 「播放设置」胶囊） -->
             <LinearLayout
                 android:id="@+id/item_decoder"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_resolution"
                 android:nextFocusDown="@+id/item_renderer"
-                android:clickable="true">
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -220,18 +278,20 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- 渲染方式 -->
+            <!-- 渲染方式（一级折叠 → 「播放设置」胶囊） -->
             <LinearLayout
                 android:id="@+id/item_renderer"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_decoder"
                 android:nextFocusDown="@+id/tv_screen_ratio"
-                android:clickable="true">
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -248,11 +308,12 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- 屏幕比例 -->
+            <!-- 屏幕比例（一级折叠 → 「播放设置」胶囊） -->
             <TextView
                 android:id="@+id/tv_screen_ratio"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
@@ -263,15 +324,16 @@
                 android:background="@drawable/item_settings_bg"
                 android:nextFocusUp="@+id/item_renderer"
                 android:nextFocusDown="@+id/item_redirect"
-                android:clickable="true"/>
+                android:clickable="true"
+                android:layout_marginBottom="8dp"/>
 
 
-            <!-- HTTP重定向网络配置 -->
+            <!-- HTTP重定向网络配置（一级折叠 → 「其他设置」胶囊） -->
             <LinearLayout
                 android:id="@+id/item_redirect"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="55dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
@@ -279,7 +341,8 @@
                 android:focusable="true"
                 android:nextFocusUp="@+id/tv_screen_ratio"
                 android:nextFocusDown="@+id/item_live_subscribe"
-                android:clickable="true">
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -298,14 +361,15 @@
             <LinearLayout
                 android:id="@+id/item_live_subscribe"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
-                android:nextFocusUp="@+id/item_redirect"
+                android:nextFocusUp="@+id/item_resolution"
                 android:nextFocusDown="@+id/item_epg_subscribe"
-                android:clickable="true">
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -318,14 +382,15 @@
             <LinearLayout
                 android:id="@+id/item_epg_subscribe"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_live_subscribe"
-                android:nextFocusDown="@+id/item_background_switch"
-                android:clickable="true">
+                android:nextFocusDown="@+id/item_exit_dialog"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -334,79 +399,19 @@
                     android:textSize="16sp" />
             </LinearLayout>
 
-
-
-
-
-            <!-- 源模式 -->
+            <!-- 退出弹窗 -->
             <LinearLayout
-                android:id="@+id/item_source_mode"
+                android:id="@+id/item_exit_dialog"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_epg_subscribe"
-                android:nextFocusDown="@+id/item_background_switch"
-                android:clickable="true">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="wrap_content"
-                    android:text="@string/source_mode"
-                    android:textColor="@color/setting_item_text_color"
-                    android:textSize="16sp" />
-                <TextView
-                    android:id="@+id/tv_source_mode_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/source_mode_live"
-                    android:textColor="@color/setting_item_text_color"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-            <!-- 背景切换 -->
-            <LinearLayout
-                android:id="@+id/item_background_switch"
-                android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:gravity="center_vertical"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:focusable="true"
-                android:nextFocusUp="@+id/item_source_mode"
-                android:nextFocusDown="@+id/item_exit_dialog"
-                android:clickable="true">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="wrap_content"
-                    android:text="@string/background_switch"
-                    android:textColor="@color/setting_item_text_color"
-                    android:textSize="16sp" />
-                <TextView
-                    android:id="@+id/tv_background_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/background_default"
-                    android:textColor="@color/setting_item_text_color"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
-
-            <!-- 退出弹窗 -->
-            <LinearLayout
-                android:id="@+id/item_exit_dialog"
-                android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:gravity="center_vertical"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:focusable="true"
-                android:nextFocusUp="@+id/item_background_switch"
-                android:nextFocusDown="@+id/item_exit_dialog"
-                android:clickable="true">
+                android:nextFocusDown="@+id/item_extra_group"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -424,18 +429,56 @@
             </LinearLayout>
 
 
-            <!-- 版本信息 -->
+            <!-- 其他设置（分组入口 → 二级胶囊：换台反转 / HTTP重定向 / 版本信息） -->
+            <LinearLayout
+                android:id="@+id/item_extra_group"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:focusable="true"
+                android:nextFocusUp="@+id/item_exit_dialog"
+                android:nextFocusDown="@+id/item_extra_group"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_extra_group"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="16sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_group_count"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="14sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="6dp"
+                    android:text="@string/settings_group_arrow"
+                    android:textColor="@color/setting_item_text_color"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <!-- 版本信息（一级折叠 → 「其他设置」胶囊；视图保留防逻辑 NPE） -->
             <LinearLayout
                 android:id="@+id/item_version_info"
                 android:layout_width="match_parent"
-                android:layout_height="55dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
                 android:gravity="center_vertical"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:focusable="true"
                 android:nextFocusUp="@+id/item_exit_dialog"
-                android:nextFocusDown="@+id/item_js_update"
-                android:clickable="true">
+                android:nextFocusDown="@+id/item_version_info"
+                android:clickable="true"
+                android:layout_marginBottom="8dp">
                 <TextView
                     android:layout_width="0dp"
                     android:layout_weight="1"
@@ -450,33 +493,6 @@
                     android:text="@string/version_2_0"
                     android:textColor="@color/setting_item_text_color"
                     android:textSize="14sp" />
-            </LinearLayout>
-
-            <!-- 插件热更（默认关；开启后按 md5 增量对齐 JS 解析插件） -->
-            <LinearLayout
-                android:id="@+id/item_js_update"
-                android:layout_width="match_parent"
-                android:layout_height="55dp"
-                android:gravity="center_vertical"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:focusable="true"
-                android:nextFocusUp="@+id/item_version_info"
-                android:nextFocusDown="@+id/item_js_update"
-                android:clickable="true">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
-                    android:layout_height="wrap_content"
-                    android:text="@string/js_plugin_update"
-                    android:textColor="@color/setting_item_text_color"
-                    android:textSize="16sp" />
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/sw_js_update"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:focusable="false"
-                    android:clickable="false" />
             </LinearLayout>
 
             <!-- 网页设置提示 -->

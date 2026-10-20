@@ -13,6 +13,7 @@ import com.tv.live.Channel;
 import com.tv.live.MainActivity;
 import com.tv.live.R;
 import com.tv.live.util.HuyaSDKParser;
+import com.tv.live.util.PanelFocusHistory;
 import com.tv.live.widget.ChannelListManager;
 import com.tv.live.EpgManager.DateListManager;
 import com.tv.live.EpgManager.EpgManagerWrapper;
@@ -51,6 +52,9 @@ public class ChannelPanelController {
     private DateListManager dateListManager;
     private EpgManagerWrapper epgManagerWrapper;
     private PanelManager panelManager;
+
+    /** 【2026-10-21】直播模式频道面板焦点历史：记录左/右面板 7 个区域的停留位置 */
+    private PanelFocusHistory focusHistory;
 
     private List<Channel> channelSourceList = new ArrayList<>();
     private List<Channel> currentGroupChannelList = new ArrayList<>();
@@ -163,6 +167,7 @@ public class ChannelPanelController {
         this.panelManager = panelManager;
         applyOttFocusStyle();
         initClickListeners();
+        initFocusHistory();
 
         try {
             com.tv.live.EpgManager.getInstance().registerHuyaEpgReadyListener(
@@ -282,6 +287,45 @@ public class ChannelPanelController {
             }
             return false;
         });
+    }
+
+    /**
+     * 【2026-10-21】频道面板焦点历史：绑定左/右面板 7 个焦点区域并开始监听。
+     * 左：分组列表 / 频道列表 / 节目单按钮；右：频道组按钮 / 频道列表 / 日期 / 节目单。
+     * 焦点离开某区域时记录其位置，焦点返回时（含左右面板互切、面板关闭再打开）复原。
+     */
+    private void initFocusHistory() {
+        if (panelLayout == null) return;
+        focusHistory = new PanelFocusHistory(panelLayout);
+        focusHistory.bind(PanelFocusHistory.ZONE_LEFT_GROUP, lvGroup);
+        focusHistory.bind(PanelFocusHistory.ZONE_LEFT_CHANNEL, lvChannelList);
+        focusHistory.bind(PanelFocusHistory.ZONE_LEFT_EPG_BUTTON, btnShowEpg);
+        focusHistory.bind(PanelFocusHistory.ZONE_RIGHT_BACK_BUTTON, btnBackGroup);
+        focusHistory.bind(PanelFocusHistory.ZONE_RIGHT_CHANNEL, lvChannelListEpg);
+        focusHistory.bind(PanelFocusHistory.ZONE_RIGHT_DATE, lvDate);
+        focusHistory.bind(PanelFocusHistory.ZONE_RIGHT_EPG, lvEpg);
+        focusHistory.attach();
+    }
+
+    /** 焦点回到左侧面板：优先回上次离开的区域与位置，无历史时落到正在播放的频道行 */
+    private void restoreLeftFocus() {
+        if (lvChannelList == null) return;
+        int fallback = getChannelListSelection();
+        if (focusHistory != null && focusHistory.focusLastLeft(fallback)) {
+            return;
+        }
+        lvChannelList.requestFocus();
+        lvChannelList.setSelection(fallback);
+    }
+
+    /** 焦点回到右侧面板：优先回上次离开的区域与位置，无历史时落到右侧频道列表 */
+    private void restoreRightFocus() {
+        if (focusHistory != null && focusHistory.focusLastRight()) {
+            return;
+        }
+        if (lvChannelListEpg != null) {
+            lvChannelListEpg.requestFocus();
+        }
     }
 
     /**
@@ -877,6 +921,13 @@ public class ChannelPanelController {
         currentGroupName = groupName;
         LogBridge.d("ChannelPanel", "切换分组: " + prevGroupName + " -> " + groupName);
 
+        // 【2026-10-21】分组变了，频道列表内容整体替换，旧的行号已失去意义，
+        // 清掉频道列表的焦点历史，返回右侧时落到正在播放的频道行。
+        if (focusHistory != null) {
+            focusHistory.resetPosition(PanelFocusHistory.ZONE_LEFT_CHANNEL);
+            focusHistory.resetPosition(PanelFocusHistory.ZONE_RIGHT_CHANNEL);
+        }
+
         if (groupListManager.isFixedGroup(position)) {
             loadFixedGroupChannels(groupName);
             LogBridge.d("ChannelPanel", "切换分组[" + groupName + "]（固定组）耗时 "
@@ -1293,6 +1344,12 @@ public class ChannelPanelController {
         if (index >= 0 && channelSourceList != null && index < channelSourceList.size()) {
             currentPlayingChannel = channelSourceList.get(index);
         }
+        // 【2026-10-21】面板关闭状态下换台（遥控器上下键）：旧的行号已指向别的频道，
+        // 清掉频道列表的焦点历史，下次打开面板重新定位到正在播放的频道。
+        if (focusHistory != null && !isPanelOpen()) {
+            focusHistory.resetPosition(PanelFocusHistory.ZONE_LEFT_CHANNEL);
+            focusHistory.resetPosition(PanelFocusHistory.ZONE_RIGHT_CHANNEL);
+        }
     }
 
     public void togglePanel() {
@@ -1340,12 +1397,9 @@ public class ChannelPanelController {
             }
 
             if (isPanelOpen()) {
-
-                lvChannelList.requestFocus();
-
-                lvChannelList.setSelection(getChannelListSelection());
-            } else {
-
+                // 【2026-10-21】优先回到上次离开时停留的左侧区域与位置；
+                // 无历史（首次打开）时才落到正在播放的频道行。
+                restoreLeftFocus();
             }
         }, 100);
 
@@ -1402,8 +1456,9 @@ public class ChannelPanelController {
                 epgManagerWrapper.refresh(curr, channelSourceList, currentDateOffset());
             }
             panelLayout.post(() -> {
-                lvChannelListEpg.requestFocus();
-                LogBridge.d("ChannelPanel", "Right panel opened, focus on channel list");
+                // 【2026-10-21】回到右侧面板上次停留的区域与位置（无历史时落到右侧频道列表）
+                restoreRightFocus();
+                LogBridge.d("ChannelPanel", "Right panel opened, restore last right focus");
             });
         } else {
             if (llRightPanel != null) {
@@ -1415,7 +1470,7 @@ public class ChannelPanelController {
             rightPanelOpen = false;
             epgPanelOpen = false;
 
-            panelLayout.post(() -> lvChannelList.requestFocus());
+            panelLayout.post(this::restoreLeftFocus);
         }
     }
 
@@ -1425,9 +1480,7 @@ public class ChannelPanelController {
             if (llLeftPanel != null) llLeftPanel.setVisibility(View.VISIBLE);
             rightPanelOpen = false;
             epgPanelOpen = false;
-            panelLayout.post(() -> {
-                if (lvChannelList != null) lvChannelList.requestFocus();
-            });
+            panelLayout.post(this::restoreLeftFocus);
             return true;
         }
         return false;
@@ -1440,7 +1493,7 @@ public class ChannelPanelController {
             rightPanelOpen = false;
             epgPanelOpen = false;
 
-            panelLayout.post(() -> lvChannelList.requestFocus());
+            panelLayout.post(this::restoreLeftFocus);
         }
     }
 
@@ -1664,6 +1717,12 @@ public class ChannelPanelController {
 
     public void release() {
         LogBridge.d("ChannelPanelController", "release: 级联清理所有组件引用");
+
+        // 【2026-10-21】先摘掉面板焦点监听，避免销毁后仍持有已回收的视图
+        if (focusHistory != null) {
+            focusHistory.detach();
+            focusHistory = null;
+        }
 
         // 取消尚未执行的增量刷新，避免 Activity 销毁后回调仍持有引用
         if (pendingMergeRefresh != null) {

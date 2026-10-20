@@ -30,6 +30,7 @@ import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.AdapterView;
@@ -50,8 +51,8 @@ import com.tv.live.util.HuyaStreamPlayer.IntCallback;
 import com.tv.live.widget.SettingsDialogHelper;
 
 public class SettingsDialog extends android.app.Dialog {
-    private SwitchCompat sw_boot, sw_reverse, sw_pip, sw_js_update;
-    private TextView tv_screen_ratio, tv_decoder_mode, tv_renderer_type, tv_redirect_setting, tv_boot_status;
+    private SwitchCompat sw_boot, sw_reverse, sw_pip;
+    private TextView tv_screen_ratio, tv_decoder_mode, tv_renderer_type, tv_redirect_setting;
     private TextView tv_channel_line;
     private TextView tv_resolution_status;
     private View itemResolution;
@@ -64,7 +65,6 @@ public class SettingsDialog extends android.app.Dialog {
 
     private LinearLayout itemLiveSubscribe, itemEpgSubscribe;
 
-    private TextView tv_background_status;
     private TextView tv_source_mode_status;
 
     private SharedPreferences sp;
@@ -93,6 +93,10 @@ public class SettingsDialog extends android.app.Dialog {
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private int selectedItemPosition = 0;
+
+    /** 二级 / 三级胶囊面板返回栈（栈顶 = 当前显示的那一层） */
+    private final java.util.ArrayDeque<SettingsCapsulePanel> capsuleStack = new java.util.ArrayDeque<>();
+    private static final int CAPSULE_MAX_DEPTH = 4;
 
     private long mShowTime = 0;
     private static final long IGNORE_KEY_DELAY_MS = 500;
@@ -139,12 +143,10 @@ public class SettingsDialog extends android.app.Dialog {
         sw_boot = findViewById(R.id.sw_boot);
         sw_reverse = findViewById(R.id.sw_reverse);
         sw_pip = findViewById(R.id.sw_pip);
-        sw_js_update = findViewById(R.id.sw_js_update);
         tv_decoder_mode = findViewById(R.id.tv_decoder_mode);
         tv_renderer_type = findViewById(R.id.tv_renderer_type);
         tv_redirect_setting = findViewById(R.id.tv_redirect_setting);
         tv_screen_ratio = findViewById(R.id.tv_screen_ratio);
-        tv_boot_status = findViewById(R.id.tv_boot_status);
         scrollView = findViewById(R.id.settings_content);
 
         itemResolution = findViewById(R.id.item_resolution);
@@ -156,7 +158,6 @@ public class SettingsDialog extends android.app.Dialog {
         itemVersionInfo = findViewById(R.id.item_version_info);
         tv_version_short = findViewById(R.id.tv_version_short);
 
-        tv_background_status = findViewById(R.id.tv_background_status);
         applyPanelBackgroundForSettings();
         tv_source_mode_status = findViewById(R.id.tv_source_mode_status);
         applySourceModeForSettings();
@@ -170,12 +171,8 @@ public class SettingsDialog extends android.app.Dialog {
         itemEpgSubscribe = findViewById(R.id.item_epg_subscribe);
 
         sw_boot.setChecked(sp.getBoolean("boot_auto_start", false));
-        bootStartManager.updateBootStatusText(tv_boot_status);
-
-        tv_boot_status.setOnClickListener(v -> bootStartManager.showBootStatusDialog());
         sw_reverse.setChecked(sp.getBoolean("channel_reverse", false));
         sw_pip.setChecked(sp.getBoolean("pip_enable", false));
-        sw_js_update.setChecked(sp.getBoolean("js_plugin_hot_update", false));
 
         String decoderMode = sp.getString("decoder_mode", "auto");
         updateDecoderModeText(decoderMode);
@@ -205,23 +202,21 @@ public class SettingsDialog extends android.app.Dialog {
     }
 
     private void initSettingsItemList() {
+        // 【2026-10-20 三级菜单方案】一级只保留 10 行可见项：开关(开机自启/画中画/退出弹窗) +
+        //   值项(源模式/频道线路/清晰度) + 订阅入口 + 两个分组入口(▦ 播放设置 / ▦ 其他设置)。
+        //   被折叠的子项(item_reverse/item_decoder/item_renderer/tv_screen_ratio/item_redirect/
+        //   item_version_info)在布局中保持 visibility=gone 且不进入本数组，其动作改由二级胶囊触发。
         View[] items = {
             findViewById(R.id.item_boot),
-            findViewById(R.id.item_reverse),
             findViewById(R.id.item_pip),
+            findViewById(R.id.item_source_mode),
+            findViewById(R.id.item_play_group),
             findViewById(R.id.item_channel_line),
             findViewById(R.id.item_resolution),
-            findViewById(R.id.item_decoder),
-            findViewById(R.id.item_renderer),
-            findViewById(R.id.tv_screen_ratio),
-            findViewById(R.id.item_redirect),
             findViewById(R.id.item_live_subscribe),
             findViewById(R.id.item_epg_subscribe),
-            findViewById(R.id.item_source_mode),
-            findViewById(R.id.item_background_switch),
             findViewById(R.id.item_exit_dialog),
-            findViewById(R.id.item_version_info),
-            findViewById(R.id.item_js_update)
+            findViewById(R.id.item_extra_group)
         };
 
         for (View item : items) {
@@ -243,7 +238,10 @@ public class SettingsDialog extends android.app.Dialog {
                         selectedItemPosition = finalI;
                     }
                 }
-                v.setBackgroundResource(R.drawable.item_settings_bg);
+                // 【2026-10-20 橄榄底 + 黄字方案】实测 state_focused 选择器在该行不生效
+                // （焦点已落在行上仍画默认底），故与频道面板一致：由代码按 hasFocus 显式指定背景资源。
+                v.setBackgroundResource(hasFocus
+                        ? R.drawable.list_item_focused : R.drawable.list_item_default);
             });
         }
 
@@ -298,21 +296,15 @@ public class SettingsDialog extends android.app.Dialog {
         mainHandler.postDelayed(() -> {
             View[] items = {
                 findViewById(R.id.item_boot),
-                findViewById(R.id.item_reverse),
                 findViewById(R.id.item_pip),
+                findViewById(R.id.item_source_mode),
+                findViewById(R.id.item_play_group),
                 findViewById(R.id.item_channel_line),
                 findViewById(R.id.item_resolution),
-                findViewById(R.id.item_decoder),
-                findViewById(R.id.item_renderer),
-                findViewById(R.id.tv_screen_ratio),
-                findViewById(R.id.item_redirect),
                 findViewById(R.id.item_live_subscribe),
                 findViewById(R.id.item_epg_subscribe),
-                findViewById(R.id.item_source_mode),
-                findViewById(R.id.item_background_switch),
                 findViewById(R.id.item_exit_dialog),
-                findViewById(R.id.item_version_info),
-                findViewById(R.id.item_js_update)
+                findViewById(R.id.item_extra_group)
             };
             if (items.length > 0 && items[0] != null) {
                 items[0].requestFocus();
@@ -326,15 +318,9 @@ public class SettingsDialog extends android.app.Dialog {
             case 0:
                 boolean bootChecked = !sw_boot.isChecked();
                 sw_boot.setChecked(bootChecked);
-                bootStartManager.toggleBoot(bootChecked, tv_boot_status);
+                bootStartManager.toggleBoot(bootChecked, null);
                 break;
             case 1:
-                boolean reverseChecked = !sw_reverse.isChecked();
-                sw_reverse.setChecked(reverseChecked);
-                sp.edit().putBoolean("channel_reverse", reverseChecked).apply();
-                Toast.makeText(getContext(), "换台反转" + (reverseChecked ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
-                break;
-            case 2:
                 boolean pipChecked = !sw_pip.isChecked();
                 sw_pip.setChecked(pipChecked);
                 sp.edit().putBoolean("pip_enable", pipChecked).apply();
@@ -344,57 +330,273 @@ public class SettingsDialog extends android.app.Dialog {
                     Toast.makeText(getContext(), "画中画已关闭", Toast.LENGTH_SHORT).show();
                 }
                 break;
-            case 3:
-                showChannelLineDialog();
-                break;
-            case 4:
-                showResolutionDialog();
-                break;
-            case 5:
-                showDecoderModeDialog();
-                break;
-            case 6:
-                showRendererModeDialog();
-                break;
-            case 7:
-                showRatioDialog();
-                break;
-            case 8:
-                showRedirectConfigDialog();
-                break;
-            case 9:
-                showSubscriptionDialog("live_history", "直播源订阅");
-                break;
-            case 10:
-                showSubscriptionDialog("epg_history", "节目单订阅");
-                break;
-            case 11:
+            case 2:
                 showSourceModeDialog();
                 break;
-            case 12:
-                showBackgroundSwitchDialog();
+            case 3:
+                showPlayGroupCapsule();
                 break;
-            case 13:
+            case 4:
+                showChannelLineDialog();
+                break;
+            case 5:
+                showResolutionDialog();
+                break;
+            case 6:
+                showSubscriptionPanel("live_history", "直播源订阅");
+                break;
+            case 7:
+                showSubscriptionPanel("epg_history", "节目单订阅");
+                break;
+            case 8:
                 boolean exitDialogEnabled = sp.getBoolean("exit_dialog_enable", false);
                 boolean newState = !exitDialogEnabled;
                 sp.edit().putBoolean("exit_dialog_enable", newState).apply();
                 tv_exit_dialog_status.setText(newState ? "开启" : "关闭");
                 Toast.makeText(getContext(), "退出弹窗已" + (newState ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
                 break;
-            case 14:
-                showVersionInfoDialog();
-                break;
-            case 15:
-                // 【2026-10-07】插件热更开关：默认关；开启后按 md5 增量对齐 JS 解析插件
-                boolean jsUpdateChecked = !sw_js_update.isChecked();
-                sw_js_update.setChecked(jsUpdateChecked);
-                com.tv.live.migu.js.JsPluginStore.setUpdateEnabled(getContext(), jsUpdateChecked);
-                Toast.makeText(getContext(), jsUpdateChecked
-                                ? "插件热更已开启（24 小时内最多检查一次）"
-                                : "插件热更已关闭",
-                        Toast.LENGTH_SHORT).show();
+            case 9:
+                showExtraGroupCapsule();
                 break;
         }
+    }
+
+    // ==================== 二级胶囊分页（播放设置 / 其他设置） ====================
+
+    /**
+     * 打开一层胶囊分页。{@code keepOpenOnPick=true} 表示选中子项后本层不关闭
+     * （三级弹窗叠在其上，选完再回调重建本层刷新当前值）。
+     */
+    private SettingsCapsulePanel openCapsule(String title, String[] items, int checkedItem,
+                                             final IntCallback onPick, final boolean keepOpenOnPick,
+                                             int focusIndex) {
+        if (capsuleStack.size() >= CAPSULE_MAX_DEPTH) {
+            return null;
+        }
+        View viewOutside = findViewById(R.id.view_outside);
+        if (viewOutside == null || !(viewOutside.getParent() instanceof FrameLayout)) {
+            return null;
+        }
+        FrameLayout host = (FrameLayout) viewOutside.getParent();
+        SettingsCapsulePanel below = capsuleStack.peek();
+        View level1Root = (below == null) ? scrollView : below.getView();
+
+        final SettingsCapsulePanel[] holder = new SettingsCapsulePanel[1];
+        SettingsCapsulePanel panel = new SettingsCapsulePanel(getContext(), host, level1Root, viewOutside,
+                title, items, checkedItem, which -> {
+                    if (holder[0] != null && !holder[0].isKeepOpen()) {
+                        capsuleStack.remove(holder[0]);
+                    }
+                    if (onPick != null) {
+                        onPick.accept(which);
+                    }
+                }, keepOpenOnPick);
+        holder[0] = panel;
+        panel.setOnRequestClose(this::popCapsule);
+        panel.setInitialFocus(focusIndex);
+        capsuleStack.push(panel);
+        panel.show();
+        return panel;
+    }
+
+    /** 关闭栈顶胶囊并回到下一层（栈空时把焦点交回一级列表的对应分组行） */
+    private void popCapsule() {
+        SettingsCapsulePanel top = capsuleStack.poll();
+        if (top == null) {
+            return;
+        }
+        String title = top.getTitle();
+        top.hide();
+        // 仅「分组入口」类胶囊需要把焦点还给对应的 ▦ 行；
+        // 其余条目（源模式 / 线路 / 清晰度 / 订阅）已由 hide() 依 trigger 复原到原行，不能抢焦点
+        if (capsuleStack.isEmpty() && scrollView != null) {
+            View target = null;
+            if ("播放设置".equals(title)) {
+                target = findViewById(R.id.item_play_group);
+            } else if ("其他设置".equals(title)) {
+                target = findViewById(R.id.item_extra_group);
+            }
+            if (target != null) {
+                final View focusTarget = target;
+                focusTarget.postDelayed(focusTarget::requestFocus, 80L);
+            }
+        }
+    }
+
+    /** 「播放设置」二级胶囊：解码器选择 / 渲染方式 / 屏幕比例 */
+    private void showPlayGroupCapsule() {
+        showPlayGroupCapsule(-1);
+    }
+
+    private void showPlayGroupCapsule(int focusIndex) {
+        final String[] items = {
+            "解码器选择 · " + currentDecoderLabel(),
+            "渲染方式 · " + currentRendererLabel(),
+            "屏幕比例 · " + sp.getString("screen_ratio", "全屏")
+        };
+        openCapsule("播放设置", items, -1, which -> {
+            switch (which) {
+                case 0:
+                    showDecoderModeDialog(() -> rebuildTopCapsule(0));
+                    break;
+                case 1:
+                    showRendererModeDialog(() -> rebuildTopCapsule(1));
+                    break;
+                case 2:
+                    showRatioDialog(() -> rebuildTopCapsule(2));
+                    break;
+            }
+        }, true, focusIndex);
+    }
+
+    /** 「其他设置」二级胶囊：换台反转 / HTTP重定向网络配置 / 版本信息 */
+    private void showExtraGroupCapsule() {
+        showExtraGroupCapsule(-1);
+    }
+
+    private void showExtraGroupCapsule(int focusIndex) {
+        final String[] items = {
+            "换台反转 · " + (sp.getBoolean("channel_reverse", false) ? "已开启" : "已关闭"),
+            getContext().getString(R.string.http_redirect_config),
+            "版本信息 · v" + BuildConfig.VERSION_NAME
+        };
+        openCapsule("其他设置", items, -1, which -> {
+            switch (which) {
+                case 0:
+                    boolean reverseNow = !sp.getBoolean("channel_reverse", false);
+                    sp.edit().putBoolean("channel_reverse", reverseNow).apply();
+                    if (sw_reverse != null) {
+                        sw_reverse.setChecked(reverseNow);
+                    }
+                    Toast.makeText(getContext(), "换台反转" + (reverseNow ? "已开启" : "已关闭"), Toast.LENGTH_SHORT).show();
+                    rebuildTopCapsule(0);
+                    break;
+                case 1:
+                    showRedirectCapsule();
+                    break;
+                case 2:
+                    showVersionCapsule();
+                    break;
+            }
+        }, true, focusIndex);
+    }
+
+    /**
+     * 三级「HTTP重定向配置」胶囊（对齐参考包 showRedirectCapsule）：
+     * 5 个开关 + 最大次数 + UA，均为动作行（无 ●/○），选中即切换并原地重建刷新值。
+     */
+    private void showRedirectCapsule() {
+        showRedirectCapsule(-1);
+    }
+
+    private void showRedirectCapsule(int focusIndex) {
+        final String[] keys = {
+                KEY_REDIRECT_CROSS_DOMAIN, KEY_REDIRECT_CROSS_PROTOCOL, KEY_REDIRECT_FOLLOW_HEADERS,
+                KEY_REDIRECT_IGNORE_SSL, KEY_REDIRECT_SEND_COOKIE
+        };
+        final String[] labels = {"跨域重定向", "跨协议重定向", "跟随请求Header", "忽略SSL证书", "发送Cookie"};
+        final String[] items = new String[7];
+        for (int i = 0; i < 5; i++) {
+            items[i] = labels[i] + " · " + (sp.getBoolean(keys[i], i != 3) ? "开启" : "关闭");
+        }
+        items[5] = "最大次数 · " + sp.getInt(KEY_REDIRECT_MAX_COUNT, 5);
+        items[6] = "UserAgent · " + ("vlc".equals(sp.getString(KEY_USER_AGENT_MODE, "exo")) ? "VLC" : "ExoPlayer默认");
+
+        openCapsule("HTTP重定向配置", items, -1, which -> {
+            if (which < 5) {
+                boolean now = sp.getBoolean(keys[which], which != 3);
+                sp.edit().putBoolean(keys[which], !now).apply();
+                Toast.makeText(getContext(), labels[which] + " 已" + (now ? "关闭" : "开启"), Toast.LENGTH_SHORT).show();
+            } else if (which == 5) {
+                int[] values = {3, 5, 8, 10};
+                int cur = sp.getInt(KEY_REDIRECT_MAX_COUNT, 5);
+                int next = 1;
+                for (int i = 0; i < values.length; i++) {
+                    if (values[i] == cur) {
+                        next = (i + 1) % values.length;
+                    }
+                }
+                sp.edit().putInt(KEY_REDIRECT_MAX_COUNT, values[next]).apply();
+                Toast.makeText(getContext(), "最大次数：" + values[next], Toast.LENGTH_SHORT).show();
+            } else {
+                String ua = "exo".equals(sp.getString(KEY_USER_AGENT_MODE, "exo")) ? "vlc" : "exo";
+                sp.edit().putString(KEY_USER_AGENT_MODE, ua).apply();
+                Toast.makeText(getContext(), "UA：" + ("vlc".equals(ua) ? "VLC" : "ExoPlayer默认"), Toast.LENGTH_SHORT).show();
+            }
+            if (which == 5) {
+                rebuildSelfCapsule("HTTP重定向配置", 5);
+            } else if (which == 6) {
+                rebuildSelfCapsule("HTTP重定向配置", 6);
+            } else {
+                rebuildSelfCapsule("HTTP重定向配置", which);
+            }
+        }, true, focusIndex);
+    }
+
+    /**
+     * 三级「版本信息」胶囊（对齐参考包 showVersionCapsule）：
+     * 只读信息行，选中不改变任何配置。
+     */
+    private void showVersionCapsule() {
+        String ua;
+        String custom = sp.getString("custom_user_agent", "");
+        if (!TextUtils.isEmpty(custom)) {
+            ua = custom;
+        } else {
+            ua = "vlc".equals(sp.getString(KEY_USER_AGENT_MODE, "exo")) ? "VLC/3.0.21 LibVLC/3.0.21" : "ExoPlayer";
+        }
+        String[] items = {
+                "版本 · v" + BuildConfig.VERSION_NAME + "（" + BuildConfig.VERSION_CODE + "）",
+                "解码器 · " + currentDecoderLabel(),
+                "UA · " + ua,
+                "SDK 版本 · Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")",
+                "播放器版本 · androidx.media3 1.7.1"
+        };
+        openCapsule("版本信息", items, -1, which -> {
+        }, true, -1);
+    }
+
+    /** 重建立即重建当前栈顶胶囊（用于动作行的值刷新，保持焦点在原行） */
+    private void rebuildSelfCapsule(String title, int focusIndex) {
+        SettingsCapsulePanel top = capsuleStack.peek();
+        if (top == null || !title.equals(top.getTitle())) {
+            return;
+        }
+        capsuleStack.pop();
+        top.discard();
+        if ("HTTP重定向配置".equals(title)) {
+            showRedirectCapsule(focusIndex);
+        }
+    }
+
+    /** 三级弹窗选完后，重建栈顶胶囊以刷新行内的当前值（并把焦点留在原行） */
+    private void rebuildTopCapsule(int focusIndex) {
+        SettingsCapsulePanel top = capsuleStack.peek();
+        if (top == null) {
+            return;
+        }
+        capsuleStack.pop();
+        top.discard();
+        if ("播放设置".equals(top.getTitle())) {
+            showPlayGroupCapsule(focusIndex);
+        } else if ("其他设置".equals(top.getTitle())) {
+            showExtraGroupCapsule(focusIndex);
+        }
+    }
+
+    private String currentDecoderLabel() {
+        switch (sp.getString("decoder_mode", "auto")) {
+            case "hard": return "硬解";
+            case "soft": return "软解";
+            case "auto":
+            default: return "自动";
+        }
+    }
+
+    private String currentRendererLabel() {
+        return "texture".equals(sp.getString("renderer_type", "surface"))
+                ? getContext().getString(R.string.texture_view)
+                : getContext().getString(R.string.surface_view);
     }
 
     private int getPanelBackgroundRes(int index) {
@@ -407,41 +609,9 @@ public class SettingsDialog extends android.app.Dialog {
         }
     }
 
-    private String getPanelBackgroundName(int index) {
-        switch (index) {
-            case 1: return getContext().getString(R.string.background_1);
-            case 2: return getContext().getString(R.string.background_2);
-            case 3: return getContext().getString(R.string.background_3);
-            case 4: return getContext().getString(R.string.background_4);
-            default: return getContext().getString(R.string.background_default);
-        }
-    }
-
     private void applyPanelBackgroundForSettings() {
         int bg = sp.getInt(KEY_PANEL_BACKGROUND, 0);
         if (scrollView != null) scrollView.setBackgroundResource(getPanelBackgroundRes(bg));
-        if (tv_background_status != null) tv_background_status.setText(getPanelBackgroundName(bg));
-    }
-
-    private void showBackgroundSwitchDialog() {
-        String[] options = {
-            getContext().getString(R.string.background_default),
-            getContext().getString(R.string.background_1),
-            getContext().getString(R.string.background_2),
-            getContext().getString(R.string.background_3),
-            getContext().getString(R.string.background_4)
-        };
-        int current = sp.getInt(KEY_PANEL_BACKGROUND, 0);
-
-        showCommonSelectionDialog(getContext().getString(R.string.background_select), options, current, selected -> {
-            sp.edit().putInt(KEY_PANEL_BACKGROUND, selected).apply();
-            applyPanelBackgroundForSettings();
-            MainActivity activity = MainActivity.getRunningInstance();
-            if (activity != null) {
-                activity.applyPanelBackground(selected);
-            }
-            Toast.makeText(getContext(), "已切换背景：" + getPanelBackgroundName(selected), Toast.LENGTH_SHORT).show();
-        });
     }
 
     private void applySourceModeForSettings() {
@@ -460,7 +630,8 @@ public class SettingsDialog extends android.app.Dialog {
         };
         int current = AppConfig.getInstance(getContext()).getSourceMode();
 
-        showCommonSelectionDialog(getContext().getString(R.string.source_mode_select), options, current, selected -> {
+        // 二级面板：胶囊单选，选中即应用
+        showCapsulePicker(getContext().getString(R.string.source_mode), options, current, selected -> {
             AppConfig.getInstance(getContext()).setSourceMode(selected);
             applySourceModeForSettings();
             Toast.makeText(getContext(), "源模式已切换为" + options[selected], Toast.LENGTH_SHORT).show();
@@ -482,91 +653,6 @@ public class SettingsDialog extends android.app.Dialog {
         });
     }
 
-    private void showVersionInfoDialog() {
-        String versionName = BuildConfig.VERSION_NAME;
-        int versionCode = BuildConfig.VERSION_CODE;
-        String userAgent = sp.getString("custom_user_agent", "");
-        if (TextUtils.isEmpty(userAgent)) {
-            String uaMode = sp.getString(KEY_USER_AGENT_MODE, "exo");
-            if ("vlc".equals(uaMode)) {
-                userAgent = "VLC/3.0.21 LibVLC/3.0.21";
-            } else {
-                userAgent = "ExoPlayer";
-            }
-        }
-        String sdkVersion = "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")";
-        String playerVersion = "androidx.media3 1.7.1";
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("版本信息: v").append(versionName).append(" (").append(versionCode).append(")\n\n");
-        sb.append("UA: ").append(userAgent).append("\n\n");
-        sb.append("SDK 版本: ").append(sdkVersion).append("\n\n");
-        sb.append("播放器版本: ").append(playerVersion).append("\n\n");
-        sb.append("━━━━━━━━━━━━━━━━━━\n");
-
-        String message = sb.toString();
-        SpannableString spannableString = new SpannableString(message);
-
-        int p;
-        p = message.indexOf("版本信息");
-        if (p != -1) spannableString.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), p, p + 4, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        p = message.indexOf("UA:");
-        if (p != -1) spannableString.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), p, p + 3, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        p = message.indexOf("SDK 版本");
-        if (p != -1) spannableString.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), p, p + 6, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-        p = message.indexOf("播放器版本");
-        if (p != -1) spannableString.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), p, p + 6, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-
-        LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setBackgroundResource(R.drawable.dialog_bg_corner);
-        int pad = dp2px(16);
-        layout.setPadding(pad, pad, pad, pad);
-
-        TextView titleView = new TextView(getContext());
-        titleView.setText("📱 应用详情");
-        titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(20);
-        titleView.setTypeface(null, Typeface.BOLD);
-        titleView.setPadding(0, 0, 0, dp2px(8));
-        layout.addView(titleView);
-
-        ScrollView scrollView = new ScrollView(getContext());
-        scrollView.setScrollbarFadingEnabled(false);
-        scrollView.setVerticalScrollBarEnabled(true);
-        scrollView.setFillViewport(true);
-
-        TextView msgView = new TextView(getContext());
-        msgView.setText(spannableString);
-        msgView.setTextColor(Color.WHITE);
-        msgView.setTextSize(16);
-        msgView.setLineSpacing(0, 1.25f);
-        msgView.setFocusable(true);
-        msgView.setFocusableInTouchMode(true);
-
-        scrollView.addView(msgView, new ScrollView.LayoutParams(
-                ScrollView.LayoutParams.MATCH_PARENT,
-                ScrollView.LayoutParams.WRAP_CONTENT
-        ));
-        layout.addView(scrollView, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp2px(380)
-        ));
-
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-                .setView(layout)
-                .create();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
-        dialog.show();
-        mainHandler.postDelayed(() -> {
-            if (msgView != null && dialog.isShowing()) {
-                msgView.requestFocus();
-            }
-        }, 200);
-    }
-
     private int dp2px(int dp) {
         float density = getContext().getResources().getDisplayMetrics().density;
         return (int) (dp * density + 0.5f);
@@ -585,7 +671,7 @@ public class SettingsDialog extends android.app.Dialog {
 
         TextView titleView = new TextView(getContext());
         titleView.setText("请输入数字");
-        titleView.setTextColor(Color.WHITE);
+        titleView.setTextColor(0xFFFFD166);
         titleView.setTextSize(18);
         titleView.setTypeface(null, Typeface.BOLD);
         titleView.setGravity(Gravity.CENTER);
@@ -597,7 +683,7 @@ public class SettingsDialog extends android.app.Dialog {
         displayView.setTextColor(Color.WHITE);
         displayView.setTextSize(48);
         displayView.setGravity(Gravity.CENTER);
-        displayView.setBackgroundColor(0xFF333545);
+        displayView.setBackgroundColor(0xFF212121);
         displayView.setPadding(16, 16, 16, 16);
         dialogView.addView(displayView);
 
@@ -619,7 +705,7 @@ public class SettingsDialog extends android.app.Dialog {
                 keyView.setTextColor(Color.WHITE);
                 keyView.setTextSize(20);
                 keyView.setGravity(Gravity.CENTER);
-                keyView.setBackgroundColor(0xFF333545);
+                keyView.setBackgroundColor(0xFF212121);
                 keyView.setPadding(32, 20, 32, 20);
                 keyView.setFocusable(true);
                 keyView.setFocusableInTouchMode(true);
@@ -728,13 +814,10 @@ public class SettingsDialog extends android.app.Dialog {
             });
 
             keyView.setOnFocusChangeListener((v, hasFocus) -> {
-                if (hasFocus) {
-                    keyView.setBackgroundColor(0x3340A9FF);
-                    keyView.setTextColor(0xFF40A9FF);
-                } else {
-                    keyView.setBackgroundColor(0xFF333545);
-                    keyView.setTextColor(Color.WHITE);
-                }
+                // 【2026-10-20 橄榄底 + 黄字方案】原浅蓝 #3340A9FF/#40A9FF → 橄榄底 + 2dp 白描边 + 黄字
+                keyView.setBackgroundResource(hasFocus
+                        ? R.drawable.list_item_focused : R.drawable.list_item_default);
+                keyView.setTextColor(hasFocus ? 0xFFFFD166 : 0xFFFFFFFF);
             });
         }
 
@@ -755,19 +838,62 @@ public class SettingsDialog extends android.app.Dialog {
         }, 200);
     }
 
+    /**
+     * 把「一组选项」渲染为<b>二级胶囊面板</b>（而非弹窗）：单选语义（checkedItem 画 ●/○ 标记），
+     * 选中即生效并关闭胶囊；BACK 逐层退回一级列表。
+     *
+     * <p>用于源模式 / 频道线路选择 / 清晰度选择这三个二级面板；三级取值弹窗仍走
+     * {@link #showCommonSelectionDialog}。
+     */
+    private void showCapsulePicker(String title, String[] items, int checkedItem, IntCallback onSelected) {
+        if (items == null || items.length == 0) {
+            return;
+        }
+        // 打勾铁律：checkedItem 传 -1（匹配不到真实生效项）时必须原样透传，
+        //   由胶囊按「一项都不高亮」渲染，不能夹到 0 造成误标。
+        int checked = (checkedItem >= 0 && checkedItem < items.length) ? checkedItem : -1;
+        openCapsule(title, items, checked, onSelected, false, -1);
+    }
+
     private void showCommonSelectionDialog(String title, String[] items, int checkedItem, IntCallback onSelected) {
+        showCommonSelectionDialog(title, items, checkedItem, onSelected, null);
+    }
+
+    /**
+     * @param onClosed 弹窗关闭后回调（二级胶囊用它刷新行内的当前值）；可为 null
+     */
+    private void showCommonSelectionDialog(String title, String[] items, int checkedItem,
+                                           IntCallback onSelected, final Runnable onClosed) {
+        // 【2026-10-20 对齐参考包】已有胶囊层时，三级选择同样以胶囊叠层呈现
+        // （参考包 showCommonSelectionDialog 直接委托 openCapsule）。
+        // UA 切换来自独立的 HTTP 重定向弹窗（非胶囊），此时栈为空，仍走下面的 AlertDialog。
+        if (!capsuleStack.isEmpty()) {
+            openCapsule(title, items, checkedItem, which -> {
+                onSelected.accept(which);
+                if (onClosed != null) {
+                    onClosed.run();
+                }
+            }, false, -1);
+            return;
+        }
+
         ListView listView = new ListView(getContext());
         listView.setBackgroundColor(Color.TRANSPARENT);
-        listView.setDivider(new ColorDrawable(0x33FFFFFF));
-        listView.setDividerHeight(1);
+        // 【2026-10-20】行间距统一为 8dp（对齐设置面板/频道面板），去掉 1px 分隔线
+        listView.setDivider(new ColorDrawable(Color.TRANSPARENT));
+        listView.setDividerHeight(dp2px(8));
         listView.setPadding(0, 16, 0, 16);
         listView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        // 【2026-10-20 三级面板统一】关掉系统选择器，焦点底与文字色在适配器里按焦点行显式指定
+        listView.setSelector(new ColorDrawable(Color.TRANSPARENT));
+        listView.setDrawSelectorOnTop(false);
 
         final int[] pendingPos = {checkedItem};
         final AlertDialog[] dialogHolder = new AlertDialog[1];
 
         class CustomAdapter extends ArrayAdapter<String> {
             private int selectedPos;
+            private int focusPos = -1;
 
             public CustomAdapter(android.content.Context context, String[] items, int initialPos) {
                 super(context, android.R.layout.simple_list_item_single_choice, items);
@@ -781,12 +907,19 @@ public class SettingsDialog extends android.app.Dialog {
                 tv.setTextSize(16);
                 tv.setPadding(16, 16, 16, 16);
 
-                if (position == selectedPos) {
-                    tv.setTextColor(0xFF40A9FF);
-                    view.setBackgroundColor(0x3340A9FF);
-                } else {
-                    tv.setTextColor(Color.WHITE);
-                    view.setBackgroundColor(0x00000000);
+                // 【2026-10-20 橄榄底 + 黄字方案】焦点行 = 橄榄底 + 白描边 + 黄字；
+                //   选中未聚焦 = 胶囊底 + 黄字；其余 = 胶囊底 + 白字
+                boolean focused = position == focusPos;
+                boolean checked = position == selectedPos;
+                tv.setTextColor((focused || checked) ? 0xFFFFD166 : Color.WHITE);
+                view.setBackgroundResource(focused
+                        ? R.drawable.list_item_focused : R.drawable.list_item_default);
+                // 【2026-10-20 三级面板统一】单选框由主题青色改为黄（选中）/ 半透明白（未选）
+                if (tv instanceof android.widget.CheckedTextView) {
+                    ((android.widget.CheckedTextView) tv).setCheckMarkTintList(
+                            new android.content.res.ColorStateList(
+                                    new int[][]{{android.R.attr.state_checked}, {}},
+                                    new int[]{0xFFFFD166, 0x66FFFFFF}));
                 }
                 return view;
             }
@@ -795,12 +928,24 @@ public class SettingsDialog extends android.app.Dialog {
                 selectedPos = pos;
                 notifyDataSetChanged();
             }
+
+            public void setFocusPos(int pos) {
+                if (focusPos == pos) {
+                    return;
+                }
+                focusPos = pos;
+                notifyDataSetChanged();
+            }
         }
 
         CustomAdapter adapter = new CustomAdapter(getContext(), items, checkedItem);
         listView.setAdapter(adapter);
         listView.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
         listView.setItemChecked(checkedItem, true);
+        if (checkedItem >= 0 && checkedItem < items.length) {
+            // 打开时把焦点行定位到当前生效项，避免每次都从第 1 行开始
+            listView.setSelection(checkedItem);
+        }
         listView.setOnItemClickListener((parent, view, position, id) -> {
             pendingPos[0] = position;
             adapter.setSelectedPos(position);
@@ -812,6 +957,7 @@ public class SettingsDialog extends android.app.Dialog {
         listView.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                adapter.setFocusPos(position);
                 if (pendingPos[0] != position) {
                     pendingPos[0] = position;
                     adapter.setSelectedPos(position);
@@ -820,6 +966,7 @@ public class SettingsDialog extends android.app.Dialog {
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
+                adapter.setFocusPos(-1);
             }
         });
 
@@ -849,7 +996,7 @@ public class SettingsDialog extends android.app.Dialog {
 
         TextView titleView = new TextView(getContext());
         titleView.setText(title);
-        titleView.setTextColor(Color.WHITE);
+        titleView.setTextColor(0xFFFFD166);
         titleView.setTextSize(20);
         titleView.setTypeface(null, Typeface.BOLD);
         titleView.setPadding(24, 24, 24, 0);
@@ -871,6 +1018,9 @@ public class SettingsDialog extends android.app.Dialog {
         dialogHolder[0] = new AlertDialog.Builder(getContext())
                 .setView(layout)
                 .create();
+        if (onClosed != null) {
+            dialogHolder[0].setOnDismissListener(d -> onClosed.run());
+        }
         if (dialogHolder[0].getWindow() != null) {
             dialogHolder[0].getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         }
@@ -1151,7 +1301,7 @@ public class SettingsDialog extends android.app.Dialog {
             if (currentLineIndex >= lineList.size() || currentLineIndex < 0) currentLineIndex = 0;
         }
 
-        showCommonSelectionDialog("频道线路选择", lineArray, currentLineIndex, (which) -> {
+        showCapsulePicker("频道线路选择", lineArray, currentLineIndex, (which) -> {
             sp.edit().putInt(prefKey, which).apply();
             sp.edit().putInt(KEY_CHANNEL_LINE_INDEX, which).apply();
             tv_channel_line.setText(lineArray[which]);
@@ -1203,7 +1353,7 @@ public class SettingsDialog extends android.app.Dialog {
         int checkedItem = (currentLineIndex >= 0 && currentLineIndex < lineArray.length)
                 ? currentLineIndex : 0;
 
-        showCommonSelectionDialog("频道线路选择", lineArray, checkedItem, (which) -> {
+        showCapsulePicker("频道线路选择", lineArray, checkedItem, (which) -> {
             tv_channel_line.setText(lineArray[which]);
             playerManager.switchMiguLine(which);
             // 换线路后该线路可能没有当前档位 → 清晰度会跟着变，两行一起刷
@@ -1230,7 +1380,7 @@ public class SettingsDialog extends android.app.Dialog {
         int checkedItem = (currentLineIndex >= 0 && currentLineIndex < lineArray.length)
                 ? currentLineIndex : 0;
 
-        showCommonSelectionDialog("频道线路选择", lineArray, checkedItem, (which) -> {
+        showCapsulePicker("频道线路选择", lineArray, checkedItem, (which) -> {
             tv_channel_line.setText(lineArray[which]);
             playerManager.switchChanxiangLine(which);
             // 换线路后该线路可能没有当前档位 → 清晰度会跟着变，两行一起刷
@@ -1256,7 +1406,7 @@ public class SettingsDialog extends android.app.Dialog {
         int checkedItem = (currentLineIndex >= 0 && currentLineIndex < lineArray.length)
                 ? currentLineIndex : 0;
 
-        showCommonSelectionDialog("频道线路选择", lineArray, checkedItem, (which) -> {
+        showCapsulePicker("频道线路选择", lineArray, checkedItem, (which) -> {
             tv_channel_line.setText(lineArray[which]);
             playerManager.switchAfhgrjLine(which);
             // 换线路后清晰度仍为自适应，两行一起刷即可
@@ -1288,7 +1438,7 @@ public class SettingsDialog extends android.app.Dialog {
         int cur = com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLineIndex(vodId);
         int checkedItem = Math.max(0, Math.min(cur, lines.size() - 1));
 
-        showCommonSelectionDialog("频道线路选择", lineArray, checkedItem, (which) -> {
+        showCapsulePicker("频道线路选择", lineArray, checkedItem, (which) -> {
             String url = com.tv.live.renyibo.RenYiBoVodSourceLoader.switchVodLine(vodId, which);
             if (url != null) {
                 playerManager.playUrl(url, currentChannel.getName(), currentChannel);
@@ -1353,7 +1503,7 @@ public class SettingsDialog extends android.app.Dialog {
         //   多码率由播放器自适应 —— 提供一个「自适应」档（不报「不支持切换」）。
         if (playerManager.isAfhgrjChannel()) {
             String[] a7Items = {"自适应"};
-            showCommonSelectionDialog("清晰度选择", a7Items, 0, (which) -> {
+            showCapsulePicker("清晰度选择", a7Items, 0, (which) -> {
                 tv_resolution_status.setText(a7Items[which]);
                 Toast.makeText(getContext(), "已切换至: " + a7Items[which], Toast.LENGTH_SHORT).show();
             });
@@ -1385,7 +1535,7 @@ public class SettingsDialog extends android.app.Dialog {
             if (qIdx.isEmpty()) {
                 // 剧集类：无枚举品质 —— 与源7 一样只给「自适应」档。
                 String[] a5Items = {"自适应"};
-                showCommonSelectionDialog("清晰度选择", a5Items, 0, (which) -> {
+                showCapsulePicker("清晰度选择", a5Items, 0, (which) -> {
                     tv_resolution_status.setText(a5Items[which]);
                     Toast.makeText(getContext(), "已切换至: " + a5Items[which], Toast.LENGTH_SHORT).show();
                 });
@@ -1399,7 +1549,7 @@ public class SettingsDialog extends android.app.Dialog {
             for (int i = 0; i < qArray.length; i++) {
                 if (qArray[i].equals(curQ)) { checked = i; break; }
             }
-            showCommonSelectionDialog("清晰度选择", qArray, checked, (which) -> {
+            showCapsulePicker("清晰度选择", qArray, checked, (which) -> {
                 Integer lineIdx = qIdx.get(qArray[which]);
                 String url = com.tv.live.renyibo.RenYiBoVodSourceLoader
                         .switchVodLine(rnVid2, lineIdx != null ? lineIdx : 0);
@@ -1428,7 +1578,7 @@ public class SettingsDialog extends android.app.Dialog {
             }
         }
 
-        showCommonSelectionDialog("清晰度选择", items, initialPos, (which) -> {
+        showCapsulePicker("清晰度选择", items, initialPos, (which) -> {
             String selectedLabel = items[which];
             int targetHeight = 0;
             if (selectedLabel.contains("4K")) targetHeight = 2160;
@@ -1451,6 +1601,10 @@ public class SettingsDialog extends android.app.Dialog {
     }
 
     private void showDecoderModeDialog() {
+        showDecoderModeDialog(null);
+    }
+
+    private void showDecoderModeDialog(final Runnable onClosed) {
         final String[] modes = {"自动", "硬解", "软解"};
         final String[] modeValues = {"auto", "hard", "soft"};
         String currentMode = sp.getString("decoder_mode", "auto");
@@ -1472,7 +1626,7 @@ public class SettingsDialog extends android.app.Dialog {
             getContext().sendBroadcast(intent);
 
             Toast.makeText(getContext(), "已切换到" + modes[which] + "，正在重新加载…", Toast.LENGTH_SHORT).show();
-        });
+        }, onClosed);
     }
 
     private void updateDecoderModeText(String mode) {
@@ -1485,6 +1639,10 @@ public class SettingsDialog extends android.app.Dialog {
     }
 
     private void showRendererModeDialog() {
+        showRendererModeDialog(null);
+    }
+
+    private void showRendererModeDialog(final Runnable onClosed) {
         final String[] modes = {"SurfaceView（默认）", "TextureView（兼容）"};
         final String[] modeValues = {"surface", "texture"};
         String currentMode = sp.getString("renderer_type", "surface");
@@ -1506,7 +1664,7 @@ public class SettingsDialog extends android.app.Dialog {
             getContext().sendBroadcast(intent);
 
             Toast.makeText(getContext(), "已切换到" + modes[which] + "，正在应用……", Toast.LENGTH_SHORT).show();
-        });
+        }, onClosed);
     }
 
     private void updateRendererModeText(String mode) {
@@ -1518,6 +1676,10 @@ public class SettingsDialog extends android.app.Dialog {
     }
 
     private void showRatioDialog() {
+        showRatioDialog(null);
+    }
+
+    private void showRatioDialog(final Runnable onClosed) {
         final String[] ratios = {"全屏", "填充", "原始"};
         String currentMode = sp.getString("screen_ratio", "全屏");
         int checkedItem = 0;
@@ -1531,758 +1693,164 @@ public class SettingsDialog extends android.app.Dialog {
         showCommonSelectionDialog("屏幕比例", ratios, checkedItem, (which) -> {
             sp.edit().putString("screen_ratio", ratios[which]).apply();
             Toast.makeText(getContext(), "已设置", Toast.LENGTH_SHORT).show();
-        });
+        }, onClosed);
     }
 
-    private void showSubscriptionDialog(String spKey, String title) {
+    /**
+     * 【2026-10-20 三级菜单方案】「直播源订阅 / 节目单订阅」二级胶囊面板。
+     *
+     * <p>胶囊内列出全部订阅源（单选，打勾落在当前默认源）+ 末行「＋ 管理订阅（添加 / 删除 / 扫码）…」。
+     * 末行以 keepOpen 方式保留本层，再由 {@link #openQrCapsule} 叠出只含二维码的三级胶囊；
+     * 关闭三级后回到本层，不直接退回一级列表。
+     */
+    private void showSubscriptionPanel(final String spKey, final String title) {
         SourceManager sourceManager = new SourceManager(getContext(), spKey);
-        List<SourceManager.SourceItem> sources = sourceManager.getAllSources();
+        final List<SourceManager.SourceItem> sources = sourceManager.getAllSources();
+        final int checked = Math.max(0, sourceManager.indexOfUrl(sourceManager.getDefaultUrl()));
 
-        android.view.LayoutInflater inflater = android.view.LayoutInflater.from(
-                new android.view.ContextThemeWrapper(getContext(), androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog)
-        );
-        View dialogView = inflater.inflate(R.layout.dialog_subscription, null);
-
-        ListView lvSourceList = dialogView.findViewById(R.id.lv_source_list);
-        ImageView ivQrCode = dialogView.findViewById(R.id.iv_qr_code);
-        TextView tvIpAddress = dialogView.findViewById(R.id.tv_ip_address);
-        TextView tvDialogTitle = dialogView.findViewById(R.id.tv_dialog_title);
-        LinearLayout llScanHeader = dialogView.findViewById(R.id.ll_scan_header);
-        EditText etName = dialogView.findViewById(R.id.et_name);
-        EditText etUrl = dialogView.findViewById(R.id.et_url);
-        Button btnClear = dialogView.findViewById(R.id.btn_clear);
-        Button btnConfirm = dialogView.findViewById(R.id.btn_confirm);
-        Button btnClose = dialogView.findViewById(R.id.btn_close);
-
-        boolean isLive = "live_history".equals(spKey);
-        tvIpAddress.setText(currentWebUrl);
-
-        if (isLive) {
-            if (tvDialogTitle != null) tvDialogTitle.setText(title);
-            if (llScanHeader != null) llScanHeader.setVisibility(View.VISIBLE);
-            if (ivQrCode != null) ivQrCode.setVisibility(View.VISIBLE);
-
-            com.tv.live.util.AppExecutors.io(() -> {
-                Bitmap qrBitmap = null;
-                try {
-                    qrBitmap = qrCodeManager.createQR(currentWebUrl, 240);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                final Bitmap finalQrBitmap = qrBitmap;
-                mainHandler.post(() -> {
-                    if (finalQrBitmap != null) {
-                        ivQrCode.setImageBitmap(finalQrBitmap);
-                    } else {
-                        ivQrCode.setBackgroundColor(Color.LTGRAY);
-                    }
-                });
-            });
-
-            ivQrCode.setOnClickListener(v -> {
-                Toast.makeText(getContext(), "已生成二维码，请扫码", Toast.LENGTH_SHORT).show();
-            });
-            etName.setHint("请输入名称(选填)");
-            etUrl.setHint("请输入地址");
-        } else {
-            if (tvDialogTitle != null) tvDialogTitle.setText(title);
-            if (llScanHeader != null) llScanHeader.setVisibility(View.GONE);
-            if (ivQrCode != null) ivQrCode.setVisibility(View.GONE);
-            etName.setHint("请输入节目单名称(选填)");
-            etUrl.setHint("请输入EPG节目单地址");
+        final String[] items = new String[sources.size() + 1];
+        for (int i = 0; i < sources.size(); i++) {
+            SourceManager.SourceItem si = sources.get(i);
+            String name = (si == null || TextUtils.isEmpty(si.name)) ? ("源" + (i + 1)) : si.name.trim();
+            items[i] = name;
         }
+        items[sources.size()] = "＋ 管理订阅（添加 / 删除 / 扫码）…";
+        final int manageIndex = sources.size();
 
-        etName.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    lvSourceList.requestFocus();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    etUrl.requestFocus();
-                    return true;
-                }
-            }
-            return false;
-        });
-        etUrl.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    lvSourceList.requestFocus();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    etName.requestFocus();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-
-                    btnClear.requestFocus();
-                    return true;
-                }
-            }
-            return false;
-        });
-
-        int currentDefault = sourceManager.indexOfUrl(sourceManager.getDefaultUrl());
-        SubscriptionAdapter adapter = new SubscriptionAdapter(getContext(), sources);
-
-        adapter.setOnActionListener(new SubscriptionAdapter.OnActionListener() {
-            @Override
-            public void onSwitch(int position) {
-
-                SourceManager.SourceItem pickedDiagnose = (position >= 0 && position < sources.size()) ? sources.get(position) : null;
-                LogBridge.d("SUBSCRIPTION", "onSwitch called: position=" + position
-                    + " | pickedName=" + (pickedDiagnose != null ? pickedDiagnose.name : "null")
-                    + " | pickedUrl=" + (pickedDiagnose != null ? pickedDiagnose.url : "null")
-                    + " | spKey=" + spKey);
-
-                if (position < 0 || position >= sources.size()) return;
-                SourceManager.SourceItem picked = sources.get(position);
-
-                List<SourceManager.SourceItem> latest = sourceManager.getAllSources();
-                int realPos = -1;
-                for (int i = 0; i < latest.size(); i++) {
-                    SourceManager.SourceItem si = latest.get(i);
-                    if (si != null && TextUtils.equals(si.url, picked.url) && TextUtils.equals(si.name, picked.name)) {
-                        realPos = i; break;
-                    }
-                }
-                if (realPos < 0) {
-
-                    for (int i = 0; i < latest.size(); i++) {
-                        SourceManager.SourceItem si = latest.get(i);
-                        if (si != null && TextUtils.equals(si.name, picked.name)) { realPos = i; break; }
-                    }
-                }
-                if (realPos < 0) {
-
-                    if (position < 0 || position >= latest.size()) return;
-                    realPos = position;
-                }
-                sourceManager.setDefault(realPos);
-
-                SharedPreferences appSp = getContext().getSharedPreferences("app_settings", Context.MODE_PRIVATE);
-                if ("live_history".equals(spKey)) {
-                    appSp.edit().remove("custom_live_url").apply();
-                    UrlConfig.LIVE_URL = latest.get(realPos).url;
-
-                } else if ("epg_history".equals(spKey)) {
-                    appSp.edit().remove("custom_epg_url").apply();
-                    UrlConfig.EPG_URL = latest.get(realPos).url;
-                }
-
-                Intent intent = new Intent("com.tv.live.REFRESH_LIVE_AND_EPG");
-                intent.setPackage(getContext().getPackageName());
-                getContext().sendBroadcast(intent);
-
-                Toast.makeText(getContext(), "已切换到：" + latest.get(realPos).name, Toast.LENGTH_SHORT).show();
-                adapter.setSelectedPosition(position);
-                lvSourceList.post(() -> {
-                    adapter.notifyDataSetChanged();
-                    lvSourceList.setSelection(position);
-                    lvSourceList.requestFocus();
-                });
-            }
-
-            @Override
-            public void onDelete(int position) {
-                if (position < 0 || position >= sources.size()) {
-                    return;
-                }
-                SourceManager.SourceItem item = sources.get(position);
-
-                AlertDialog deleteDialog = new AlertDialog.Builder(getContext())
-                        .setTitle("确认删除")
-                        .setMessage("确定要删除「" + item.name + "」吗？")
-                        .setPositiveButton("删除", (d, w) -> {
-                            int realIndex = sourceManager.indexOfUrl(item.url);
-                            if (realIndex >= 0 && realIndex < sourceManager.size()) {
-                                sourceManager.removeSource(realIndex);
-                                sources.clear();
-                                sources.addAll(sourceManager.getAllSources());
-                                int newDefaultPos = sourceManager.indexOfUrl(sourceManager.getDefaultUrl());
-                                adapter.setSelectedPosition(newDefaultPos);
-                                lvSourceList.post(() -> {
-                                    adapter.notifyDataSetChanged();
-                                    if (newDefaultPos >= 0) {
-                                        lvSourceList.setSelection(newDefaultPos);
-                                    }
-                                    lvSourceList.requestFocus();
-                                });
-                                Toast.makeText(getContext(), "已删除", Toast.LENGTH_SHORT).show();
-                            } else {
-                                Toast.makeText(getContext(), "删除失败，源未找到", Toast.LENGTH_SHORT).show();
-                            }
-                        })
-                        .create();
-
-                if (deleteDialog.getWindow() != null) {
-                    deleteDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-                }
-                deleteDialog.show();
-
-                deleteDialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.WHITE);
-                deleteDialog.getButton(AlertDialog.BUTTON_POSITIVE).setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF55576A));
-            }
-        });
-
-        lvSourceList.setChoiceMode(android.widget.ListView.CHOICE_MODE_SINGLE);
-        lvSourceList.setAdapter(adapter);
-        adapter.setListView(lvSourceList);
-
-        if (currentDefault >= 0) {
-            adapter.setSelectedPosition(currentDefault);
-        }
-
-        lvSourceList.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
-
-                lvSourceList.setItemChecked(position, true);
-
-                if (view != null) {
-
-                    if (parent instanceof android.view.ViewGroup) {
-                        android.view.ViewGroup vg = (android.view.ViewGroup) parent;
-                        for (int i = 0; i < vg.getChildCount(); i++) {
-                            android.view.View sib = vg.getChildAt(i);
-                            if (sib != null && sib != view) sib.setSelected(false);
-                        }
-                    }
-                    view.setSelected(true);
-                }
-            }
-
-            @Override
-            public void onNothingSelected(android.widget.AdapterView<?> parent) {
-            }
-        });
-
-        final Button finalBtnConfirm = btnConfirm;
-        final Button finalBtnClose = btnClose;
-
-        setupTwoStepTintButton(finalBtnConfirm, () -> {
-            String name = etName.getText().toString().trim();
-            String url = etUrl.getText().toString().trim();
-            if (url.isEmpty()) {
-                Toast.makeText(getContext(), "地址不能为空", Toast.LENGTH_SHORT).show();
+        openCapsule(title, items, checked, which -> {
+            if (which == manageIndex) {
+                showSubscriptionDialog(title);
                 return;
             }
-            if (sourceManager.addSource(name, url)) {
-                etName.setText("");
-                etUrl.setText("");
-                sources.clear();
-                sources.addAll(sourceManager.getAllSources());
-                adapter.setSelectedPosition(sourceManager.indexOfUrl(sourceManager.getDefaultUrl()));
-                adapter.notifyDataSetChanged();
-                Toast.makeText(getContext(), "已添加，正在刷新...", Toast.LENGTH_SHORT).show();
-
-                Intent intent = new Intent("com.tv.live.REFRESH_LIVE_AND_EPG");
-                intent.setPackage(getContext().getPackageName());
-                getContext().sendBroadcast(intent);
-            } else {
-                Toast.makeText(getContext(), "该地址已存在", Toast.LENGTH_SHORT).show();
-            }
-        }, Color.WHITE, 0xFF55576A);
-
-        final Button finalBtnClear = btnClear;
-        setupTwoStepTintButton(finalBtnClear, () -> {
-            etName.setText("");
-            etUrl.setText("");
-        }, Color.WHITE, 0xFF55576A);
-
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-                .setView(dialogView)
-                .create();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        }
-        dialog.setOnKeyListener((d, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    LogBridge.d("SUBSCRIPTION", "ENTER/DPAD_CENTER global: hasFocus=" + lvSourceList.hasFocus() + " selectedPos=" + adapter.getSelectedPosition() + " sources.size=" + sources.size());
-                    if (lvSourceList.hasFocus()) {
-                        int position = adapter.getSelectedPosition();
-                        if (position >= 0 && position < sources.size()) {
-
-                            SourceManager.SourceItem picked = sources.get(position);
-                            List<SourceManager.SourceItem> latest = sourceManager.getAllSources();
-                            int realPos = -1;
-                            for (int i = 0; i < latest.size(); i++) {
-                                SourceManager.SourceItem li = latest.get(i);
-                                if (picked.name.equals(li.name) && picked.url.equals(li.url)) { realPos = i; break; }
-                            }
-                            if (realPos < 0) {
-                                for (int i = 0; i < latest.size(); i++) {
-                                    SourceManager.SourceItem li = latest.get(i);
-                                    if (picked.name.equals(li.name)) { realPos = i; break; }
-                                }
-                            }
-                            if (realPos < 0) {
-                                if (position < latest.size()) realPos = position;
-                                else return true;
-                            }
-                            sourceManager.setDefault(realPos);
-                            SharedPreferences appSp = getContext().getSharedPreferences("app_settings", Context.MODE_PRIVATE);
-                            if ("live_history".equals(spKey)) {
-                                appSp.edit().remove("custom_live_url").apply();
-                                UrlConfig.LIVE_URL = latest.get(realPos).url;
-                            } else if ("epg_history".equals(spKey)) {
-                                appSp.edit().remove("custom_epg_url").apply();
-                                UrlConfig.EPG_URL = latest.get(realPos).url;
-                            }
-                            Intent intent = new Intent("com.tv.live.REFRESH_LIVE_AND_EPG");
-                            intent.setPackage(getContext().getPackageName());
-                            getContext().sendBroadcast(intent);
-                            Toast.makeText(getContext(), "已切换到：" + latest.get(realPos).name, Toast.LENGTH_SHORT).show();
-                            adapter.setSelectedPosition(position);
-                            lvSourceList.post(() -> {
-                                adapter.notifyDataSetChanged();
-                                lvSourceList.setSelection(position);
-                                lvSourceList.requestFocus();
-                            });
-                        }
-                        return true;
-                    }
-                } else if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    dialog.dismiss();
-                    return true;
-                }
-            }
-            return false;
-        });
-        dialog.show();
-        if (btnClose != null) {
-            setupTwoStepTintButton(finalBtnClose, () -> dialog.dismiss(), Color.WHITE, 0xFF55576A);
-        }
-        mainHandler.postDelayed(() -> {
-            if (lvSourceList != null && dialog.isShowing()) {
-                lvSourceList.requestFocus();
-                if (currentDefault >= 0) {
-                    lvSourceList.setSelection(currentDefault);
-                }
-
-                adapter.ensureActivatedImmediate();
-            }
-        }, 200);
+            // keepOpen 下选中订阅源后手动收起本层，行为与普通单选项一致
+            popCapsule();
+            switchSubscriptionSource(spKey, which, sources);
+        }, true, -1);
     }
 
-    private void showRedirectConfigDialog() {
-        int currentMax = sp.getInt(KEY_REDIRECT_MAX_COUNT,5);
-        boolean crossDomain = sp.getBoolean(KEY_REDIRECT_CROSS_DOMAIN,true);
-        boolean crossProto = sp.getBoolean(KEY_REDIRECT_CROSS_PROTOCOL,true);
-        boolean followHeader = sp.getBoolean(KEY_REDIRECT_FOLLOW_HEADERS,true);
-        boolean ignoreSsl = sp.getBoolean(KEY_REDIRECT_IGNORE_SSL,false);
-        boolean sendCookie = sp.getBoolean(KEY_REDIRECT_SEND_COOKIE, true);
-        final String[] currentUaMode = { sp.getString(KEY_USER_AGENT_MODE, "exo") };
+    /** 订阅源切换（胶囊与完整弹窗共用同一套口径：消除 custom url 覆盖 + 广播刷新） */
+    private void switchSubscriptionSource(String spKey, int position, List<SourceManager.SourceItem> sources) {
+        if (position < 0 || position >= sources.size()) {
+            return;
+        }
+        SourceManager sourceManager = new SourceManager(getContext(), spKey);
+        SourceManager.SourceItem picked = sources.get(position);
 
-        android.view.LayoutInflater inflater = android.view.LayoutInflater.from(
-                new android.view.ContextThemeWrapper(getContext(), androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog)
-        );
-        View dialogView = inflater.inflate(R.layout.dialog_redirect_config, null);
-        EditText etMax = dialogView.findViewById(R.id.et_redirect_max);
-        SwitchCompat swCrossDomain = dialogView.findViewById(R.id.sw_cross_domain);
-        SwitchCompat swCrossProto = dialogView.findViewById(R.id.sw_cross_proto);
-        SwitchCompat swFollowHeader = dialogView.findViewById(R.id.sw_follow_header);
-        SwitchCompat swIgnoreSsl = dialogView.findViewById(R.id.sw_ignore_ssl);
-        SwitchCompat swSendCookie = dialogView.findViewById(R.id.sw_send_cookie);
-        LinearLayout llUserAgent = dialogView.findViewById(R.id.ll_user_agent);
-        TextView tvUserAgentStatus = dialogView.findViewById(R.id.tv_user_agent_status);
-        Button btnCancel = dialogView.findViewById(R.id.btn_redirect_cancel);
-        Button btnSave = dialogView.findViewById(R.id.btn_redirect_save);
-
-        android.widget.ScrollView svContent = dialogView.findViewById(R.id.sv_redirect_content);
-        if (svContent != null) {
-            android.util.DisplayMetrics dm = getContext().getResources().getDisplayMetrics();
-            int maxHeightPx = (int) (dm.heightPixels * 0.6f);
-            android.view.ViewGroup.LayoutParams lp = svContent.getLayoutParams();
-            if (lp.height > maxHeightPx) {
-                lp.height = maxHeightPx;
-                svContent.setLayoutParams(lp);
+        List<SourceManager.SourceItem> latest = sourceManager.getAllSources();
+        int realPos = -1;
+        for (int i = 0; i < latest.size(); i++) {
+            SourceManager.SourceItem si = latest.get(i);
+            if (si != null && TextUtils.equals(si.url, picked.url) && TextUtils.equals(si.name, picked.name)) {
+                realPos = i;
+                break;
             }
         }
-
-        LinearLayout llMaxCount = dialogView.findViewById(R.id.ll_max_count);
-        LinearLayout llCrossDomain = dialogView.findViewById(R.id.ll_cross_domain);
-        LinearLayout llCrossProto = dialogView.findViewById(R.id.ll_cross_proto);
-        LinearLayout llFollowHeader = dialogView.findViewById(R.id.ll_follow_header);
-        LinearLayout llSendCookie = dialogView.findViewById(R.id.ll_send_cookie);
-        LinearLayout llIgnoreSsl = dialogView.findViewById(R.id.ll_ignore_ssl);
-        TextView tvCrossDomain = dialogView.findViewById(R.id.tv_cross_domain);
-        TextView tvCrossProto = dialogView.findViewById(R.id.tv_cross_proto);
-        TextView tvFollowHeader = dialogView.findViewById(R.id.tv_follow_header);
-        TextView tvSendCookie = dialogView.findViewById(R.id.tv_send_cookie);
-        TextView tvIgnoreSsl = dialogView.findViewById(R.id.tv_ignore_ssl);
-
-        tvUserAgentStatus.setText("exo".equals(currentUaMode[0]) ? "ExoPlayer默认" : "VLC");
-        etMax.setFilters(new InputFilter[]{new InputFilter.LengthFilter(2)});
-        etMax.setText(String.valueOf(currentMax));
-        etMax.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-                    imm.hideSoftInputFromWindow(etMax.getWindowToken(), 0);
-                    llCrossDomain.requestFocus();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getContext().getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
-                    imm.hideSoftInputFromWindow(etMax.getWindowToken(), 0);
-                    llMaxCount.requestFocus();
-                    return true;
-                }
-            }
-            return false;
-        });
-        swCrossDomain.setChecked(crossDomain);
-        swCrossProto.setChecked(crossProto);
-        swFollowHeader.setChecked(followHeader);
-        swIgnoreSsl.setChecked(ignoreSsl);
-        swSendCookie.setChecked(sendCookie);
-
-        final int[] pendingPos = {0};
-        final LinearLayout[] items = {llMaxCount, llCrossDomain, llCrossProto, llFollowHeader, llSendCookie, llIgnoreSsl, llUserAgent};
-        final String[] itemNames = {"maxCount", "crossDomain", "crossProto", "followHeader", "sendCookie", "ignoreSsl", "userAgent"};
-
-        llMaxCount.setBackgroundColor(0x3340A9FF);
-        for (int i = 0; i < llMaxCount.getChildCount(); i++) {
-            View child = llMaxCount.getChildAt(i);
-            if (child instanceof TextView) {
-                ((TextView) child).setTextColor(0xFF40A9FF);
-            } else if (child instanceof EditText) {
-                ((EditText) child).setTextColor(0xFF40A9FF);
-            }
-        }
-
-        View.OnClickListener clickListener = v -> {
-            int currentPos = -1;
-            for (int i = 0; i < items.length; i++) {
-                if (items[i] == v) {
-                    currentPos = i;
+        if (realPos < 0) {
+            for (int i = 0; i < latest.size(); i++) {
+                SourceManager.SourceItem si = latest.get(i);
+                if (si != null && TextUtils.equals(si.name, picked.name)) {
+                    realPos = i;
                     break;
                 }
             }
-
-            if (pendingPos[0] == currentPos) {
-                if (currentPos == 0) {
-                    int currentVal = Integer.parseInt(etMax.getText().toString());
-                    showNumberInputDialog(currentVal, newVal -> {
-                        etMax.setText(String.valueOf(newVal));
-                    });
-                } else if (currentPos == 1) {
-                    swCrossDomain.setChecked(!swCrossDomain.isChecked());
-                } else if (currentPos == 2) {
-                    swCrossProto.setChecked(!swCrossProto.isChecked());
-                } else if (currentPos == 3) {
-                    swFollowHeader.setChecked(!swFollowHeader.isChecked());
-                } else if (currentPos == 4) {
-                    swSendCookie.setChecked(!swSendCookie.isChecked());
-                } else if (currentPos == 5) {
-                    swIgnoreSsl.setChecked(!swIgnoreSsl.isChecked());
-                } else if (currentPos == 6) {
-                    final String[] uaOptions = {"ExoPlayer默认", "VLC"};
-                    final String[] uaValues = {"exo", "vlc"};
-                    int checkedItem = 0;
-                    for (int i = 0; i < uaValues.length; i++) {
-                        if (uaValues[i].equals(currentUaMode[0])) {
-                            checkedItem = i;
-                            break;
-                        }
-                    }
-                    showCommonSelectionDialog("UA切换", uaOptions, checkedItem, (which) -> {
-                        currentUaMode[0] = uaValues[which];
-                        tvUserAgentStatus.setText(uaOptions[which]);
-                    });
-                }
-            } else {
-                for (int i = 0; i < items.length; i++) {
-                    items[i].setBackgroundColor(0xFF272B3A);
-                    for (int j = 0; j < items[i].getChildCount(); j++) {
-                        View child = items[i].getChildAt(j);
-                        if (child instanceof TextView) {
-                            ((TextView) child).setTextColor(Color.WHITE);
-                        } else if (child instanceof EditText) {
-                            ((EditText) child).setTextColor(Color.WHITE);
-                        }
-                    }
-                }
-                v.setBackgroundColor(0x3340A9FF);
-                for (int i = 0; i < ((LinearLayout) v).getChildCount(); i++) {
-                    View child = ((LinearLayout) v).getChildAt(i);
-                    if (child instanceof TextView) {
-                        ((TextView) child).setTextColor(0xFF40A9FF);
-                    } else if (child instanceof EditText) {
-                        ((EditText) child).setTextColor(0xFF40A9FF);
-                    }
-                }
-                pendingPos[0] = currentPos;
-            }
-        };
-
-        View.OnKeyListener keyListener = (v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_CENTER) {
-                    int currentPos = -1;
-                    for (int i = 0; i < items.length; i++) {
-                        if (items[i] == v) {
-                            currentPos = i;
-                            break;
-                        }
-                    }
-                    if (currentPos >= 0) {
-                        if (currentPos == 0) {
-                            int currentVal = Integer.parseInt(etMax.getText().toString());
-                            showNumberInputDialog(currentVal, newVal -> {
-                                etMax.setText(String.valueOf(newVal));
-                            });
-                        } else if (currentPos == 1) {
-                            swCrossDomain.setChecked(!swCrossDomain.isChecked());
-                        } else if (currentPos == 2) {
-                            swCrossProto.setChecked(!swCrossProto.isChecked());
-                        } else if (currentPos == 3) {
-                            swFollowHeader.setChecked(!swFollowHeader.isChecked());
-                        } else if (currentPos == 4) {
-                            swSendCookie.setChecked(!swSendCookie.isChecked());
-                        } else if (currentPos == 5) {
-                            swIgnoreSsl.setChecked(!swIgnoreSsl.isChecked());
-                        } else if (currentPos == 6) {
-                            final String[] uaOptions = {"ExoPlayer默认", "VLC"};
-                            final String[] uaValues = {"exo", "vlc"};
-                            int checkedItem = 0;
-                            for (int i = 0; i < uaValues.length; i++) {
-                                if (uaValues[i].equals(currentUaMode[0])) {
-                                    checkedItem = i;
-                                    break;
-                                }
-                            }
-                            showCommonSelectionDialog("UA切换", uaOptions, checkedItem, (which) -> {
-                                currentUaMode[0] = uaValues[which];
-                                tvUserAgentStatus.setText(uaOptions[which]);
-                            });
-                        }
-                    }
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    int currentPos = -1;
-                    for (int i = 0; i < items.length; i++) {
-                        if (items[i] == v) {
-                            currentPos = i;
-                            break;
-                        }
-                    }
-                    if (currentPos >= 0 && currentPos == items.length - 1 && btnCancel != null) {
-                        btnCancel.requestFocus();
-                        return true;
-                    }
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                    int currentPos = -1;
-                    for (int i = 0; i < items.length; i++) {
-                        if (items[i] == v) {
-                            currentPos = i;
-                            break;
-                        }
-                    }
-                    if (currentPos >= 0 && currentPos == 0) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
-
-        View.OnFocusChangeListener focusListener = (v, hasFocus) -> {
-            int pos = -1;
-            for (int i = 0; i < items.length; i++) {
-                if (items[i] == v) {
-                    pos = i;
-                    break;
-                }
-            }
-            if (hasFocus && pos >= 0) {
-                for (int i = 0; i < items.length; i++) {
-                    items[i].setBackgroundColor(0x00000000);
-                    for (int j = 0; j < items[i].getChildCount(); j++) {
-                        View child = items[i].getChildAt(j);
-                        if (child instanceof TextView) {
-                            ((TextView) child).setTextColor(Color.WHITE);
-                        } else if (child instanceof EditText) {
-                            ((EditText) child).setTextColor(Color.WHITE);
-                        }
-                    }
-                }
-                v.setBackgroundColor(0x3340A9FF);
-                for (int i = 0; i < ((LinearLayout) v).getChildCount(); i++) {
-                    View child = ((LinearLayout) v).getChildAt(i);
-                    if (child instanceof TextView) {
-                        ((TextView) child).setTextColor(0xFF40A9FF);
-                    } else if (child instanceof EditText) {
-                        ((EditText) child).setTextColor(0xFF40A9FF);
-                    }
-                }
-                pendingPos[0] = pos;
-            } else {
-                v.setBackgroundColor(0x00000000);
-                for (int i = 0; i < ((LinearLayout) v).getChildCount(); i++) {
-                    View child = ((LinearLayout) v).getChildAt(i);
-                    if (child instanceof TextView) {
-                        ((TextView) child).setTextColor(Color.WHITE);
-                    } else if (child instanceof EditText) {
-                        ((EditText) child).setTextColor(Color.WHITE);
-                    }
-                }
-            }
-        };
-
-        llMaxCount.setOnClickListener(clickListener);
-        llMaxCount.setOnKeyListener(keyListener);
-        llMaxCount.setOnFocusChangeListener(focusListener);
-        llMaxCount.setNextFocusDownId(R.id.ll_cross_domain);
-        llCrossDomain.setNextFocusUpId(R.id.ll_max_count);
-        llCrossDomain.setOnClickListener(clickListener);
-        llCrossDomain.setOnKeyListener(keyListener);
-        llCrossDomain.setOnFocusChangeListener(focusListener);
-        llCrossProto.setOnClickListener(clickListener);
-        llCrossProto.setOnKeyListener(keyListener);
-        llCrossProto.setOnFocusChangeListener(focusListener);
-        llFollowHeader.setOnClickListener(clickListener);
-        llFollowHeader.setOnKeyListener(keyListener);
-        llFollowHeader.setOnFocusChangeListener(focusListener);
-        llSendCookie.setOnClickListener(clickListener);
-        llSendCookie.setOnKeyListener(keyListener);
-        llSendCookie.setOnFocusChangeListener(focusListener);
-        llIgnoreSsl.setOnClickListener(clickListener);
-        llIgnoreSsl.setOnKeyListener(keyListener);
-        llIgnoreSsl.setOnFocusChangeListener(focusListener);
-        llUserAgent.setOnClickListener(clickListener);
-        llUserAgent.setOnKeyListener(keyListener);
-        llUserAgent.setOnFocusChangeListener(focusListener);
-        llUserAgent.setNextFocusDownId(R.id.btn_redirect_cancel);
-        btnCancel.setNextFocusUpId(R.id.ll_user_agent);
-        btnCancel.setNextFocusRightId(R.id.btn_redirect_save);
-        btnSave.setNextFocusLeftId(R.id.btn_redirect_cancel);
-        btnSave.setNextFocusUpId(R.id.ll_user_agent);
-
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-                .setView(dialogView)
-                .create();
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            dialog.getWindow().setLayout((int) (getContext().getResources().getDisplayMetrics().widthPixels * 0.85),
-                    android.view.WindowManager.LayoutParams.WRAP_CONTENT);
         }
-        final Button finalBtnCancel = btnCancel;
-        final Button finalBtnSave = btnSave;
-        final LinearLayout finalLlUserAgent = llUserAgent;
-        dialog.setOnKeyListener((d, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    dialog.dismiss();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    View focused = dialog.getCurrentFocus();
-                    if (focused != null && focused.equals(finalLlUserAgent) && finalBtnCancel != null) {
-                        finalBtnCancel.requestFocus();
-                        return true;
-                    }
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                    View focused = dialog.getCurrentFocus();
-                    if (focused != null && (focused.equals(finalBtnCancel) || focused.equals(finalBtnSave)) && finalLlUserAgent != null) {
-                        finalLlUserAgent.requestFocus();
-                        return true;
-                    }
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    View focused = dialog.getCurrentFocus();
-                    if (focused != null && focused.equals(finalBtnCancel) && finalBtnSave != null) {
-                        finalBtnSave.requestFocus();
-                        return true;
-                    }
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    View focused = dialog.getCurrentFocus();
-                    if (focused != null && focused.equals(finalBtnSave) && finalBtnCancel != null) {
-                        finalBtnCancel.requestFocus();
-                        return true;
-                    }
-                }
-            }
-            return false;
-        });
-        dialog.show();
-        mainHandler.postDelayed(() -> {
-            if (llMaxCount != null && dialog.isShowing()) {
-                llMaxCount.requestFocus();
-            }
-        }, 200);
+        if (realPos < 0 || realPos >= latest.size()) {
+            return;
+        }
 
-        setupTwoStepTintButton(finalBtnCancel, () -> {
-            dialog.dismiss();
-        }, Color.WHITE, 0xFF55576A);
+        sourceManager.setDefault(realPos);
 
-        btnCancel.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP && finalLlUserAgent != null) {
-                    finalLlUserAgent.requestFocus();
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    return true;
-                }
-            }
-            return false;
-        });
+        SharedPreferences appSp = getContext().getSharedPreferences("app_settings", Context.MODE_PRIVATE);
+        if ("live_history".equals(spKey)) {
+            appSp.edit().remove("custom_live_url").apply();
+            UrlConfig.LIVE_URL = latest.get(realPos).url;
+        } else if ("epg_history".equals(spKey)) {
+            appSp.edit().remove("custom_epg_url").apply();
+            UrlConfig.EPG_URL = latest.get(realPos).url;
+        }
 
-        setupTwoStepTintButton(finalBtnSave, () -> {
-            String maxStr = etMax.getText().toString().trim();
-            int newMax = 5;
-            if (!TextUtils.isEmpty(maxStr)) {
-                try {
-                    newMax = Integer.parseInt(maxStr);
-                    if(newMax < 1) newMax = 1;
-                    if(newMax > 20) newMax = 20;
-                }catch (Exception ignored){ newMax =5; }
-            }
-            SharedPreferences.Editor editor = sp.edit();
-            editor.putInt(KEY_REDIRECT_MAX_COUNT, newMax);
-            editor.putBoolean(KEY_REDIRECT_CROSS_DOMAIN, swCrossDomain.isChecked());
-            editor.putBoolean(KEY_REDIRECT_CROSS_PROTOCOL, swCrossProto.isChecked());
-            editor.putBoolean(KEY_REDIRECT_FOLLOW_HEADERS, swFollowHeader.isChecked());
-            editor.putBoolean(KEY_REDIRECT_IGNORE_SSL, swIgnoreSsl.isChecked());
-            editor.putBoolean(KEY_REDIRECT_SEND_COOKIE, swSendCookie.isChecked());
-            editor.putString(KEY_USER_AGENT_MODE, currentUaMode[0]);
-            editor.apply();
-            updateRedirectSettingText();
-            Toast.makeText(getContext(), "重定向配置保存成功", Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
-        }, Color.WHITE, 0xFF55576A);
+        Intent intent = new Intent("com.tv.live.REFRESH_LIVE_AND_EPG");
+        intent.setPackage(getContext().getPackageName());
+        getContext().sendBroadcast(intent);
+
+        Toast.makeText(getContext(), "已切换到：" + latest.get(realPos).name, Toast.LENGTH_SHORT).show();
+        refreshStreamStatusRows();
     }
+
+    /**
+     * 【2026-10-20 对齐参考包】订阅管理三级：<b>只保留二维码</b>的三层胶囊。
+     *
+     * <p>源列表 / 输入框 / 增删按钮全部移除，扫码进入网页端管理；
+     * 与参考包 showQrCapsule 一致：二维码 + 访问地址 + 「关闭」行，BACK 返回二级面板。
+     */
+    private void showSubscriptionDialog(String title) {
+        Bitmap qrBitmap = null;
+        try {
+            qrBitmap = qrCodeManager.createQR(currentWebUrl, 480);
+        } catch (Exception e) {
+            LogBridge.e("SUBSCRIPTION", "二维码生成失败: " + e.getMessage(), e);
+        }
+        openQrCapsule(title, qrBitmap, currentWebUrl);
+    }
+
+    /** 叠出「二维码」三级胶囊；level1Root 指向当前二级胶囊，关闭后回到二级而不是一级 */
+    private void openQrCapsule(String title, Bitmap qrBitmap, String address) {
+        if (capsuleStack.size() >= CAPSULE_MAX_DEPTH) {
+            return;
+        }
+        View viewOutside = findViewById(R.id.view_outside);
+        if (viewOutside == null || !(viewOutside.getParent() instanceof FrameLayout)) {
+            return;
+        }
+        FrameLayout host = (FrameLayout) viewOutside.getParent();
+        SettingsCapsulePanel below = capsuleStack.peek();
+        View level1Root = (below == null) ? scrollView : below.getView();
+
+        final SettingsCapsulePanel[] holder = new SettingsCapsulePanel[1];
+        SettingsCapsulePanel panel = new SettingsCapsulePanel(getContext(), host, level1Root, viewOutside,
+                title, new String[]{"关闭"}, -1, which -> {
+                    if (holder[0] != null) {
+                        capsuleStack.remove(holder[0]);
+                    }
+                }, false, qrBitmap, address);
+        holder[0] = panel;
+        panel.setOnRequestClose(this::popCapsule);
+        capsuleStack.push(panel);
+        panel.show();
+    }
+
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         try {
-            View[] items = {
-                findViewById(R.id.item_boot),
-                findViewById(R.id.item_reverse),
-                findViewById(R.id.item_pip),
-                findViewById(R.id.item_channel_line),
-                findViewById(R.id.item_resolution),
-                findViewById(R.id.item_decoder),
-                findViewById(R.id.item_renderer),
-                findViewById(R.id.tv_screen_ratio),
-                findViewById(R.id.item_redirect),
-                findViewById(R.id.item_live_subscribe),
-                findViewById(R.id.item_epg_subscribe),
-                findViewById(R.id.item_source_mode),
-                findViewById(R.id.item_background_switch),
-                findViewById(R.id.item_exit_dialog),
-                findViewById(R.id.item_version_info),
-                findViewById(R.id.item_js_update)
-            };
-
+            // 【2026-10-20 三级菜单方案】BACK 优先逐层退回二级胶囊，栈空才关掉设置面板
             if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (!capsuleStack.isEmpty()) {
+                    popCapsule();
+                    return true;
+                }
                 backHandled = true;
                 dismiss();
                 return true;
             }
+
+            // 有胶囊浮层时，方向/确认键交给胶囊内部处理，不做一级列表导航
+            if (!capsuleStack.isEmpty()) {
+                return super.onKeyDown(keyCode, event);
+            }
+
+            View[] items = {
+                findViewById(R.id.item_boot),
+                findViewById(R.id.item_pip),
+                findViewById(R.id.item_source_mode),
+                findViewById(R.id.item_play_group),
+                findViewById(R.id.item_channel_line),
+                findViewById(R.id.item_resolution),
+                findViewById(R.id.item_live_subscribe),
+                findViewById(R.id.item_epg_subscribe),
+                findViewById(R.id.item_exit_dialog),
+                findViewById(R.id.item_extra_group)
+            };
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 int nextPos = selectedItemPosition + 1;
@@ -2338,6 +1906,10 @@ public class SettingsDialog extends android.app.Dialog {
         }
         isDismissing = true;
         try {
+            // 关闭整窗时直接丢弃所有胶囊层（不再逐层恢复一级面板）
+            while (!capsuleStack.isEmpty()) {
+                capsuleStack.poll().discard();
+            }
             if (webServerManager != null) {
                 webServerManager.stop();
             }
@@ -2369,8 +1941,8 @@ public class SettingsDialog extends android.app.Dialog {
 
     private void setupTwoStepTintButton(Button button, Runnable action, int normalTextColor, int normalBgColor) {
         final boolean[] pending = {false};
-        final int selectedTextColor = 0xFF40A9FF;
-        final int selectedBgColor = 0xFFB3D9FF;
+        // 【2026-10-20 橄榄底 + 黄字方案】焦点态由浅蓝 #40A9FF/#B3D9FF → 橄榄底 + 2dp 白描边 + 黄字
+        final int selectedTextColor = 0xFFFFD166;
 
         final ColorStateList origTint = button.getBackgroundTintList();
         final android.graphics.drawable.Drawable origBg = button.getBackground();
@@ -2382,8 +1954,9 @@ public class SettingsDialog extends android.app.Dialog {
                 button.setTextColor(selectedTextColor);
                 button.setTypeface(origTypeface, Typeface.BOLD);
                 android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
-                gd.setColor(selectedBgColor);
-                gd.setCornerRadius(dp2px(6));
+                gd.setColor(0xFF3C3525);
+                gd.setStroke(dp2px(2), 0xFFFFFFFF);
+                gd.setCornerRadius(dp2px(8));
                 button.setBackground(gd);
             } else {
                 pending[0] = false;

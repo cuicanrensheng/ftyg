@@ -32,6 +32,10 @@
     <string name="exit_dialog">退出弹窗</string>
     <string name="close">关闭</string>
     <string name="web_settings_url">网页设置：http://设备IP:10481</string>
+    <string name="settings_play_group">▦ 播放设置</string>
+    <string name="settings_extra_group">▦ 其他设置</string>
+    <string name="settings_group_count">3 项</string>
+    <string name="settings_group_arrow">›</string>
 
     <string name="confirm_exit">确认退出</string>
     <string name="settings_option">设置选项</string>

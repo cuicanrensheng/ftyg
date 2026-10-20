@@ -1,7 +1,6 @@
 package com.tv.live;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,9 +16,10 @@ public class SourceAdapter extends ArrayAdapter<SourceManager.SourceItem> {
     private int selectedPosition = -1;
     private OnDeleteClickListener onDeleteClickListener;
 
-    private static final int COLOR_FOCUS = Color.parseColor("#40A9FF");
-    private static final int COLOR_FOCUS_BG = 0x3340A9FF;
-    private static final int COLOR_HOVER_BG = 0x4440A9FF;
+    // 【2026-10-20 橄榄底 + 黄字方案】原蓝色焦点语言（#40A9FF / #3340A9FF）改为
+    // 与直播频道面板一致的黄字 #FFD166；行背景改用统一的 list_item_focused / list_item_default。
+    private static final int COLOR_FOCUS = 0xFFFFD166;
+    private static final int COLOR_NORMAL = 0xFFFFFFFF;
 
     public interface OnDeleteClickListener {
         void onDelete(int position);
@@ -94,18 +94,20 @@ public class SourceAdapter extends ArrayAdapter<SourceManager.SourceItem> {
         holder.deleteBtn.setClickable(true);
         holder.deleteBtn.setFocusable(false);
 
-        if (position == selectedPosition) {
+        if (convertView.isFocused()) {
+            // 焦点态：橄榄底 + 2dp 白描边 + 黄字
             holder.tv.setTextColor(COLOR_FOCUS);
             holder.indexTv.setTextColor(COLOR_FOCUS);
-            convertView.setBackgroundColor(COLOR_FOCUS_BG);
-        } else if (convertView.isFocused()) {
+            convertView.setBackgroundResource(R.drawable.list_item_focused);
+        } else if (position == selectedPosition) {
+            // 选中未聚焦：默认胶囊底 + 黄字
             holder.tv.setTextColor(COLOR_FOCUS);
             holder.indexTv.setTextColor(COLOR_FOCUS);
-            convertView.setBackgroundColor(COLOR_HOVER_BG);
+            convertView.setBackgroundResource(R.drawable.list_item_default);
         } else {
-            holder.tv.setTextColor(Color.WHITE);
-            holder.indexTv.setTextColor(Color.WHITE);
-            convertView.setBackgroundColor(Color.TRANSPARENT);
+            holder.tv.setTextColor(COLOR_NORMAL);
+            holder.indexTv.setTextColor(COLOR_NORMAL);
+            convertView.setBackgroundResource(R.drawable.list_item_default);
         }
 
         return convertView;

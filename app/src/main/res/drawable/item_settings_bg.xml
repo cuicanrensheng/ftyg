@@ -1,28 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  直播模式：设置面板行背景
+  【2026-10-20 橄榄底 + 黄字方案】对齐直播频道面板的三态口径：
+    · 焦点态   → 橄榄暗金底 #3C3525 + 2dp 白描边 + 8dp 圆角（复用 list_item_focused）
+    · 默认/选中未聚焦 → 胶囊底 #212121 + 8dp 圆角（复用 list_item_default）
+  文字颜色由 @color/setting_item_text_color 单独负责（焦点/选中 → 黄字 #FFD166）。
+  设置项是普通可聚焦 View（非 AbsListView 的 item），state_focused 选择器生效，
+  因此无需像频道列表那样由适配器显式指定背景。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_selected="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#3340A9FF" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
-    <item android:state_activated="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#3340A9FF" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
-    <item android:state_pressed="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#3340A9FF" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
-    <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#3340A9FF" />
-            <corners android:radius="6dp" />
-        </shape>
-    </item>
-    <item android:drawable="@android:color/transparent" />
+    <item android:state_focused="true" android:drawable="@drawable/list_item_focused" />
+    <item android:drawable="@drawable/list_item_default" />
 </selector>

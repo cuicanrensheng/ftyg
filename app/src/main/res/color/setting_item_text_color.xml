@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  直播模式：设置面板项文字颜色
+  【2026-10-20 橄榄底 + 黄字方案】原四态蓝字 #40A9FF → 统一为黄字 #FFD166
+  （与直播频道面板的焦点/选中态一致），默认仍为白字 #FFFFFF。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 选中状态：蓝色 -->
-    <item android:color="#40A9FF" android:state_selected="true" />
-    <item android:color="#40A9FF" android:state_activated="true" />
-    <!-- 按下状态：蓝色（触摸时） -->
-    <item android:color="#40A9FF" android:state_pressed="true" />
-    <!-- 焦点状态：蓝色（遥控器） -->
-    <item android:color="#40A9FF" android:state_focused="true" />
-    <!-- 默认：白色 -->
-    <item android:color="#FFFFFF" />
+    <!-- 选中状态：黄字 -->
+    <item android:color="#FFFFD166" android:state_selected="true" />
+    <item android:color="#FFFFD166" android:state_activated="true" />
+    <!-- 按下状态：黄字（触摸时） -->
+    <item android:color="#FFFFD166" android:state_pressed="true" />
+    <!-- 焦点状态：黄字（遥控器） -->
+    <item android:color="#FFFFD166" android:state_focused="true" />
+    <!-- 默认：白字 -->
+    <item android:color="#FFFFFFFF" />
 </selector>

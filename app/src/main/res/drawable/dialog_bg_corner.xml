@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  三级弹窗（源模式 / 解码器 / 渲染方式 / 屏幕比例 / 版本信息 / HTTP重定向 / 订阅管理）统一底板
+  【2026-10-20 三级面板统一】深蓝灰 #272B3A → 中性近黑 #1A1A1A，与二级胶囊面板、设置面板同底
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#272B3A" />
+    <solid android:color="#1A1A1A" />
     <corners android:radius="20dp" />
 </shape>

@@ -1,15 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTP 重定向配置弹窗：设置行背景
+  【2026-10-20 橄榄底 + 黄字方案】焦点态由浅蓝 #3340A9FF 改为橄榄暗金底 #3C3525
+  + 2dp 白描边 + 8dp 圆角（复用 list_item_focused）；默认行底统一为胶囊底 #212121。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#3340A9FF" />
-            <corners android:radius="8dp" />
-        </shape>
-    </item>
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#272B3A" />
-            <corners android:radius="8dp" />
-        </shape>
-    </item>
+    <item android:state_focused="true" android:drawable="@drawable/list_item_focused" />
+    <item android:drawable="@drawable/list_item_default" />
 </selector>

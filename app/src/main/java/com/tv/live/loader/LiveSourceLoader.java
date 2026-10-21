@@ -187,8 +187,11 @@ public class LiveSourceLoader {
                     // 【2026-10-19 用户口径】给「没有自家直播频道」的源补上「央视」分组：
                     //   源4（影视轮播）/源7/源8 切过去后「直播」板块是空的，补一份内置央视列表
                     //   （取自内置源1 的央视条目，31 个频道，带 catvod 台标，随包离线可用）。
-                    if (isAsset || isAfhgrj || isRyb) {
+                    if (isAsset) {
                         rawContent = appendCctvGroup(rawContent);
+                    } else if (isAfhgrj || isRyb) {
+                        // 【2026-10-21】源7/源8：央视分组里再并入卫视频道
+                        rawContent = appendCctvAndWeishi(context, rawContent);
                     }
                     long dlMs = System.currentTimeMillis() - tDlStart;
                     if (rawContent == null || rawContent.isEmpty()) {
@@ -635,22 +638,40 @@ public class LiveSourceLoader {
 
     /** 内置央视片段（assets/cctv_group.m3u）：取自内置源1 的央视条目，group-title="央视"、带 catvod 台标 */
     private static final String CCTV_GROUP_ASSET = "cctv_group.m3u";
-    private String sCctvFragment;
+    /** 【2026-10-21】内置卫视片段（assets/weishi_group.m3u）：39 个卫视频道，同挂 group-title="央视" */
+    private static final String WEISHI_GROUP_ASSET = "weishi_group.m3u";
+    private static final java.util.Map<String, String> sFragments = new java.util.HashMap<>();
 
     /**
-     * 读取内置「央视」片段（只读一次并常驻；离线可用，不额外联网）。
+     * 读取内置片段（按 asset 名只读一次并常驻；离线可用，不额外联网）。
      * 片段格式与网络源一致：{@code #EXTINF:-1 tvg-name=… tvg-logo=… group-title="央视",频道名} + 地址行。
      */
-    private String cctvFragment() {
-        if (sCctvFragment != null) return sCctvFragment;
-        try {
-            String t = readAssetSource(CCTV_GROUP_ASSET);
-            sCctvFragment = (t == null) ? "" : t.trim();
-        } catch (Throwable e) {
-            LogBridge.w(TAG, "【央视分组】内置片段读取失败: " + e.getMessage());
-            sCctvFragment = "";
+    private static String fragment(Context ctx, String asset) {
+        synchronized (sFragments) {
+            String cached = sFragments.get(asset);
+            if (cached != null) return cached;
+            String t = "";
+            try (InputStream in = ctx.getAssets().open(asset)) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line).append('\n');
+                t = sb.toString().trim();
+            } catch (Throwable e) {
+                LogBridge.w(TAG, "【央视分组】内置片段读取失败(" + asset + "): " + e.getMessage());
+            }
+            sFragments.put(asset, t);
+            return t;
         }
-        return sCctvFragment;
+    }
+
+    private static int countExtinf(String frag) {
+        int n = 0;
+        if (frag == null) return 0;
+        for (String line : frag.split("\n")) {
+            if (line.startsWith("#EXTINF")) n++;
+        }
+        return n;
     }
 
     /**
@@ -666,14 +687,43 @@ public class LiveSourceLoader {
     private String appendCctvGroup(String m3u) {
         if (m3u == null || m3u.isEmpty()) return m3u;
         if (m3u.contains("group-title=\"央视\"")) return m3u;
-        String frag = cctvFragment();
+        String frag = fragment(context, CCTV_GROUP_ASSET);
         if (frag.isEmpty()) return m3u;
-        int n = 0;
-        for (String line : frag.split("\n")) {
-            if (line.startsWith("#EXTINF")) n++;
-        }
-        LogBridge.i(TAG, "【央视分组】已补入直播频道 " + n + " 个（源4/源7/源8 补齐直播源）");
+        int n = countExtinf(frag);
+        LogBridge.i(TAG, "【央视分组】已补入直播频道 " + n + " 个（源4 补齐直播源）");
         return m3u + (m3u.endsWith("\n") ? "" : "\n") + frag + "\n";
+    }
+
+    /**
+     * 【2026-10-21 用户口径】源7/源8 的「央视」分组里再并入卫视频道。
+     *
+     * <p>两个片段都挂 {@code group-title="央视"}，解析后同属一个分组：先 31 个央视系，
+     * 后 39 个卫视系（{@code assets/weishi_group.m3u}，取自内置源1，离线可用）。
+     * 幂等：已含央视分组直接返回。
+     */
+    private static String appendCctvAndWeishi(Context ctx, String m3u) {
+        if (m3u == null || m3u.isEmpty()) return m3u;
+        if (m3u.contains("group-title=\"央视\"")) return m3u;
+        String cctv = fragment(ctx, CCTV_GROUP_ASSET);
+        String weishi = fragment(ctx, WEISHI_GROUP_ASSET);
+        int c = countExtinf(cctv), w = countExtinf(weishi);
+        if (c + w == 0) return m3u;
+        StringBuilder sb = new StringBuilder(m3u);
+        if (!m3u.endsWith("\n")) sb.append('\n');
+        if (!cctv.isEmpty()) sb.append(cctv).append('\n');
+        if (!weishi.isEmpty()) sb.append(weishi).append('\n');
+        LogBridge.i(TAG, "【央视分组】已补入央视 " + c + " + 卫视 " + w + " 个（源7/源8）");
+        return sb.toString();
+    }
+
+    /**
+     * 缓存命中时补组：源7/源8 的 {@code live_source} 缓存可能是升级前写入的（不含卫视），
+     * 启动直接读缓存会绕过网络分支，这里按当前源补一次，保证新版首次启动就能看到卫视。
+     */
+    public static String appendExtraGroupsForCache(Context ctx, String m3u, String sourceUrl) {
+        if (m3u == null || m3u.isEmpty() || sourceUrl == null) return m3u;
+        if (!sourceUrl.startsWith("afhgrj://") && !sourceUrl.startsWith("ryb://")) return m3u;
+        return appendCctvAndWeishi(ctx, m3u);
     }
 
     private void saveFallback(String content) {

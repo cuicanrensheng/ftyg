@@ -499,7 +499,9 @@ public class AppCoreManager {
             String line;
             while ((line = br.readLine()) != null) sb.append(line).append('\n');
             br.close();
-            return sb.toString();
+            // 【2026-10-21】源7/源8：缓存可能是升级前写入的（无央视/卫视分组），
+            // 这里按当前源补一次，保证新版首次启动即生效（幂等，已补过直接返回）。
+            return LiveSourceLoader.appendExtraGroupsForCache(context, sb.toString(), UrlConfig.LIVE_URL);
         } catch (Exception e) {
             return null;
         }

@@ -9,8 +9,10 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.tv.live.util.LogBridge;
@@ -21,16 +23,47 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 【2026-10-17 直播频道列表抽屉】
+ * 【2026-10-21 OTT 频道列表弹窗 · 双栏版】
  *
- * <p>直播形态的"选集"：贴右侧竖排，顶部按分组过滤（全部 + 源里的 group-title），
- * 每行 = 频道号 + 频道名 + 当前节目；当前频道黄底（不抢焦点色，焦点才黄底）。
- * 支持 CH± 翻页、数字键直输频道号、**焦点锁定在抽屉内**（只能按返回键回控制栏，由宿主统一处理）。
+ * <p>按设计稿重排（原为「顶部横向页签 + 单列频道」）：
+ * <pre>
+ *  ┌ 频道列表                                              共911台 ┐
+ *  │ ┌────────┐   ┌────────────────────────────────────────────┐ │
+ *  │ │  全部  │   │ 01  CCTV1综合                              │ │
+ *  │ │  卫视  │   │ 02  CCTV2财经                              │ │
+ *  │ │ 电影…  │   │ 03  CCTV3综艺                              │ │
+ *  │ │ 点播…  │   │ …                                          │ │
+ *  │ │ 虎牙…  │   │                                            │ │
+ *  │ └────────┘   └────────────────────────────────────────────┘ │
+ *  │ CH± 翻页 · 数字键输频道号 · 返回键回到控制栏                   │
+ *  └──────────────────────────────────────────────────────────────┘
+ * </pre>
+ *
+ * <p>交互约定（延续原口径）：
+ * <ul>
+ *   <li>焦点<b>锁定在弹窗内</b>，只能按返回键回控制栏（由宿主统一处理）；</li>
+ *   <li>左右键在「分组列 ↔ 频道列」之间移动，上下键在各自列内移动；</li>
+ *   <li>CH± 按可视行数滚动，数字键 = 当前可视区第 N 个。</li>
+ * </ul>
  */
 public class ChannelListPanel extends LinearLayout {
 
     private static final String TAG = "ChannelList";
-    private static final int ROWS = 6;
+
+    // ---- 视觉规格（对齐设计稿） ----
+    private static final int PANEL_BG = 0xFF1B1B1B;
+    private static final int ITEM_BG = 0xFF292929;
+    private static final int ITEM_BG_CURRENT = 0xFF303030;
+    private static final int GOLD = 0xFFFFD166;
+    private static final int GOLD_TOP = 0xFFFFDF85;
+    private static final int GOLD_BOTTOM = 0xFFFFC94D;
+
+    private static final int ROW_HEIGHT_DP = 37;
+    private static final int ROW_GAP_DP = 11;
+    private static final int GROUP_HEIGHT_DP = 41;
+    private static final int GROUP_GAP_DP = 11;
+    /** 弹窗宽度：恢复改造前的 560dp（贴右侧、控制栏上方） */
+    private static final int PANEL_WIDTH_DP = 560;
 
     public interface OnPick {
         void onPick(Channel channel);
@@ -40,7 +73,11 @@ public class ChannelListPanel extends LinearLayout {
         void onClose();
     }
 
-    /** 由宿主提供节目名（可为 null） */
+    /**
+     * 由宿主提供节目名。
+     * 【2026-10-21】设计稿的行内只有「序号 + 频道名」，不再渲染节目名；
+     * 保留该入参只为兼容宿主调用，后续若要在行尾加节目名可直接用。
+     */
     public interface ProgramLookup {
         String nowPlaying(Channel ch);
     }
@@ -59,22 +96,70 @@ public class ChannelListPanel extends LinearLayout {
 
     private final List<String> groups = new ArrayList<>();
     private String activeGroup = "全部";
-    /** 首屏高度测量失败时的重试次数（避免无限 postDelayed） */
-    private int capRetry;
     private boolean closed;
 
     private OnPick onPick;
     private OnClose onClose;
 
-    private LinearLayout listBox, tabRow;
-    /** 页签行容器：分组多时横向滚动，避免后面的分组被挤出抽屉 */
-    private android.widget.HorizontalScrollView svTabs;
-    /** 列表容器：让焦点移动能把目标行滚进可视区（行数超出抽屉高度时必需） */
-    private android.widget.ScrollView listScroll;
+    /** 主体（左右两列），高度按可视空间封顶，超出时两列各自滚动 */
+    private LinearLayout body;
+    /** 右列：频道列表 */
+    private LinearLayout listBox;
+    /** 左列：分组胶囊 */
+    private LinearLayout groupBox;
+    private ScrollView groupScroll, listScroll;
     private TextView tvPage;
+    /** 当前选中的分组胶囊（行内左键回落到它） */
+    private TextView activeTabView;
+
     private final List<View> rows = new ArrayList<>();
+    private final List<View> tabViews = new ArrayList<>();
     private final List<Channel> rowChannels = new ArrayList<>();
     private List<Channel> filtered = new ArrayList<>();
+    /** 最近一次聚焦的频道行（从分组列按右键回列表时用它定位） */
+    private int lastRowIdx = 0;
+    private int capRetry = 0;
+    /** 弹窗内最后一次拥有焦点的控件（焦点被系统清空/越界时拉回它） */
+    private View lastFocusedInside;
+    /**
+     * 【2026-10-21】虚拟焦点区：0=左侧分组列，1=右侧频道列。
+     *
+     * <p>实测左侧分组胶囊拿到 Android 焦点后会被系统清成 null（requestFocus 返回 true，
+     * 但 0.5s 后焦点丢失），所以分组列不再依赖真实焦点：Android 焦点固定在频道行上，
+     * 分组列的"焦点态"由本字段 + 自绘白描边表达，方向键全部由 {@link #handleNav} 驱动。
+     */
+    private int focusZone = 1;
+    private int groupFocusIdx = 0;
+
+    /**
+     * 【2026-10-21】弹窗自带焦点守卫。
+     *
+     * <p>实测：焦点从频道行移到左侧分组胶囊后，约 0.5s 会被系统清成 null
+     * （下一次按键时 {@code findFocus()} 为 null，按键落到控制栏）。宿主的
+     * 抽屉看门狗只在 newFocus 非空时才会兜底，清空事件拦不住，所以这里自己兜：
+     * 一旦焦点离开弹窗或被清空，<b>立刻</b>还回上一次在弹窗内的控件。
+     */
+    private final ViewTreeObserver.OnGlobalFocusChangeListener focusGuard =
+            (oldF, newF) -> {
+                if (closed) return;
+                LogBridge.i(TAG, "焦点 " + describe(oldF) + " → " + describe(newF));
+                if (newF != null && isDescendantOf(newF, this)) {
+                    lastFocusedInside = newF;
+                    return;
+                }
+                post(() -> {
+                    if (closed || hasFocusInside()) return;
+                    View back = (lastFocusedInside != null && lastFocusedInside.isAttachedToWindow()
+                            && lastFocusedInside.isFocusable())
+                            ? lastFocusedInside : null;
+                    if (back == null && !rows.isEmpty()) {
+                        back = rows.get(Math.min(lastRowIdx, rows.size() - 1));
+                    }
+                    if (back == null) return;
+                    boolean ok = back.requestFocus();
+                    LogBridge.i(TAG, "焦点被清空/越界 → 拉回 " + describe(back) + " 成功=" + ok);
+                });
+            };
 
     public ChannelListPanel(Context context, FrameLayout root, List<Channel> channels,
                             Channel current, ProgramLookup lookup) {
@@ -84,8 +169,8 @@ public class ChannelListPanel extends LinearLayout {
         this.current = current;
         this.lookup = lookup;
         setOrientation(VERTICAL);
-        setBackground(round(0xFF1A1A1A, 16));
-        setPadding(dp(24), dp(18), dp(24), dp(18));
+        setBackground(round(PANEL_BG, 24));
+        setPadding(dp(24), dp(16), dp(24), dp(16));
         setFocusable(false);
         collectGroups();
         build();
@@ -107,7 +192,7 @@ public class ChannelListPanel extends LinearLayout {
     }
 
     /**
-     * 频道 → 抽屉里的分组名。
+     * 频道 → 弹窗里的分组名。
      *
      * <p>与主界面 Tab 完全同口径：
      * <ul>
@@ -130,14 +215,10 @@ public class ChannelListPanel extends LinearLayout {
         groups.add("全部");
         LinkedHashSet<String> set = new LinkedHashSet<>();
         for (Channel c : allChannels) {
-            // 【2026-10-17】与主界面分组同一口径（见 groupOf）。
             String g = groupOf(c);
             if (isEmpty(g) || "全部".equals(g)) continue;
             set.add(g);
         }
-        // 【2026-10-17】去掉「只取前 4 个分组」的上限：只取 4 个会导致后面的分组
-        // 根本不出现在抽屉里（用户实测"还有分组没有显示"）。
-        // 页签行已放进 HorizontalScrollView，分组再多也能横向滚动。
         groups.addAll(set);
         LogBridge.i(TAG, "频道列表分组共 " + groups.size() + " 个：" + groups);
     }
@@ -146,142 +227,211 @@ public class ChannelListPanel extends LinearLayout {
         return s == null || s.trim().isEmpty();
     }
 
+    // ==================== 构建 ====================
+
     private void build() {
+        // ---- 顶栏：标题 + 总台数 ----
         LinearLayout header = new LinearLayout(getContext());
         header.setOrientation(HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        TextView title = text("频道列表", 18, 0xFF9E9E9E, false);
+        TextView title = text("频道列表", 18, 0xFF9A9A9A, false);
         header.addView(title, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        tvPage = text("", 13, 0xFFFFD166, false);
+        tvPage = text("", 15, GOLD, false);
         header.addView(tvPage);
 
-        tabRow = new LinearLayout(getContext());
-        tabRow.setOrientation(HORIZONTAL);
-        // 【2026-10-17】页签行放进横向滚动容器：源1/源2 有 卫视/总台/央视/地方… 多个分组，
-        // 抽屉只有 560dp 宽，直接 addView 会把后面的分组挤到屏幕外（"还有分组没有显示"）。
-        // 放在 HorizontalScrollView 里，焦点移到哪个页签就自动横向滚过去。
-        svTabs = new android.widget.HorizontalScrollView(getContext());
-        svTabs.setHorizontalScrollBarEnabled(false);
-        svTabs.setFocusable(false);
-        svTabs.addView(tabRow, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+        // ---- 主体：左分组列 + 右频道列 ----
+        body = new LinearLayout(getContext());
+        body.setOrientation(HORIZONTAL);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        tlp.topMargin = dp(10);
-        addView(svTabs, tlp);
-        buildTabs();
+        blp.topMargin = dp(12);
+        addView(body, blp);
 
+        // 左列：竖向分组胶囊（分组多时可滚动）
+        groupBox = new LinearLayout(getContext());
+        groupBox.setOrientation(VERTICAL);
+        groupScroll = new ScrollView(getContext());
+        groupScroll.setVerticalScrollBarEnabled(false);
+        groupScroll.setHorizontalScrollBarEnabled(false);
+        groupScroll.setFocusable(false);
+        groupScroll.addView(groupBox, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 0.62f);
+        body.addView(groupScroll, glp);
+
+        // 右列：频道列表
         listBox = new LinearLayout(getContext());
         listBox.setOrientation(VERTICAL);
-        // 【2026-10-17】列表包一层 ScrollView：抽屉高度被屏幕限制时，
-        // 焦点移动要能把目标行"滚进可视区"（ScrollView.requestChildFocus 自带此行为）。
-        // 之前直接 addView(listBox)：行数超出可视高度时既不能滚、焦点也带不动列表。
-        listScroll = new android.widget.ScrollView(getContext());
+        listScroll = new ScrollView(getContext());
         listScroll.setVerticalScrollBarEnabled(false);
         listScroll.setFocusable(false);
-        listScroll.addView(listBox, new LinearLayout.LayoutParams(
+        listScroll.addView(listBox, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        slp.topMargin = dp(10);
-        addView(listScroll, slp);
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        slp.leftMargin = dp(18);
+        body.addView(listScroll, slp);
 
-        TextView hint = text("CH± 翻页 · 数字键输频道号 · 返回键回到控制栏", 12, 0xFF5F5F5F, false);
+        buildGroups();
+
+        // ---- 底部提示 ----
+        TextView hint = text("CH± 翻页 · 数字键输频道号 · 返回键回到控制栏", 11, 0xFF6E6E6E, false);
         LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        hlp.topMargin = dp(10);
+        hlp.topMargin = dp(8);
         addView(hint, hlp);
     }
 
-    private void buildTabs() {
-        tabRow.removeAllViews();
+    private void buildGroups() {
+        groupBox.removeAllViews();
+        tabViews.clear();
         for (final String g : groups) {
-            TextView tab = new TextView(getContext());
+            final TextView tab = new TextView(getContext());
             tab.setText(g);
-            tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            tab.setGravity(Gravity.CENTER);
+            tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+            tab.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
             tab.setIncludeFontPadding(false);
             tab.setSingleLine(true);
-            tab.setPadding(dp(14), 0, dp(14), 0);
-            tab.setFocusable(true);
-            tab.setFocusableInTouchMode(true);
-            styleTab(tab, g.equals(activeGroup), false);
-            tab.setOnClickListener(v -> {
-                activeGroup = g;
-                // 【2026-10-17 修复「点分组后焦点跳回上一频道」】
-                // 原来这里调 buildTabs() = tabRow.removeAllViews()，把**正在被聚焦的这个页签**
-                // 一起删掉 → 窗口里焦点所有者消失，Android 把焦点交给层级里第一个可聚焦控件
-                // （就是控制栏的「‹ 上一频道」）。现在改成只重刷样式，页签对象不动：
-                // 焦点原地不动，且不会出现"接下来按确认键又落回全部"的连带问题。
-                restyleTabs();
-                rebuild();
-                capListHeight();
-                listScroll.scrollTo(0, 0);   // 换分组回到列表顶部
-                v.requestFocus();
-            });
-            tab.setOnFocusChangeListener((v, has) -> styleTab((TextView) v, g.equals(activeGroup), has));
+            tab.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tab.setPadding(dp(19), 0, dp(12), 0);
+            // 分组列走"虚拟焦点"：不让 Android 真实焦点落在这里（会被系统清空），
+            // 焦点态由 focusZone/groupFocusIdx + 白描边自绘。
+            tab.setFocusable(false);
+            tab.setFocusableInTouchMode(false);
+            if (g.equals(activeGroup)) activeTabView = tab;
+            styleGroup(tab, g.equals(activeGroup), false);
+            tab.setOnClickListener(v -> activateGroup(g, tab));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, dp(32));
-            lp.rightMargin = dp(8);
-            tabRow.addView(tab, lp);
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(GROUP_HEIGHT_DP));
+            lp.bottomMargin = dp(GROUP_GAP_DP);
+            groupBox.addView(tab, lp);
+            tabViews.add(tab);
         }
     }
 
-    /** 只重刷页签样式，不重建视图（重建会把焦点所有者删掉 → 焦点掉到控制栏） */
-    private void restyleTabs() {
-        for (int i = 0; i < tabRow.getChildCount(); i++) {
-            View c = tabRow.getChildAt(i);
+    /** 切分组：只重刷胶囊样式 + 重建右列，焦点留在分组列 */
+    private void activateGroup(String g, TextView tab) {
+        int idx = indexOf(tabViews, tab);
+        if (idx >= 0) groupFocusIdx = idx;
+        if (g.equals(activeGroup)) {
+            focusZone = 0;
+            restyleGroups();
+            restyleRows();
+            return;
+        }
+        activeGroup = g;
+        activeTabView = tab;
+        restyleGroups();
+        // 重建会摘掉当前焦点行，期间焦点守卫可能把焦点收回；重建后仍停在分组列
+        rebuild(false);
+        focusZone = 0;
+        // 切分组后右列从头开始看：把锚点行重置到第一行（Android 焦点仍在频道列内部，
+        // 只是不再有金色焦点态），同时 ScrollView 自动滚回顶部
+        if (!rows.isEmpty()) {
+            lastRowIdx = 0;
+            rows.get(0).requestFocus();
+        }
+        listScroll.scrollTo(0, 0);
+        restyleGroups();
+        restyleRows();
+        ensureGroupVisible();
+        LogBridge.i(TAG, "切换分组：" + g + "（分组列焦点 idx=" + groupFocusIdx + "），右列重建");
+    }
+
+    /** 只重刷分组样式，不重建视图（重建会把焦点所有者删掉 → 焦点掉到控制栏） */
+    private void restyleGroups() {
+        for (int i = 0; i < groupBox.getChildCount(); i++) {
+            View c = groupBox.getChildAt(i);
             if (!(c instanceof TextView)) continue;
             TextView tv = (TextView) c;
             String label = tv.getText() == null ? "" : tv.getText().toString();
-            styleTab(tv, label.equals(activeGroup), tv.isFocused());
+            boolean selected = label.equals(activeGroup);
+            if (selected) activeTabView = tv;
+            boolean focused = (focusZone == 0) && (i == groupFocusIdx);
+            styleGroup(tv, selected, focused);
+        }
+        ensureGroupVisible();
+    }
+
+    /** 重刷频道行：只有「焦点在频道列」时，获焦行才显示金色焦点态 */
+    private void restyleRows() {
+        for (int i = 0; i < rows.size(); i++) {
+            View v = rows.get(i);
+            if (!(v instanceof LinearLayout)) continue;
+            boolean cur = i < rowChannels.size() && sameChannel(rowChannels.get(i), current);
+            styleRow((LinearLayout) v, cur, focusZone == 1 && v.isFocused());
         }
     }
 
-    private void styleTab(TextView tv, boolean selected, boolean focused) {
-        int fill;
-        int color;
-        if (focused) {
-            fill = 0xFFFFD166;
-            color = 0xFF111111;
-        } else if (selected) {
-            fill = 0xFF2E2E2E;
-            color = 0xFFFFD166;
-        } else {
-            fill = 0xFF2E2E2E;
-            color = 0xFFCFCFCF;
+    /**
+     * 把当前分组胶囊滚进左列可视区。
+     *
+     * <p>⚠ 不能用 {@code groupScroll.requestChildFocus(t, t)}：那会把系统记录在
+     * ViewGroup 里的"焦点子控件"改写成 groupScroll（而真正的焦点还在右侧频道行），
+     * 焦点链被写坏后系统会静默把行焦点清成 null（实测：每次按左键进分组列后
+     * 下一次按键都读到 焦点=null）。这里只做纯滚动。
+     */
+    private void ensureGroupVisible() {
+        if (groupFocusIdx < 0 || groupFocusIdx >= tabViews.size()) return;
+        View t = tabViews.get(groupFocusIdx);
+        if (t == null) return;
+        int top = t.getTop();
+        int y = groupScroll.getScrollY();
+        int h = groupScroll.getHeight();
+        if (h <= 0) return;
+        if (top < y) {
+            groupScroll.scrollTo(0, Math.max(0, top));
+        } else if (top + t.getHeight() > y + h) {
+            groupScroll.scrollTo(0, top + t.getHeight() - h);
         }
-        GradientDrawable g = round(fill, 16);
-        if (focused) g.setStroke(dp(2), 0xFFFFFFFF);
-        tv.setBackground(g);
-        tv.setTextColor(color);
+    }
+
+    /**
+     * 分组胶囊三态：
+     * <ul>
+     *   <li>焦点：金色渐变底 + 深色字 + 2dp 白描边（与右侧列表焦点完全一致）；</li>
+     *   <li>仅选中（当前生效分组）：深灰提亮底 + 白字，<b>不用金色</b>；</li>
+     *   <li>普通：深灰底 + 浅灰字。</li>
+     * </ul>
+     * 【2026-10-21】金色只表示焦点：原先 selected||focused 都套金色，会出现
+     * "选中分组 + 焦点分组"两个金色胶囊（用户反馈的"分组内有两个焦点颜色"）。
+     */
+    private void styleGroup(TextView tv, boolean selected, boolean focused) {
+        if (focused) {
+            GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{GOLD_TOP, GOLD_BOTTOM});
+            g.setCornerRadius(dp(8));
+            g.setStroke(dp(2), 0xFFFFFFFF);
+            tv.setBackground(g);
+            tv.setTextColor(0xFF111111);
+        } else if (selected) {
+            tv.setBackground(round(ITEM_BG_CURRENT, 8));
+            tv.setTextColor(0xFFFFFFFF);
+        } else {
+            tv.setBackground(round(ITEM_BG, 8));
+            tv.setTextColor(0xFFD6D6D6);
+        }
     }
 
     // ------------------------- 列表 -------------------------
 
     /**
-     * 【2026-10-17 连续滚动列表】一次把当前页签的**全部频道**铺进 ScrollView，
-     * 不再按 6 条一页切片。
+     * 铺当前分组的全部频道。
      *
-     * <p>原实现是「6 行/页 + 重建式翻页」：翻页时 removeAllViews 会把带焦点的行一起删掉，
-     * Android 只能把焦点丢给最近的控件（实测丢到控制栏「上一频道」一帧，日志可见
-     * `焦点=‹ 上一频道`），列表看起来就是不跟焦点走。改成连续列表后：
-     * 焦点在行间移动 → ScrollView 自动把目标行滚进可视区（requestChildFocus），
-     * 视觉上就是「列表跟着按键滚动」，且不再有任何重建/失焦。
+     * @param restoreFocus 重建后是否把焦点还原到原来的行；切分组时传 false，
+     *                     由调用方把锚点行重置到第一行（列表从顶部开始看）。
      */
-    private void rebuild() {
+    private void rebuild(boolean restoreFocus) {
         long t0 = System.currentTimeMillis();
-        // 【2026-10-17 修复焦点跳走】removeAllViews 会删掉"当前被聚焦的那一行"，
-        // 焦点所有者消失后 Android 只能把焦点交给层级里第一个可聚焦控件
-        // （实测 = 控制栏「‹ 上一频道」）。所以重建前先记住焦点行下标，重建后立刻还原。
-        final int keepIdx = focusedRowIndex();
+        final int keepIdx = restoreFocus ? focusedRowIndex() : -1;
         if (keepIdx >= 0) {
-            // 重建期间让 listBox 自己临时持有焦点：焦点始终留在抽屉内，不会"跑出去再被拉回来"
+            // 重建期间让 listBox 临时持有焦点，焦点始终留在弹窗内
             listBox.setFocusableInTouchMode(true);
             listBox.setFocusable(true);
             listBox.requestFocus();
@@ -292,8 +442,7 @@ public class ChannelListPanel extends LinearLayout {
         for (Channel c : allChannels) {
             if (favTab) {
                 if (favLookup != null && favLookup.isFavorite(c)) filtered.add(c);
-            } else if ("全部".equals(activeGroup)
-                    || activeGroup.equals(groupOf(c))) {
+            } else if ("全部".equals(activeGroup) || activeGroup.equals(groupOf(c))) {
                 filtered.add(c);
             }
         }
@@ -306,8 +455,8 @@ public class ChannelListPanel extends LinearLayout {
             final Channel ch = filtered.get(i);
             View row = makeRow(ch, i);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-            lp.topMargin = dp(6);
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(ROW_HEIGHT_DP));
+            lp.bottomMargin = dp(ROW_GAP_DP);
             listBox.addView(row, lp);
             rows.add(row);
             rowChannels.add(ch);
@@ -332,7 +481,7 @@ public class ChannelListPanel extends LinearLayout {
             }
         }
         LogBridge.i(TAG, "频道列表 " + activeGroup + " 共 " + filtered.size()
-                + " 台（连续列表，随焦点滚动），保留焦点行=" + keepIdx
+                + " 台（双栏，随焦点滚动），保留焦点行=" + keepIdx
                 + "，构建耗时=" + (System.currentTimeMillis() - t0) + "ms");
     }
 
@@ -352,9 +501,16 @@ public class ChannelListPanel extends LinearLayout {
         return -1;
     }
 
-    /** 行间距（40dp 行高 + 6dp 上边距），用于按 scrollY 反推"当前看到第几行" */
+    /** 行间距（{@link #ROW_HEIGHT_DP} 行高 + {@link #ROW_GAP_DP} 上边距） */
     private int rowPitch() {
-        return Math.max(1, dp(46));
+        return Math.max(1, dp(ROW_HEIGHT_DP + ROW_GAP_DP));
+    }
+
+    /** 一屏可见行数（CH± 与数字键按它滚动） */
+    private int visibleRows() {
+        int h = listScroll.getHeight();
+        if (h <= 0) return 6;
+        return Math.max(1, h / rowPitch());
     }
 
     /** 当前可视区首行下标（数字键「第N个」以它为准） */
@@ -363,40 +519,153 @@ public class ChannelListPanel extends LinearLayout {
         return Math.max(0, Math.min(v, Math.max(0, rows.size() - 1)));
     }
 
-    /** 聚焦第 idx 行并把它滚进可视区（ScrollView 会自动滚） */
+    /** 聚焦第 idx 行并把它滚进可视区（ScrollView 会自动滚；越界则钳在首/末行） */
     private void focusRow(int idx) {
         if (rows.isEmpty()) return;
         int i = Math.max(0, Math.min(idx, rows.size() - 1));
-        rows.get(i).requestFocus();
+        lastRowIdx = i;
+        boolean ok = rows.get(i).requestFocus();
+        LogBridge.i(TAG, "聚焦频道行[" + i + "] 成功=" + ok);
     }
 
-    /** CH± ：按"一屏 6 行"滚动，而不是老的翻页重建 */
-    private void scrollByRows(int delta) {
-        if (rows.isEmpty()) return;
-        int target = firstVisibleRow() + delta;
-        focusRow(target);
+    /** 在分组列内上下移动"虚拟焦点"（越界钳在首/末个） */
+    private void moveGroupFocus(int delta) {
+        if (tabViews.isEmpty()) return;
+        focusZone = 0;
+        groupFocusIdx = Math.max(0, Math.min(groupFocusIdx + delta, tabViews.size() - 1));
+        restyleGroups();
+        restyleRows();
+        LogBridge.i(TAG, "分组列焦点 → " + describe(tabViews.get(groupFocusIdx)));
+    }
+
+    /** 焦点切到左侧分组列（Android 焦点仍留在频道行上，只切换绘制区） */
+    private void enterGroupZone() {
+        focusZone = 0;
+        int idx = indexOf(tabViews, activeTabView);
+        groupFocusIdx = idx >= 0 ? idx : Math.max(0, Math.min(groupFocusIdx, tabViews.size() - 1));
+        restyleGroups();
+        restyleRows();
+        LogBridge.i(TAG, "焦点进入分组列：" + describe(tabViews.get(groupFocusIdx)));
+    }
+
+    /** 焦点切回右侧频道列（光标行保持原来的金色焦点态） */
+    private void enterRowZone() {
+        focusZone = 1;
+        restyleGroups();
+        restyleRows();
+        LogBridge.i(TAG, "焦点回到频道列，第 " + (lastRowIdx + 1) + " 行");
+    }
+
+    /** 焦点控件描述（类名 + 文案），用于定位焦点问题 */
+    private String describe(View v) {
+        if (v == null) return "null";
+        String cls = v.getClass().getSimpleName();
+        if (v instanceof TextView) {
+            CharSequence t = ((TextView) v).getText();
+            if (t != null && t.length() > 0) return cls + ":" + t;
+        }
+        return cls;
+    }
+
+    private int indexOf(List<View> list, View v) {
+        if (v == null) return -1;
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i) == v) return i;
+        }
+        return -1;
     }
 
     /**
-     * 【2026-10-17 用户口径】焦点**锁死在频道列表抽屉内**，只能按返回键回控制栏。
+     * 【2026-10-21】方向键在弹窗内自己接管。
      *
+     * <p>为什么不让系统做焦点搜索：iOS/Android TV 的默认焦点搜索会跳出弹窗落到控制栏
+     * （实测日志「焦点越界 → 拉回」），用户按方向键时焦点乱跳。这里显式约定：
      * <ul>
-     *   <li>行：左右恒指自己（抽屉在右侧，右键会跑出去）；末行下键指自己
-     *       （下面就是控制栏）；首行上键指向抽屉自己的页签行（仍在抽屉内）。</li>
-     *   <li>页签：上键指自己（防跳出抽屉上沿），下键落第一行，左右仍可在页签间移动。</li>
+     *   <li>左列：上下换分组、右键进频道列、左键停住；</li>
+     *   <li>右列：上下换频道（自动滚动）、左键回分组列、右键停住；</li>
+     *   <li>OK：分组=切分组；频道=切台并关窗。</li>
+     * </ul>
+     * 方向键与确定键无论是否命中都吃掉（return true），保证焦点绝不出窗。
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        boolean nav = code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN
+                || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER;
+        if (!nav) return super.dispatchKeyEvent(event);
+        // 长按重复只处理第一次，避免按住方向键时分组列/频道列被连续推着跑
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            handleNav(code);
+        }
+        return true;
+    }
+
+    private void handleNav(int code) {
+        View f = getRootView().findFocus();
+        int ri = indexOf(rows, f);
+        LogBridge.i(TAG, "按键 code=" + code + " 焦点=" + describe(f)
+                + " 区=" + (focusZone == 0 ? "分组" : "频道") + " 行=" + ri);
+
+        // Android 焦点被系统清空/落在弹窗外 → 先收回频道行，再继续处理本次按键。
+        // 注意不能直接 return：否则用户在分组列里按上下键会"按了没反应"。
+        if (ri < 0) {
+            restoreRowFocus();
+            if (rows.isEmpty()) return;
+            ri = Math.max(0, Math.min(lastRowIdx, rows.size() - 1));
+        }
+        lastRowIdx = ri;
+
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
+            if (focusZone == 0 && groupFocusIdx < tabViews.size()) {
+                activateGroup(groups.get(groupFocusIdx), (TextView) tabViews.get(groupFocusIdx));
+            } else if (ri < rowChannels.size()) {
+                pick(rowChannels.get(ri));
+            }
+            return;
+        }
+
+        switch (code) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (focusZone == 1) enterGroupZone();      // 频道列 → 分组列
+                break;                                      // 已在最左，停住
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (focusZone == 0) enterRowZone();         // 分组列 → 频道列
+                break;                                      // 已在最右，停住
+            case KeyEvent.KEYCODE_DPAD_UP:
+                if (focusZone == 0) moveGroupFocus(-1);
+                else focusRow(ri - 1);
+                break;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                if (focusZone == 0) moveGroupFocus(1);
+                else focusRow(ri + 1);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** CH± ：按"一屏可见行数"滚动，而不是老的翻页重建 */
+    private void scrollByRows(int delta) {
+        if (rows.isEmpty()) return;
+        focusRow(firstVisibleRow() + delta);
+    }
+
+    /**
+     * 焦点锁定在弹窗内：
+     * <ul>
+     *   <li>左列分组：上下在分组间移动，右键进频道列（同序行）；左键恒指自己，首/末行上下恒指自己。</li>
+     *   <li>右列频道：上下在行间移动，左键回左列当前选中的分组；右键恒指自己，首/末行上下恒指自己。</li>
      * </ul>
      */
     private void clampFocusInside() {
-        // 页签
         java.util.List<View> tabs = new java.util.ArrayList<>();
-        for (int i = 0; i < tabRow.getChildCount(); i++) {
-            View t = tabRow.getChildAt(i);
+        for (View t : tabViews) {
             if (t != null && t.isFocusable()) {
                 if (t.getId() == View.NO_ID) t.setId(View.generateViewId());
                 tabs.add(t);
             }
         }
-        // 行
         java.util.List<View> list = new java.util.ArrayList<>();
         for (View v : rows) {
             if (v != null && v.isFocusable()) {
@@ -404,67 +673,65 @@ public class ChannelListPanel extends LinearLayout {
                 list.add(v);
             }
         }
-        View firstTab = tabs.isEmpty() ? null : tabs.get(0);
-        for (View t : tabs) {
-            t.setNextFocusUpId(t.getId());
-            if (!list.isEmpty()) t.setNextFocusDownId(list.get(0).getId());
+        // 左列
+        for (int i = 0; i < tabs.size(); i++) {
+            View t = tabs.get(i);
+            t.setNextFocusLeftId(t.getId());
+            t.setNextFocusUpId((i == 0) ? t.getId() : tabs.get(i - 1).getId());
+            t.setNextFocusDownId((i == tabs.size() - 1) ? t.getId() : tabs.get(i + 1).getId());
+            t.setNextFocusRightId(list.isEmpty()
+                    ? t.getId()
+                    : list.get(Math.min(i, list.size() - 1)).getId());
         }
+        // 右列：左键回当前选中的分组胶囊
+        View backTab = activeTabView;
+        if (backTab != null && backTab.getId() == View.NO_ID) backTab.setId(View.generateViewId());
         for (int i = 0; i < list.size(); i++) {
             View v = list.get(i);
-            v.setNextFocusLeftId(v.getId());
             v.setNextFocusRightId(v.getId());
-            v.setNextFocusUpId((i == 0)
-                    ? (firstTab != null ? firstTab.getId() : v.getId())
-                    : list.get(i - 1).getId());
+            v.setNextFocusLeftId(backTab != null ? backTab.getId() : v.getId());
+            v.setNextFocusUpId((i == 0) ? v.getId() : list.get(i - 1).getId());
             v.setNextFocusDownId((i == list.size() - 1) ? v.getId() : list.get(i + 1).getId());
         }
-        LogBridge.i(TAG, "【频道列表】焦点已锁定在内（返回键才回控制栏）");
+        LogBridge.i(TAG, "【频道列表】焦点已锁定在内（双栏：分组↔频道）");
     }
 
     private View makeRow(final Channel ch, final int index) {
         final boolean isCur = sameChannel(ch, current);
-        FrameLayout row = new FrameLayout(getContext());
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
         row.setFocusable(true);
         row.setFocusableInTouchMode(true);
+        row.setPadding(dp(14), 0, dp(14), 0);
 
-        TextView num = text(String.format(Locale.US, "%02d", index + 1), 12,
-                isCur ? 0xFF111111 : 0xFF9E9E9E, false);
-        FrameLayout.LayoutParams nlp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        nlp.gravity = Gravity.START | Gravity.CENTER_VERTICAL;
-        nlp.leftMargin = dp(14);
-        row.addView(num, nlp);
+        TextView num = text(String.format(Locale.US, "%02d", index + 1), 15,
+                isCur ? GOLD : 0xFF9E9E9E, false);
+        row.addView(num, new LinearLayout.LayoutParams(dp(30),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView name = text(ch.getName() == null ? "" : ch.getName(), 14,
-                isCur ? 0xFF111111 : 0xFFFFFFFF, false);
+                0xFFFFFFFF, false);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        FrameLayout.LayoutParams nmlp = new FrameLayout.LayoutParams(
-                dp(150), ViewGroup.LayoutParams.WRAP_CONTENT);
-        nmlp.gravity = Gravity.START | Gravity.CENTER_VERTICAL;
-        nmlp.leftMargin = dp(44);
-        row.addView(name, nmlp);
-
-        String prog = (lookup == null) ? null : lookup.nowPlaying(ch);
-        if (prog != null && !prog.isEmpty()) {
-            TextView tvProg = text(prog, 11, isCur ? 0xFF3A3A2A : 0xFF7A7A7A, false);
-            tvProg.setSingleLine(true);
-            tvProg.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(
-                    dp(180), ViewGroup.LayoutParams.WRAP_CONTENT);
-            plp.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
-            plp.rightMargin = dp(12);
-            row.addView(tvProg, plp);
-        }
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        nlp.leftMargin = dp(8);
+        row.addView(name, nlp);
 
         styleRow(row, isCur, false);
         row.setOnClickListener(v -> pick(ch));
-        row.setOnFocusChangeListener((v, has) -> styleRow((FrameLayout) v, isCur, has));
+        row.setOnFocusChangeListener((v, has) -> {
+            // 【2026-10-21】行获焦一律**不**切换 focusZone：
+            //   焦点守卫把焦点从 null 拉回行、重建后还原行焦点、ScrollView 滚动抢焦等
+            //   都会走到这里；若在此把 zone 改回频道列，用户刚用左键进入的分组列
+            //   白描边会立刻消失（实测 BUG：左键进分组后按上下键又跳回金色频道行）。
+            //   zone 只由方向键（handleNav）和点击分组（activateGroup）决定。
+            styleRow((LinearLayout) v, isCur, has && focusZone == 1);
+        });
         row.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            // 【2026-10-17 连续列表】不再有"翻页重建"：上下键由系统在行间移动，
-            // ScrollView 自动把目标行滚进可视区 → 列表跟着焦点滚动，且不会丢焦点。
-            // 数字键 = 「当前可视区第 N 个」（以首个可见行为基准，符合用户直觉）。
+            // 数字键 = 「当前可视区第 N 个」（以首个可见行为基准，符合用户直觉）
             if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
                 int n = keyCode - KeyEvent.KEYCODE_0;
                 int target = firstVisibleRow() + (n == 0 ? 9 : n - 1);
@@ -474,11 +741,11 @@ public class ChannelListPanel extends LinearLayout {
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-                scrollByRows(-ROWS);
+                scrollByRows(-visibleRows());
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-                scrollByRows(ROWS);
+                scrollByRows(visibleRows());
                 return true;
             }
             return false;
@@ -487,33 +754,30 @@ public class ChannelListPanel extends LinearLayout {
     }
 
     /**
-     * 行样式：**每种状态都要把三个子 View 的颜色明确写全**。
-     * 原实现只在"焦点/当前"时改色，失焦后没有恢复 → 文字停在上一次的黑字，
-     * 在深色行上完全看不清（用户截图实测：移动焦点后整行变黑字）。
+     * 行样式（设计稿）：默认深灰；当前频道稍亮 + 序号黄字；
+     * 焦点 = 金色渐变底 + 2dp 白描边 + 深色字。
      */
-    private void styleRow(FrameLayout row, boolean isCurrent, boolean focused) {
-        int fill;
-        if (focused) fill = 0xFFFFD166;
-        else if (isCurrent) fill = 0xFF2E2E2E;
-        else fill = 0xFF2A2A2A;
-        GradientDrawable g = round(fill, 10);
-        if (focused) g.setStroke(dp(2), 0xFFFFFFFF);
+    private void styleRow(LinearLayout row, boolean isCurrent, boolean focused) {
+        GradientDrawable g;
+        if (focused) {
+            g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{GOLD_TOP, GOLD_BOTTOM});
+            g.setCornerRadius(dp(7));
+            g.setStroke(dp(2), 0xFFFFFFFF);
+        } else {
+            g = round(isCurrent ? ITEM_BG_CURRENT : ITEM_BG, 7);
+        }
         row.setBackground(g);
 
-        int numberColor = focused ? 0xFF111111 : (isCurrent ? 0xFFFFD166 : 0xFF9E9E9E);
+        int numberColor = focused ? 0xFF111111 : (isCurrent ? GOLD : 0xFF9E9E9E);
         int nameColor = focused ? 0xFF111111 : 0xFFFFFFFF;
-        int progColor = focused ? 0xCC111111 : (isCurrent ? 0xFFFFD166 : 0xFF7A7A7A);
 
         int textIndex = 0;
         for (int i = 0; i < row.getChildCount(); i++) {
             View c = row.getChildAt(i);
             if (!(c instanceof TextView)) continue;
             TextView tv = (TextView) c;
-            int color;
-            if (textIndex == 0) color = numberColor;        // 频道号
-            else if (textIndex == 1) color = nameColor;     // 频道名
-            else color = progColor;                          // 当前节目
-            tv.setTextColor(color);
+            tv.setTextColor(textIndex == 0 ? numberColor : nameColor);
             textIndex++;
         }
     }
@@ -521,7 +785,9 @@ public class ChannelListPanel extends LinearLayout {
     private boolean sameChannel(Channel a, Channel b) {
         if (a == null || b == null) return false;
         String ia = a.getChannelId(), ib = b.getChannelId();
-        if (ia != null && ib != null) return ia.equals(ib);
+        // ⚠ 源1/源2 的 channelId 是**空串**（不是 null）：直接 equals 会让所有行都被判成
+        // "当前频道"（序号全变黄、整列高亮）。空串必须回落到「名称」比较。
+        if (!isEmpty(ia) && !isEmpty(ib)) return ia.equals(ib);
         return a.getName() != null && a.getName().equals(b.getName());
     }
 
@@ -535,65 +801,119 @@ public class ChannelListPanel extends LinearLayout {
 
     public void show() {
         if (root == null || closed) return;
-        rebuild();
-        capListHeight();
+        rebuild(true);
+        // 恢复改造前的弹窗尺寸：560dp 宽、贴右下、位于控制栏上方
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
-                dp(560), ViewGroup.LayoutParams.WRAP_CONTENT);
+                dp(PANEL_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.gravity = Gravity.END | Gravity.BOTTOM;
         lp.rightMargin = dp(32);
-        lp.bottomMargin = dp(20 + 96 + 16);
+        lp.bottomMargin = dp(132);
         root.addView(this, lp);
-        // 打开时把焦点定位到「当前频道」那一行；ScrollView 会自动滚到它。
-        // 找不到就聚焦第一行（焦点不能留在控制栏，否则等于抽屉没接管按键）。
-        int focusIdx = 0;
-        for (int i = 0; i < filtered.size(); i++) {
-            if (sameChannel(filtered.get(i), current)) {
-                focusIdx = i;
-                break;
-            }
+        getViewTreeObserver().addOnGlobalFocusChangeListener(focusGuard);
+
+        // 高度不能超过控制栏上方的可用空间，超出时两列各自滚动
+        post(this::capBodyHeight);
+        // 打开即定位到「正在播放的频道」那一行（找不到才退回第一行）
+        focusCurrentRowWithRetry(0);
+        LogBridge.i(TAG, "频道列表显示（双栏/560dp），共" + allChannels.size()
+                + "台，准备定位当前播放频道");
+    }
+
+    /** 标题行 + 内边距 + 底部提示等固定占用（dp），用于精确算主体可用高度 */
+    private static final int CHROME_DP = 96;
+
+    /**
+     * 把主体高度封顶在「控制栏上方」，避免弹窗顶到屏幕外。
+     * 用固定占用值估算，而不是拿上一次 getHeight 反推 —— 否则标签行会被压掉半行。
+     */
+    private void capBodyHeight() {
+        if (closed || body == null || root == null) return;
+        int rh = root.getHeight();
+        if (rh <= 0) {
+            if (capRetry++ < 10) postDelayed(this::capBodyHeight, 80);
+            return;
         }
-        final int fi = focusIdx;
-        postDelayed(() -> {
-            if (closed) return;
-            if (!rows.isEmpty()) rows.get(Math.min(fi, rows.size() - 1)).requestFocus();
-        }, 250);
-        LogBridge.i(TAG, "频道列表显示，共" + allChannels.size() + "台，定位第" + (fi + 1) + "行");
+        int maxBody = Math.max(dp(40), rh - dp(132) - dp(16) - dp(CHROME_DP));
+        int need = rows.size() * rowPitch() - dp(ROW_GAP_DP);
+        int h = Math.max(dp(40), Math.min(maxBody, need));
+        ViewGroup.LayoutParams lp = body.getLayoutParams();
+        if (lp.height != h) {
+            lp.height = h;
+            body.setLayoutParams(lp);
+            LogBridge.i(TAG, "弹窗主体高度=" + h + "px（上限=" + maxBody + "px，内容=" + need + "px）");
+        }
     }
 
     /**
-     * 列表高度封顶：抽屉总高不得超过「控制栏顶边以上的可用空间」。
-     *
-     * <p>超出时让 {@link #listScroll} 内部滚动 —— 焦点移动会把目标行自动滚进可视区，
-     * 这就是「列表跟着焦点滚动」；之前 wrap_content 顶出屏幕后既滚不了也看不到。
-     * 根布局还没测量完（height<=0）时延后一帧重试。
+     * 打开时把焦点放到正在播放的频道行。
+     * View 刚 add 进来时可能还没完成布局 → requestFocus 会失败，所以按 150ms 重试，
+     * 直到焦点确实落在弹窗内为止（焦点一旦进弹窗就不再抢，尊重用户操作）。
      */
-    private void capListHeight() {
-        try {
-            int avail = (root == null) ? 0 : root.getHeight();
-            if (avail <= 0) {
-                if (capRetry++ < 12) postDelayed(this::capListHeight, 80);
-                return;
-            }
-            capRetry = 0;
-            int panelMax = avail - dp(20 + 96 + 16);       // 底边距 = 控制栏顶 − 16dp
-            int chrome = dp(30 + 10 + 32 + 10 + 22 + 20);  // 标题/页签/提示/内边距
-            int listMax = Math.max(dp(92), panelMax - chrome);
-            int need = rows.size() * dp(46);
-            int h = Math.min(listMax, Math.max(need, dp(92)));
-            ViewGroup.LayoutParams slp = listScroll.getLayoutParams();
-            if (slp != null && slp.height != h) {
-                slp.height = h;
-                listScroll.setLayoutParams(slp);
-                LogBridge.i(TAG, "列表可视高=" + h + "px（需要 " + need + "px，上限 " + listMax + "px）");
-            }
-        } catch (Throwable ignored) {
+    private void focusCurrentRowWithRetry(int attempt) {
+        if (closed || !isShowing()) return;
+        if (hasFocusInside()) return;
+        if (focusCurrentRow()) return;
+        if (attempt < 8) {
+            postDelayed(() -> focusCurrentRowWithRetry(attempt + 1), 150);
+        } else {
+            LogBridge.w(TAG, "打开后未能把焦点定位到当前频道行");
         }
+    }
+
+    /** 焦点被系统清空/越界时，把 Android 焦点收回上一次的频道行（不改变 focusZone） */
+    private void restoreRowFocus() {
+        if (rows.isEmpty()) return;
+        int i = Math.max(0, Math.min(lastRowIdx, rows.size() - 1));
+        boolean ok = rows.get(i).requestFocus();
+        LogBridge.i(TAG, "焦点被清空/越界 → 拉回频道行[" + i + "] 成功=" + ok);
+    }
+
+    /** 定位并聚焦「正在播放」的频道；无匹配时聚焦第一行 */
+    private boolean focusCurrentRow() {
+        if (rows.isEmpty()) return false;
+        int idx = 0;
+        for (int i = 0; i < filtered.size(); i++) {
+            if (sameChannel(filtered.get(i), current)) {
+                idx = i;
+                break;
+            }
+        }
+        lastRowIdx = idx;
+        boolean ok = rows.get(idx).requestFocus();
+        if (ok) {
+            // 双保险：ScrollView 在 requestFocus 时会自动滚动，这里再显式滚一次，
+            // 避免"焦点到了但行还在可视区外"。
+            final int y = Math.max(0, idx * rowPitch() - rowPitch());
+            listScroll.post(() -> listScroll.scrollTo(0, y));
+            LogBridge.i(TAG, "已定位到正在播放频道：第" + (idx + 1) + " 行 " + current.getName());
+        }
+        return ok;
+    }
+
+    /** 焦点是否已经在弹窗内 */
+    private boolean hasFocusInside() {
+        View f = getRootView().findFocus();
+        return f != null && isDescendantOf(f, this);
+    }
+
+    private boolean isDescendantOf(View v, View ancestor) {
+        View cur = v;
+        while (cur != null) {
+            if (cur == ancestor) return true;
+            android.view.ViewParent p = cur.getParent();
+            cur = (p instanceof View) ? (View) p : null;
+        }
+        return false;
     }
 
     public void close() {
         if (closed) return;
         closed = true;
         handler.removeCallbacksAndMessages(null);
+        try {
+            getViewTreeObserver().removeOnGlobalFocusChangeListener(focusGuard);
+        } catch (Throwable ignored) {
+        }
         // 【2026-10-17】先 onClose 把焦点还给触发按钮，再移除视图；否则 removeView 删掉焦点所有者，
         // 系统会把焦点丢给控制栏「‹ 上一频道」，60ms 后才纠正（用户看到焦点跳走）。
         if (onClose != null) onClose.onClose();

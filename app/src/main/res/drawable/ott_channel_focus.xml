@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：频道网格遥控焦点框（作为 GridView 的 listSelector，drawSelectorOnTop 绘制在卡片之上） -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#331E7BE0" />
+            <stroke android:width="3dp" android:color="#FF3AA0FF" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+        </shape>
+    </item>
+</selector>

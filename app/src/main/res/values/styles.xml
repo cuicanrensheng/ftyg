@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TVLive" parent="Theme.AppCompat.Light.NoActionBar"/>
+
+    <style name="Theme.TVLive.NoTitle" parent="Theme.TVLive">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:fitsSystemWindows">false</item>
+        <!-- 【2026-10-17 启动图】窗口背景 = 启动图：系统启动预览窗(Starting Window)直接绘制，
+             从点击图标到 Activity 首帧之间不再黑屏。
+             注：不再使用 windowDisablePreview=true（此前为黑屏快速切换而禁用预览窗），
+             现由「预览窗 + App 内 splash_overlay」双段启动图全程衔接。 -->
+        <item name="android:windowBackground">@drawable/splash_window_bg</item>
+    </style>
+
+    <style name="PlayerView_Surface">
+        <item name="surface_type">surface_view</item>
+    </style>
+    <style name="PlayerView_Texture">
+        <item name="surface_type">texture_view</item>
+    </style>
+</resources>
+

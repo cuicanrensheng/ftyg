@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 复制/删除按钮文字颜色：聚焦=黄#FFD166；默认白#FFFFFF
+     【2026-10-20 橄榄底 + 黄字方案】原三态蓝 #40A9FF → 黄 #FFD166 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true"    android:color="#FFFFD166"/>
+    <item android:state_selected="true"   android:color="#FFFFD166"/>
+    <item android:state_activated="true"  android:color="#FFFFD166"/>
+    <item android:color="#FFFFFFFF"/>
+</selector>

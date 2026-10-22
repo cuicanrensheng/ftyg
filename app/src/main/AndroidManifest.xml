@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 【2026-10-10 Lint】BIND_TV_INPUT 仅系统应用可授予。本项目作为 TV 直播应用需被预置为
+         系统应用 / 电视输入源；非系统应用安装时该权限静默不授予，不影响其余功能。
+         故此处属预期行为，忽略 Lint 的 ProtectedPermissions 告警。 -->
+    <uses-permission android:name="android.permission.BIND_TV_INPUT"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- 【2026-10-15 审计修复 #5】原 allowBackup="true" + 全量 include（sharedpref/database path="."）
+         会把全部 SharedPreferences 送进云备份 / 设备迁移。实测 6 个 prefs 中
+         credentials / secure_data / security_guard / migu_direct_cache / play_config / app_settings
+         均含凭证或带 token 的 URL；逐个排除等于全排除。且加密数据用的是 AndroidKeyStore
+         设备绑定密钥，迁移到新设备后本就解不开。故直接关闭备份。
+         同时一并消除配置错误：原 android:fullBackupContent 指向的是 <data-extraction-rules> 结构，
+         而 fullBackupContent 要求 <full-backup-content>，导致 API ≤ 30 上规则解析失败。 -->
+    <application
+        android:name=".MyApplication"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.TVLive.NoTitle"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true">
+
+        <!-- 【2026-10-08 去SDK化】原虎牙 Berry SDK meta-data（NS_APPID/HY_APPID 等）
+             与 SDK webview Activity 声明已随 SDK 一并拆除 -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="sensorLandscape"
+            android:supportsPictureInPicture="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".OttHomeActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
+
+        <activity
+            android:name="com.tv.live.util.LogBridge$CrashActivity"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false"
+            android:excludeFromRecents="true" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="1000">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".BootStartReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.tv.live.START_APP" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".BootJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false" />
+        <service
+            android:name=".BootStartForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- 【2026-10-08 去SDK化】原对 SDK 注入组件的 tools:node="remove" 抵消块
+             （sdkplayer/sdkcamera/sdklive 的 Activity/Service）已无必要，删除 -->
+
+    </application>
+</manifest>

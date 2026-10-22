@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：频道网格卡片。焦点框由 GridView 的 listSelector(ott_channel_focus) 叠加绘制。
+
+     【2026-10-11 版式改】原「图片 32dp + 剧名压在卡片内」导致图片太矮。现改为：
+       ┌──────────────┐
+       │              │  ← 图片区：铺满整张卡片（match_parent/0dp + weight）
+       │   poster     │
+       │              │
+       └──────────────┘
+           剧名          ← 文字移出卡片，在卡片下方独立一行
+
+     根布局高度 = 图片卡(weight=1) + 剧名(wrap)，GridView 的 row 高度由本 item 撑开。
+     clipChildren=false 让影像可溢出行框边界而不被裁切。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:orientation="vertical">
+
+    <!-- 图片卡片：铺满，承载卡片背景 + 焦点高亮。
+         【2026-10-11 二次调版】118dp → 88dp（4 列网格下图片偏大，等比缩小约 25%）。
+         【2026-10-13 触摸修复】clickable 由 true 改为 false：海报 FrameLayout 若 clickable=true 会
+         消费触摸且无 OnClickListener，导致触摸点海报区时卡片根 LinearLayout（挂 OnClickListener）收不到
+         click → 点频道卡片无反应。改为 false 让触摸冒泡到根布局的 OnClickListener。
+         【2026-10-13 图标放大】88dp → 104dp：台标偏小，等比放大约 18%，介于初版 118dp 与
+         10-11 的 88dp 之间，兼顾台标辨识度与 4 列网格的纵向空间。
+         【2026-10-17 界面重构 v2】底部叠 3dp 节目进度条（仅直播卡显示），
+         让用户不进全屏也能看出「这台现在播到哪」。 -->
+    <FrameLayout
+        android:id="@+id/fl_ott_item_poster"
+        android:layout_width="match_parent"
+        android:layout_height="104dp"
+        android:background="@drawable/ott_channel_item_bg"
+        android:clickable="false"
+        android:focusable="false">
+
+        <ImageView
+            android:id="@+id/iv_ott_item_logo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+
+        <ProgressBar
+            android:id="@+id/pb_ott_item_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_gravity="bottom"
+            android:max="100"
+            android:progress="0"
+            android:progressBackgroundTint="#33000000"
+            android:progressTint="#FFFFD166"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- 名称：移出卡片，位于卡片下方 -->
+    <TextView
+        android:id="@+id/tv_ott_item_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="marquee"
+        android:gravity="center"
+        android:singleLine="true"
+        android:textColor="#FFFFFFFF"
+        android:textSize="16sp" />
+
+    <!-- 当前节目（仅直播卡）：EPG 正在播的节目名，未就绪时显示「直播中」 -->
+    <TextView
+        android:id="@+id/tv_ott_item_program"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:singleLine="true"
+        android:textColor="#99B9C4D8"
+        android:textSize="12sp"
+        android:visibility="gone" />
+</LinearLayout>

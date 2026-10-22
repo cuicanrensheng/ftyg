@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  订阅列表行文字颜色（item_settings.xml）
+  【2026-10-20 橄榄底 + 黄字方案】焦点/选中由蓝字 #40A9FF 改为黄字 #FFD166。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 焦点/选中状态：黄字 -->
+    <item android:color="#FFFFD166" android:state_focused="true" />
+    <item android:color="#FFFFD166" android:state_selected="true" />
+    <!-- 默认状态：白字 -->
+    <item android:color="#FFFFFFFF" />
+</selector>

@@ -1,0 +1,475 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace "com.tv.live"
+    compileSdk 36
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+    splits {
+        abi {
+            enable true
+            reset()
+
+            include 'arm64-v8a', 'armeabi-v7a'
+            universalApk false
+        }
+    }
+    defaultConfig {
+        applicationId "com.tv.live"
+        minSdk 21
+        targetSdk 36
+        versionCode 236
+        versionName "2.0.236"
+        resConfigs "zh"
+        multiDexEnabled true
+
+        vectorDrawables {
+            useSupportLibrary true
+        }
+        buildConfigField "int", "VERSION_CODE", "${versionCode}"
+        buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
+        // 【2026-10-08 去SDK化】原 HUYA_REPORT_CLASSES_PRESENT 反射探测开关已随虎牙 SDK 拆除
+        ndkVersion '25.2.9519653'
+        ndk {
+
+            debugSymbolLevel 'NONE'
+        }
+    }
+    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword project.findProperty("storePassword")
+            keyAlias project.findProperty("keyAlias")
+            keyPassword project.findProperty("keyPassword")
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            zipAlignEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+
+            buildConfigField "boolean", "IS_DEBUG", "false"
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            // 【2026-09-29 调试专用】复用 release 签名，使 debug 包可**覆盖安装**已装的 release 包：
+            // 1) 免去卸载 → 保留应用数据（SDK 加密凭证 / 内置源配置 / cookie），
+            // 2) 保留 IS_DEBUG=true 的详细日志（虎牙 CDN 403 重试、建连耗时等只在 debug 包打印）。
+            // 仅影响签名，不改任何运行时行为；正式出包仍走 release。
+            signingConfig signingConfigs.release
+            buildConfigField "boolean", "IS_DEBUG", "true"
+        }
+    }
+    packagingOptions {
+        resources {
+            pickFirsts += ['META-INF/com.android.tools/proguard/coroutines.pro']
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt',
+                         'META-INF/license.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt',
+                         'META-INF/notice.txt', 'META-INF/ASL2.0', 'META-INF/*.kotlin_module',
+                         'META-INF/INDEX.LIST', 'META-INF/io.netty.versions.properties',
+
+            '**/publicsuffixes.gz',
+
+            'META-INF/services/*',
+                         'META-INF/proguard/*.pro',
+                         'META-INF/*.version',
+                         'META-INF/versions/**',
+                         '**/*.kotlin_builtins',
+                         '**/*.kotlin_metadata',
+                         '**/*.proto',
+                         '**/*.aidl',
+                         'DebugProbesKt.bin']
+        }
+        jniLibs {
+
+            // ⚠️ useLegacyPackaging 说明：应设为 true（保持未压缩 STORED）。
+            //   实测设 false 无压缩收益：minSdk=21(<23) 时 AGP 强制 extractNativeLibs=true，
+            //   so 仍以 STORED 进包；若想压缩 so 需把 minSdk 提到 23（放弃 Android 5.x），
+            //   当前保留 minSdk 21 以兼容更多设备。
+            useLegacyPackaging true
+            pickFirsts += [
+                    'lib/arm64-v8a/libc++_shared.so',
+                    'lib/armeabi-v7a/libc++_shared.so',
+                    'lib/x86/libc++_shared.so',
+                    'lib/x86_64/libc++_shared.so'
+            ]
+
+            // 【2026-10-08 去SDK化】原虎牙系 SO 排除清单（libhycrypto/libhyssl/libstlport_shared/
+            //   libmarsxlog/libhyquic/libnsdt/libudbauthunify/libmarsstn/libBugly_Native）
+            //   及配套 ASM 插桩说明已随虎牙 SDK 一并删除，不再需要。
+            // libc++_shared - 静态分析: 不被任何存活 so 引用，属传递依赖带入的死代码 → 排除
+            excludes += ['**/libc++_shared.so']
+
+        }
+    }
+    androidResources {
+        generateLocaleConfig false
+    }
+    lint {
+        baseline = file("lint-baseline.xml")
+        // 【2026-10-15 审计修复 #7】原 abortOnError=false + checkReleaseBuilds=false 等于把质量闸门
+        // 整个关掉：release 不再因任何 Lint 问题失败，新引入的问题会被静默吞掉。
+        // 现恢复：
+        //   · checkReleaseBuilds=true  → assembleRelease 会跑 lintVitalRelease（仅 Fatal 级，低噪声）
+        //   · abortOnError=true        → 显式跑 :app:lint 时，Error 级问题会真正让构建失败
+        // 历史遗留项由 lint-baseline.xml 吸收；有意保留的规则（明文 HTTP / 用户 CA / JS Bridge 等
+        // 业务决定）已在 app/lint.xml 里逐条 ignore。
+        abortOnError true
+        checkReleaseBuilds true
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.zxing:core:3.5.2'
+    implementation "androidx.media3:media3-exoplayer:1.7.1"
+    implementation "androidx.media3:media3-ui:1.7.1"
+    implementation "androidx.media3:media3-exoplayer-hls:1.7.1"
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+    // 【2026-10-16】腾讯 Bugly 崩溃上报 SDK
+    implementation 'com.tencent.bugly:crashreport:4.1.9.3'
+    // 【2026-10-08 去SDK化】原 fileTree(dir: 'libs') 的虎牙 Berry SDK AAR/JAR 已全部移除，
+    // libs 目录已清空删除；播放地址解析一律走自研 HuyaParser（纯 HTTP）。
+    // ⚠️ 必须使用 full 版脱糖库, 不可换 minimal 版:
+    //   minimal 只回填 java.util.concurrent / java.util.function, 不回填 java.util.stream /
+    //   java.time / java.util.Base64 / java.util.Map 等集合默认方法;
+    //   这些方法在 Android 5.0~7.1 (API 21~25) 上不存在, 换 minimal 会导致
+    //   minSdk=21 的设备运行到相关代码路径时 NoSuchMethodError → 破坏旧系统兼容性.
+    //   代价: 多出 j$ 回填类 (classes2.dex, 约 178KB 压缩) 属于必要成本.
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
+    // 【2026-10-12】VOD 加密移植：纯离线单测（VodCryptoTest），不进 APK
+    testImplementation 'junit:junit:4.13.2'
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.outputs.forEach { output ->
+            try {
+                def currentName = output.outputFileName.get()
+                def abiName = currentName.find(/arm64-v8a|armeabi-v7a/)
+                if (!abiName) {
+                    abiName = variant.name
+                }
+                def verName = project.android.defaultConfig.versionName
+                def newName = "tv_live_${variant.buildType}_${abiName}_${verName}.apk"
+                logger.lifecycle "Renaming APK: ${currentName} -> ${newName}"
+                output.outputFileName.set(newName)
+            } catch (Exception e) {
+                logger.warn "Rename failed for ${variant.name}: ${e.message}"
+            }
+        }
+    }
+}
+
+// 【2026-10-08 去SDK化】原三套 ASM 字节码插桩（SafeClinitClassVisitorFactory 包裹
+//   NSDT/HuyaAuthCore <clinit>、OptionalNativeLoadClassVisitorFactory 重定向第三方
+//   System.loadLibrary、JCE 反射采集说明）已随虎牙 SDK 移除——没有第三方库再需要这些防御。
+
+// ============================================================
+// 【2026-10-15 体积优化】release 包剔除不使用的 JS 插件
+//
+//   策略：**源文件保留在仓库**（app/src/main/assets/js/），只在 mergeReleaseAssets
+//   之后从**合并产物**里删除 —— APK 不含这些文件，但仓库里随时能找到源文件。
+//   恢复方式：把文件名从下面的 UNUSED_JS_ASSETS 列表里删掉（一行），重新出包即可，
+//             不需要重建任何文件。
+//
+//   判定依据（详见 .workbuddy/memory/2026-10-15.md 的插件盘点）：
+//     · 保留：native_layer.js / yt_source_root.js            —— JS 引擎基础设施 + 路由表
+//             other_live.js / ysp_live.js / migu_sport.js     —— 自有源实际在用（有运行日志实证：
+//                 `路由：migu://… → other_live.js::miguLiveParsePlay`）
+//             letv_vod.js                                     —— 网页类源兜底典型
+//                 （TVPlayerManager 注释明确：webPageSource 典型 http://www.le.com → .le.com → letv_vod.js）
+//             js_meta_baseline.json                           —— JS 热更基线清单（JsPluginStore 读取）
+//     · 剔除 block.js —— 全仓库零引用（原版 App 给「搜索/列表/收藏/热门/历史/预约」页做内容
+//                        过滤用，本工程没有这些 JS 页面）
+//     · 剔除其余 16 个插件 —— root 路由表里有，但只有上游 sourceLabels 下发**对应网页 URL**
+//                        才会命中；本工程没有搜片/网页解析入口，实际不可达
+//     · 剔除 web_parse_filter.json —— 全仓库零引用
+//
+//   ⚠️ 副作用：若日后上游开始下发匹配的网页 URL，JS 解析会失败（getPlugin 返回空串）。
+//      届时把对应文件名从列表删掉、重新出包即可恢复（源文件一直在仓库里）。
+//
+//   2026-09-10 体积优化: 在 mergeReleaseAssets 后删除 cacert.pem
+//     （原来自 hyhal AAR；去SDK后该资产不再出现，此任务保留为无害兜底）
+// ============================================================
+// ============================================================
+// 【2026-10-21 P0 修复（I1-01）】DEX 完整性期望值注入（release 出包后处理）
+//
+//   背景：SecurityCore.verifyDexIntegrity 原比对硬编码常量 EXPECTED_DEX_B64，
+//     其值长期为占位符 "REPLACE_WITH_DEX_SHA256_BASE64"，命中即 return true，
+//     校验完全空转（二次打包 / 篡改检测不到，审计 P0 项）。
+//   方案：期望值改放 APK 内 assets/dexhash.png（运行时读取；占位符 44 字节 ASCII）。
+//     本任务在 assembleRelease 收尾（重命名后）执行：
+//       1) 按运行时同口径计算 APK 内全部 classes*.dex（数字序）的 SHA-256 → Base64(44字符)
+//       2) 原地改写 assets/dexhash.png 条目内容（STORED 等长，同步更新本地头/中央目录 CRC）
+//       3) apksigner 以 release 签名配置重签名（内容变更必然使原签名失效）
+//     任一步骤失败：APK 保持原样（占位符留存），运行时降级为「未配置」告警，不阻断构建。
+//     debug 包不注入（BuildConfig.IS_DEBUG 直接跳过校验）。
+//   运行时口径：SecurityCore.IntegrityCheck.computeDexHash / SecurityCheck.verifyDexIntegrity。
+//   .png 扩展名原因：本 AGP 版本 packagingOptions.resources 无 noCompress 入口，
+//     .png 默认 STORED 进包，注入任务才能等长原地改写（压缩流改写会变长、破坏 zip 结构）。
+// ============================================================
+def injectDexHashIntoApk = { File apk ->
+    try {
+        // —— 1. 定位 apksigner.jar（SDK build-tools，取最高版本） ——
+        def sdkDir = null
+        try { sdkDir = project.android.sdkDirectory } catch (Throwable ignored) {}
+        if (sdkDir == null) {
+            def env = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+            if (env) sdkDir = new File(env)
+        }
+        def apksignerJar = null
+        if (sdkDir != null) {
+            def btDir = new File(sdkDir, "build-tools")
+            def candidates = btDir.listFiles()?.findAll {
+                it.isDirectory() && new File(it, "lib/apksigner.jar").isFile()
+            } ?: []
+            candidates.sort { a, b ->
+                def va = a.name.split("\\.").collect { it.isInteger() ? it.toInteger() : 0 }
+                def vb = b.name.split("\\.").collect { it.isInteger() ? it.toInteger() : 0 }
+                for (int i = 0; i < Math.max(va.size(), vb.size()); i++) {
+                    def x = i < va.size() ? va[i] : 0
+                    def y = i < vb.size() ? vb[i] : 0
+                    if (x != y) return x <=> y
+                }
+                return 0
+            }
+            if (!candidates.isEmpty()) {
+                apksignerJar = new File(candidates.last(), "lib/apksigner.jar")
+            }
+        }
+        if (apksignerJar == null) {
+            println "[DEX校验] 未找到 apksigner.jar（build-tools），跳过注入（运行时按未配置降级）：${apk.name}"
+            return
+        }
+
+        // —— 2. release 签名配置（与 signingConfigs.release 同源） ——
+        def ksFile = file("release.keystore")
+        def ksPass = findProperty("storePassword")
+        def ksAlias = findProperty("keyAlias")
+        def keyPass = findProperty("keyPassword")
+        if (!ksFile.isFile() || !ksPass || !ksAlias || !keyPass) {
+            println "[DEX校验] release 签名配置不完整（storePassword/keyAlias/keyPassword），跳过注入：${apk.name}"
+            return
+        }
+
+        // —— 3. 计算期望哈希（口径同 IntegrityCheck.computeDexHash：classes*.dex 数字序拼接） ——
+        def dexIdx = { String name ->
+            def m = (name =~ /classes(\d+)?\.dex/)
+            if (!m) return Integer.MAX_VALUE
+            def g = m[0][1]
+            (g == null || g.isEmpty()) ? 0 : g.toInteger()
+        }
+        byte[] digest
+        def zf = new java.util.zip.ZipFile(apk)
+        try {
+            def entries = Collections.list(zf.entries()).findAll {
+                !it.isDirectory() && (it.name ==~ /classes(\d+)?\.dex/)
+            }
+            if (entries.isEmpty()) throw new IllegalStateException("APK 内无 classes*.dex")
+            entries.sort { a, b -> dexIdx(a.name) <=> dexIdx(b.name) ?: a.name <=> b.name }
+            def md = java.security.MessageDigest.getInstance("SHA-256")
+            byte[] buf = new byte[65536]
+            entries.each { e ->
+                def is = zf.getInputStream(e)
+                try {
+                    int n
+                    while ((n = is.read(buf)) > 0) md.update(buf, 0, n)
+                } finally { is.close() }
+            }
+            digest = md.digest()
+        } finally { zf.close() }
+        def expected = java.util.Base64.encoder.encodeToString(digest)
+        if (expected.length() != 44) throw new IllegalStateException("base64 长度异常: ${expected}")
+
+        // —— 4. 原地改写 assets/dexhash.png（等长 STORED，更新本地头 + 中央目录 CRC） ——
+        def u16 = { byte[] d, int o -> (d[o] & 0xFF) | ((d[o + 1] & 0xFF) << 8) }
+        def u32 = { byte[] d, int o ->
+            (d[o] & 0xFF) | ((d[o + 1] & 0xFF) << 8) | ((d[o + 2] & 0xFF) << 16) | ((d[o + 3] & 0xFF) << 24)
+        }
+        def putU32 = { byte[] d, int o, int v ->
+            d[o] = (byte) (v & 0xFF); d[o + 1] = (byte) ((v >> 8) & 0xFF)
+            d[o + 2] = (byte) ((v >> 16) & 0xFF); d[o + 3] = (byte) ((v >> 24) & 0xFF)
+        }
+        byte[] data = apk.bytes
+        int eocd = -1
+        for (int i = data.length - 22; i >= 0; i--) {
+            if (data[i] == 0x50 && data[i + 1] == 0x4b && data[i + 2] == 0x05 && data[i + 3] == 0x06) {
+                eocd = i; break
+            }
+        }
+        if (eocd < 0) throw new IllegalStateException("EOCD 未找到")
+        int cdCount = u16(data, eocd + 10)
+        int p = u32(data, eocd + 16)
+        boolean patched = false
+        for (int i = 0; i < cdCount; i++) {
+            if (u32(data, p) != 0x02014b50) throw new IllegalStateException("中央目录条目签名异常 @${p}")
+            int method = u16(data, p + 10)
+            int compSize = u32(data, p + 20)
+            int nameLen = u16(data, p + 28)
+            int extraLen = u16(data, p + 30)
+            int commentLen = u16(data, p + 32)
+            int localOffset = u32(data, p + 42)
+            String name = new String(data, p + 46, nameLen, "UTF-8")
+            if (name == "assets/dexhash.png") {
+                if (method != 0) throw new IllegalStateException("条目非 STORED（method=${method}），无法等长改写")
+                if (compSize != 44) throw new IllegalStateException("条目长度异常（${compSize}≠44）")
+                if (u32(data, localOffset) != 0x04034b50) throw new IllegalStateException("本地头签名异常")
+                int lNameLen = u16(data, localOffset + 26)
+                int lExtraLen = u16(data, localOffset + 28)
+                int dataStart = localOffset + 30 + lNameLen + lExtraLen
+                if (dataStart + 44 > data.length) throw new IllegalStateException("数据越界")
+                byte[] newContent = expected.getBytes("UTF-8")
+                System.arraycopy(newContent, 0, data, dataStart, 44)
+                def crc = new java.util.zip.CRC32()
+                crc.update(newContent)
+                putU32(data, p + 16, (int) crc.value)          // 中央目录 CRC
+                putU32(data, localOffset + 14, (int) crc.value) // 本地头 CRC
+                patched = true
+                break
+            }
+            p += 46 + nameLen + extraLen + commentLen
+        }
+        if (!patched) throw new IllegalStateException("assets/dexhash.png 条目未找到")
+        apk.bytes = data
+
+        // —— 5. apksigner 重签名（keystore 同 release 配置，证书不变 → 签名校验仍通过） ——
+        def javaBin = new File(System.getProperty("java.home"),
+                "bin/java" + (System.getProperty("os.name").toLowerCase().contains("win") ? ".exe" : ""))
+        def pb = new ProcessBuilder(javaBin.absolutePath, "-jar", apksignerJar.absolutePath, "sign",
+                "--ks", ksFile.absolutePath,
+                "--ks-pass", "pass:${ksPass}",
+                "--ks-key-alias", ksAlias.toString(),
+                "--key-pass", "pass:${keyPass}",
+                "--v1-signing-enabled", "true",
+                "--v2-signing-enabled", "true",
+                apk.absolutePath)
+        pb.redirectErrorStream(true)
+        def proc = pb.start()
+        def signLog = proc.inputStream.text
+        int code = proc.waitFor()
+        if (code != 0) throw new IllegalStateException("apksigner 重签名失败(${code}): ${signLog}")
+
+        println "[DEX校验] 已注入 DEX 期望哈希并重签名：${apk.name} classes*.dex SHA-256(base64)=${expected}"
+    } catch (Throwable t) {
+        // 任何失败都不阻断构建：APK 保持原样，运行时按「未配置」告警降级
+        println "[DEX校验] ⚠️ 注入失败（APK 未改动，运行时按未配置降级）：${apk.name} — ${t.message}"
+    }
+}
+
+project.afterEvaluate {
+    tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach {
+        doLast {
+            def mergedAssets = file("$buildDir/intermediates/assets/release/mergeReleaseAssets")
+
+            def cacert = new File(mergedAssets, "cacert.pem")
+            if (cacert.exists()) {
+                cacert.delete()
+                println "[体积优化] 已删除 mergeReleaseAssets/cacert.pem (222KB)"
+            }
+
+            // —— 2026-10-15：release 专用剔除清单（源文件保留在 app/src/main/assets/js/） ——
+            def UNUSED_JS_ASSETS = [
+                    // 零引用
+                    'js/block.js',
+                    'js/web_parse_filter.json',
+                    // 仅「网页类源兜底」可达（本工程无搜片 / 网页解析入口）
+                    'js/gw_live.js', 'js/tv_live.js', 'js/qq_vod.js', 'js/other_vod.js',
+                    'js/replay.js', 'js/fun_vod.js', 'js/mgtv_vod.js', 'js/bili_vod.js',
+                    'js/sohu_vod.js', 'js/pptv_vod.js', 'js/iyf_live.js', 'js/iqy_live.js',
+                    'js/weibo_vod.js', 'js/lunbo.js', 'js/fymb_live.js', 'js/tvpass_live.js',
+            ]
+            long freed = 0L
+            int removed = 0
+            UNUSED_JS_ASSETS.each { rel ->
+                def f = new File(mergedAssets, rel)
+                if (f.exists()) {
+                    freed += f.length()
+                    if (f.delete()) removed++
+                }
+            }
+            println "[体积优化] release 已剔除未使用的 JS 资产 ${removed} 个（未压缩 ${freed / 1024}KB）；" +
+                    "源文件保留于 app/src/main/assets/js/（恢复：删掉 build.gradle 里对应一行）"
+
+            // —— 防呆闸门：误放进 assets 的备份/临时文件一律不许进包 ——
+            //   背景（2026-10-15 事故）：曾把 `yt_source_root.js.bak-routefix-20261015` 直接建在
+            //   app/src/main/assets/js/ 下 —— 那是**会被打包**的 assets 源目录，结果 11KB 的旧版
+            //   备份进了 APK。此闸门兜底：命中即删除并打印警告。
+            //   正确做法：assets 的备份请放到仓库根 `_bak/<用途>-<日期>/` 下。
+            int strayRemoved = 0
+            mergedAssets.eachFileRecurse { f ->
+                if (f.isFile()) {
+                    String n = f.name.toLowerCase(Locale.ROOT)
+                    if (n.endsWith('~') || n.contains('.bak') || n.endsWith('.orig') || n.endsWith('.tmp')) {
+                        println "[体积优化] ⚠️ assets 中的非正式文件已阻止进包：${f} —— " +
+                                "请把备份移到仓库根 _bak/ 下（assets 是打包源目录）"
+                        if (f.delete()) strayRemoved++
+                    }
+                }
+            }
+            if (strayRemoved > 0) {
+                println "[体积优化] 已从 release 合并产物清除 ${strayRemoved} 个误入 assets 的备份/临时文件"
+            }
+        }
+    }
+    tasks.matching { it.name == 'assembleRelease' }.configureEach {
+        doLast {
+            def outputDir = file("$buildDir/outputs/apk/release")
+            if (outputDir.exists()) {
+                def abis = ['arm64-v8a', 'armeabi-v7a']
+                abis.each { abi ->
+                    def pattern = "*-${abi}-release.apk"
+                    fileTree(dir: outputDir, include: pattern).each { apk ->
+                        def verName = project.android.defaultConfig.versionName
+                        def newName = "tv_live_release_${abi}_${verName}.apk"
+                        def newFile = new File(outputDir, newName)
+                        if (!apk.name.equals(newName) && !newFile.exists()) {
+                            apk.renameTo(newFile)
+                            logger.lifecycle "Post-build renamed: ${apk.name} -> ${newName}"
+                        }
+                    }
+                }
+                // 【2026-10-21 P0 修复（I1-01）】对重命名后的最终 APK 注入 DEX 期望哈希
+                //   （等长改写 assets/dexhash.png + apksigner 重签名；失败不阻断构建）
+                fileTree(dir: outputDir, include: "tv_live_release_*.apk").each { apkFile ->
+                    injectDexHashIntoApk(apkFile)
+                }
+            }
+        }
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force "androidx.media3:media3-common:1.7.1"
+        force "androidx.media3:media3-exoplayer:1.7.1"
+        force "androidx.media3:media3-ui:1.7.1"
+        force "androidx.media3:media3-exoplayer-hls:1.7.1"
+        force "androidx.lifecycle:lifecycle-process:2.6.2"
+    }
+    exclude group: 'org.webrtc'
+    exclude group: 'com.squareup.picasso'
+    exclude group: 'com.github.bumptech.glide'
+    // 【2026-10-08 去SDK化】原 com.huya.berry 系列模块 exclude 已无对象（libs 已删），保留无意义，删除
+}

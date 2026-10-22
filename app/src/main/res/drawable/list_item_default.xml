@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  直播模式：列表行「默认（未选中、未聚焦）」底。
+  【2026-10-20 参考图对齐】参照用户提供的参考图，底色改为不透明的中性深灰 #212121
+  （比面板底 #1A1A1A 略亮一档，层次细腻），替换原半透明白 #33FFFFFF。
+  由适配器按「本列表是否持有焦点 && isSelected」直接指定，不依赖 View 状态选择器。
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF212121" />
+    <corners android:radius="8dp" />
+</shape>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  订阅弹窗（节目单订阅 / 直播源订阅）：列表行背景
+  【2026-10-20 橄榄底 + 黄字方案】与直播频道面板三态口径统一：
+    · 焦点/按下 → 橄榄暗金底 #3C3525 + 2dp 白描边 + 8dp 圆角（list_item_focused）
+    · 选中/激活（未聚焦）与默认 → 胶囊底 #212121 + 8dp 圆角（list_item_default）
+  原先四种状态统一用浅蓝 #3340A9FF（默认全透明）的做法已废弃。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true" android:drawable="@drawable/list_item_focused" />
+    <item android:state_focused="true" android:drawable="@drawable/list_item_focused" />
+    <item android:drawable="@drawable/list_item_default" />
+</selector>

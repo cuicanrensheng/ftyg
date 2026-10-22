@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：播放器预览卡的焦点环。叠加在 PlayerView 之上，故必须全透明填充 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#00000000" />
+    <stroke android:width="3dp" android:color="#FF3AA0FF" />
+    <corners android:radius="10dp" />
+</shape>

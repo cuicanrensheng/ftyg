@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：顶部分类 Tab。选中态为实心蓝，焦点态加亮边框 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#FF1E7BE0" />
+            <stroke android:width="2dp" android:color="#FFFFFFFF" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#FF1668C0" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#33203A5E" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</selector>

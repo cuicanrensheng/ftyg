@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 直播模式：分组胶囊「焦点」态。
+     【2026-10-20 焦点降亮】原为亮金底 #FFD166（太亮），现改为与分组选中项
+     「全部(798)」同款的暗金（橄榄）底 #FF3C3525 + 黄字 #FFFFD166；
+     焦点与选中态的区别仅靠这圈 2dp 白描边保留。
+     仅圆角沿用分组胶囊的 14dp。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF3C3525" />
+    <stroke
+        android:width="2dp"
+        android:color="#FFFFFFFF" />
+    <corners android:radius="14dp" />
+</shape>

@@ -1,0 +1,279 @@
+name: Build TV Live APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: 检查是否跳过 CI
+        id: skip_check
+        run: |
+          if echo "${{ github.event.head_commit.message }}" | grep -q '\[skip ci\]'; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "检测到 [skip ci] 标签，跳过构建"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "开始构建"
+          fi
+
+      - name: 拉取仓库代码
+        if: steps.skip_check.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 设置 JDK 17
+        if: steps.skip_check.outputs.skip == 'false'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 安装 NDK r25.2.9519653
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          set -e
+          SDK_ROOT="/usr/local/lib/android/sdk"
+          
+          echo "🔧 检查 SDKMANAGER..."
+          SDKMANAGER=""
+          for CANDIDATE in \
+            "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK_ROOT/cmdline-tools/tools/bin/sdkmanager"; do
+            if [ -x "$CANDIDATE" ]; then
+              SDKMANAGER="$CANDIDATE"
+              break
+            fi
+          done
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "📦 安装 cmdline-tools..."
+            yes | sdkmanager "cmdline-tools;latest" --sdk_root="$SDK_ROOT" 2>&1 || true
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+
+          echo "✅ 使用 sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          echo "📦 安装 NDK;25.2.9519653 ..."
+          "$SDKMANAGER" --install "ndk;25.2.9519653" --sdk_root="$SDK_ROOT" 2>&1 | tail -n 5
+
+          STRIP_BIN="$SDK_ROOT/ndk/25.2.9519653/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+          if [ -x "$STRIP_BIN" ]; then
+            echo "🎉 NDK llvm-strip 就位：$STRIP_BIN"
+          else
+            echo "⚠️ llvm-strip 不在预期位置，交给 AGP 自动下载"
+          fi
+
+      - name: 赋予 gradlew 执行权限
+        if: steps.skip_check.outputs.skip == 'false'
+        run: chmod +x gradlew
+
+      - name: 缓存 Gradle 依赖
+        if: steps.skip_check.outputs.skip == 'false'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: 解码签名证书并构建
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          set -e
+          
+          echo "🔑 解码签名证书..."
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/release.keystore
+          
+          echo "📝 创建 gradle.properties..."
+          cat > gradle.properties << GRADLE_PROPS
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.suppressUnsupportedCompileSdk=36
+          org.gradle.jvmargs=-Xmx4096m
+          org.gradle.parallel=true
+          org.gradle.caching=false
+          android.enableR8.fullMode=true
+          GRADLE_PROPS
+
+          echo "🔍 检查依赖版本..."
+          DEPS_OUTPUT=$(./gradlew app:dependencies --configuration releaseCompileClasspath --refresh-dependencies --no-daemon 2>&1 || true)
+          
+          if echo "$DEPS_OUTPUT" | grep -q "androidx.media3:media3-common:1.7.1"; then
+            echo "✅ 版本检查通过：Media3 已锁定为 1.7.1"
+          else
+            echo "❌ 版本检查失败：未检测到 Media3 1.7.1"
+            echo "$DEPS_OUTPUT" | head -n 30
+            exit 1
+          fi
+          
+          if echo "$DEPS_OUTPUT" | grep -q "com.google.android.exoplayer"; then
+            echo "❌ 安全警告：检测到旧版 ExoPlayer 依赖混入！"
+            exit 1
+          else
+            echo "✅ 安全检查通过：未发现旧版 ExoPlayer 依赖"
+          fi
+
+      - name: 自动更新版本号
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          set -e
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          
+          # 【2026-10-22 修复】原实现 NEW_VERSION_CODE=${{ github.run_number }}，用「工作流运行序号」
+          # 当版本号。问题是本地迭代出来的版本号（如 232）会大于运行序号（如 215），
+          # CI 一跑就把仓库版本**改小**，产出的包在已装高版本号的设备上属于降级安装
+          # （INSTALL_FAILED_VERSION_DOWNGRADE），等于发不出去。
+          # 改为「取文件里的 versionCode + 1」，保证单调递增，且在本地领先时不会回退。
+          CURRENT_VERSION_CODE=$(grep -oP 'versionCode\s+\K[0-9]+' app/build.gradle | head -1)
+          RUN_NO=${{ github.run_number }}
+          if [ -z "$CURRENT_VERSION_CODE" ]; then CURRENT_VERSION_CODE=0; fi
+          if [ "$RUN_NO" -gt "$CURRENT_VERSION_CODE" ]; then
+            NEW_VERSION_CODE=$((RUN_NO + 1))
+          else
+            NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+          fi
+          BASE_VERSION_NAME="2.0"
+          NEW_VERSION_NAME="${BASE_VERSION_NAME}.${NEW_VERSION_CODE}"
+          
+          sed -i "s/versionCode [0-9]*/versionCode $NEW_VERSION_CODE/" app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$NEW_VERSION_NAME\"/" app/build.gradle
+          
+          git add app/build.gradle
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto bump versionCode to $NEW_VERSION_CODE [skip ci]"
+            git fetch origin main
+            git push origin main --no-verify || echo "Push skip: remote has newer commits"
+          fi
+
+      - name: 执行 Release 打包
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          echo "🎯 开始执行 Release 打包..."
+          chmod +x ./gradlew
+          ./gradlew assembleRelease \
+            --stacktrace \
+            -PstorePassword="${{ secrets.STORE_PASSWORD }}" \
+            -PkeyAlias="${{ secrets.KEY_ALIAS }}" \
+            -PkeyPassword="${{ secrets.KEY_PASSWORD }}"
+
+      - name: 上传构建后的APK文件
+        if: steps.skip_check.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv-live-apk
+          path: |
+            app/build/outputs/apk/release/*arm64-v8a*.apk
+            app/build/outputs/apk/release/*armeabi-v7a*.apk
+          retention-days: 7
+
+      - name: 生成 update.json
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          set -e
+          VERSION_CODE=${{ github.run_number }}
+          VERSION_NAME=$(grep "versionName" app/build.gradle | head -1 | awk -F'"' '{print $2}')
+          APK_DIR="app/build/outputs/apk/release"
+          GH_BASE="https://github.com/${{ github.repository }}/releases/download/v$VERSION_CODE"
+
+          ARM64_APK=$(ls ${APK_DIR}/*arm64-v8a*.apk 2>/dev/null | head -1)
+          ARMV7_APK=$(ls ${APK_DIR}/*armeabi-v7a*.apk 2>/dev/null | head -1)
+
+          if [ -f app/release_notes.txt ]; then
+            RELEASE_NOTES=$(cat app/release_notes.txt | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+          else
+            RELEASE_NOTES="自动更新版本"
+          fi
+
+          DOWNLOAD_URLS="{"
+          if [ -n "$ARM64_APK" ]; then
+            ARM64_NAME=$(basename "$ARM64_APK")
+            DOWNLOAD_URLS="${DOWNLOAD_URLS}\"arm64-v8a\": \"${GH_BASE}/${ARM64_NAME}\""
+            echo "✅ 找到 arm64 APK: $ARM64_NAME"
+          fi
+          if [ -n "$ARMV7_APK" ]; then
+            if [ -n "$ARM64_APK" ]; then
+              DOWNLOAD_URLS="${DOWNLOAD_URLS},"
+            fi
+            ARMV7_NAME=$(basename "$ARMV7_APK")
+            DOWNLOAD_URLS="${DOWNLOAD_URLS}\"armeabi-v7a\": \"${GH_BASE}/${ARMV7_NAME}\""
+            echo "✅ 找到 armeabi-v7a APK: $ARMV7_NAME"
+          fi
+          DOWNLOAD_URLS="${DOWNLOAD_URLS}}"
+
+          if [ "$DOWNLOAD_URLS" = "{}" ]; then
+            SINGLE_APK=$(ls ${APK_DIR}/*.apk 2>/dev/null | grep -v baselineProfiles | head -1)
+            if [ -n "$SINGLE_APK" ]; then
+              SINGLE_NAME=$(basename "$SINGLE_APK")
+              DOWNLOAD_URLS="\"downloadUrl\": \"${GH_BASE}/${SINGLE_NAME}\""
+            fi
+          else
+            DOWNLOAD_URLS="\"downloadUrls\": ${DOWNLOAD_URLS}"
+          fi
+
+          cat > update.json << EOF
+          {
+            "versionCode": $VERSION_CODE,
+            "versionName": "$VERSION_NAME",
+            "message": "$RELEASE_NOTES",
+            $DOWNLOAD_URLS
+          }
+          EOF
+
+          echo "📄 update.json 内容："
+          cat update.json
+
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add update.json
+          if git diff --cached --quiet; then
+            echo "No changes to update.json"
+          else
+            git commit -m "Auto update update.json for release v$VERSION_CODE [skip ci]"
+            git fetch origin main
+            git push origin main --no-verify || echo "Push skip: remote has newer commits"
+          fi
+
+      - name: 列出所有生成的 APK 文件
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          echo "📁 Release APK 目录内容："
+          ls -la app/build/outputs/apk/release/*.apk 2>/dev/null || echo "❌ 未找到 APK 文件"
+          echo ""
+          echo "🔍 按 ABI 分类检查："
+          for abi in arm64-v8a armeabi-v7a; do
+            files=$(ls app/build/outputs/apk/release/*${abi}*.apk 2>/dev/null || true)
+            if [ -n "$files" ]; then
+              echo "✅ $abi: $files"
+            else
+              echo "❌ $abi: 未找到"
+            fi
+          done
+
+      - name: 创建发布并上传成品
+        if: steps.skip_check.outputs.skip == 'false'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          name: 自动发布 v${{ github.run_number }}
+          files: |
+            app/build/outputs/apk/release/*arm64-v8a*.apk
+            app/build/outputs/apk/release/*armeabi-v7a*.apk
+            update.json
+          overwrite_files: true

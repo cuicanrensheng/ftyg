@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  复制/删除按钮背景态
+  【2026-10-20 橄榄底 + 黄字方案】焦点/按下由规范浅蓝 #FFB3D9FF / #FF8ABFEE
+  改为橄榄暗金底 #3C3525 + 2dp 白描边 + 8dp 圆角（复用 list_item_focused）；
+  未聚焦保持灰背景 #FF55576A。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:state_pressed="false" android:drawable="@drawable/list_item_focused" />
+    <item android:state_pressed="true" android:drawable="@drawable/list_item_focused" />
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#FF55576A"/>
+            <corners android:radius="8dp"/>
+        </shape>
+    </item>
+</selector>

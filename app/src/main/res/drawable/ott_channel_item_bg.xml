@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTT 首页：频道网格卡片。焦点态给高亮边框（大屏遥控焦点必须清晰可辨） -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#CC12406E" />
+            <!-- 【2026-10-13 焦点框去重】去掉本状态的描边：GridView 的 listSelector
+                 (ott_channel_focus, 3dp 蓝框) 已绘制焦点框，这里再画 2dp 描边会与焦点框
+                 叠加成「蓝框内多出的一横」（卡片底边横线）。焦点表现统一由 listSelector 承担。 -->
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#CC12406E" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#CC12406E" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#660E1E3C" />
+            <!-- 【2026-10-13 电视视觉修复】默认态去描边：每卡 1dp 白描边在 4 列网格中
+                 上下叠加成「行间横线」，电视上观感突兀。焦点/选中态仍由高亮边框+Selector 呈现。 -->
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</selector>

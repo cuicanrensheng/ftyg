@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 【2026-09-29 频道台标】台标占位图：半透明白色圆角矩形 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#14FFFFFF" />
+    <corners android:radius="4dp" />
+</shape>

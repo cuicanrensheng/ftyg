@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 【2026-09-29 频道台标】为 ImageView 的 tag 提供稳定的资源 ID（用于防错位校验） -->
+<resources>
+    <item name="logo_load_tag" type="id"/>
+</resources>

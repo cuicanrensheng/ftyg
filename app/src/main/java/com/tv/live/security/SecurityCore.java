@@ -1980,6 +1980,20 @@ public final class SecurityCore {
 
     private static boolean verifySignature(Context appCtx) {
         try {
+            // 【2026-10-22 修复·release 234 启动崩溃】这里原来直接调 nativeBindSignature /
+            //   nativeSignatureOk，假定 SO 已加载——而 SecurityCore.init() 跑在
+            //   MyApplication 的 init-urlconfig-early 后台线程里，与本方法存在**竞态**。
+            //   2.0.232 碰巧赢了这个竞态；2.0.234 输了 → 启动即
+            //   UnsatisfiedLinkError: nativeSignatureOk → FATAL（AppIO-2）。
+            //   这里先同步确保加载（幂等，已加载时立即返回），仍失败则按「降级模式」放行，
+            //   绝不让一个 JNI 调用把整个进程打死。
+            if (!sLoaded) {
+                try { init(); } catch (Throwable ignored) {}
+            }
+            if (!sLoaded) {
+                LogBridge.w(TAG, "⚠️ 安全库未加载，签名校验降级放行（不影响功能）");
+                return true;
+            }
             PackageManager pm = appCtx.getPackageManager();
             PackageInfo pi;
             byte[] certBytes;
@@ -2020,7 +2034,13 @@ public final class SecurityCore {
             String sigB64 = Base64.encodeToString(shaBytes, Base64.NO_WRAP);
             LogBridge.i(TAG, "当前签名 SHA256=" + sigB64.substring(0, Math.min(12, sigB64.length())) + "…");
 
-            boolean ok = nativeSignatureOk();
+            boolean ok;
+            try {
+                ok = nativeSignatureOk();
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "签名校验 JNI 不可用，降级放行: " + t.getMessage());
+                return true;
+            }
             if (!ok) {
                 LogBridge.e(TAG, "❌ 签名校验失败：与 .so 内置期望不一致（加密常量已失效）");
                 toastAndExit(appCtx, "签名校验失败，APK 被修改");

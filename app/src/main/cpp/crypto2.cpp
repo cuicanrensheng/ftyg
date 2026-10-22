@@ -198,6 +198,105 @@ int ct_equal(const uint8_t* a, const uint8_t* b, size_t n) {
     return d == 0 ? 1 : 0;
 }
 
+// ---------------- AES-256-GCM 核心（JNI 壳与 nbmovie.cpp 共用） ----------------
+//
+// 【2026-10-21】从下面的两个 JNI 函数中抽出，逻辑与原实现逐行等价：
+// 密文||16B tag 写入 out（容量 >= plainLen+16）。返回 0；参数错 -2。
+int gcm_seal_core(const uint8_t* key, const uint8_t* nonce, size_t nonceLen,
+                  const uint8_t* plain, size_t plainLen,
+                  const uint8_t* aad, size_t aadLen, uint8_t* out) {
+    if (key == nullptr || nonce == nullptr || nonceLen == 0 || out == nullptr) return -2;
+    if (plainLen > 0 && plain == nullptr) return -2;
+    if (aadLen > 0 && aad == nullptr) return -2;
+
+    uint8_t rk[240];
+    aes256_expand(key, rk);
+
+    uint8_t H[16];
+    uint8_t zero[16];
+    memset(zero, 0, 16);
+    aes_encrypt_block(zero, H, rk);
+
+    uint8_t J0[16];
+    if (nonceLen == 12) {
+        memcpy(J0, nonce, 12);
+        J0[12] = 0; J0[13] = 0; J0[14] = 0; J0[15] = 1;
+    } else {
+        ghash(H, nullptr, 0, nonce, nonceLen, J0);
+    }
+
+    if (plainLen > 0) {
+        uint8_t ctr[16];
+        memcpy(ctr, J0, 16);
+        inc32(ctr);
+        ctr_xcrypt(rk, ctr, plain, plainLen, out);
+    }
+
+    uint8_t S[16];
+    ghash(H, aadLen > 0 ? aad : nullptr, aadLen, out, plainLen, S);
+    uint8_t E0[16];
+    aes_encrypt_block(J0, E0, rk);
+    for (int i = 0; i < 16; ++i) out[plainLen + i] = (uint8_t)(E0[i] ^ S[i]);
+
+    memset(rk, 0, sizeof(rk));
+    memset(H, 0, sizeof(H));
+    memset(J0, 0, sizeof(J0));
+    memset(S, 0, sizeof(S));
+    memset(E0, 0, sizeof(E0));
+    return 0;
+}
+
+// 验签通过：明文写入 out（容量 >= ctTagLen-16）。返回 0；tag 不符 -1；参数错 -2。
+int gcm_open_core(const uint8_t* key, const uint8_t* nonce, size_t nonceLen,
+                  const uint8_t* ctTag, size_t ctTagLen,
+                  const uint8_t* aad, size_t aadLen, uint8_t* out) {
+    if (key == nullptr || nonce == nullptr || nonceLen == 0 || out == nullptr ||
+        ctTag == nullptr || ctTagLen < 16) {
+        return -2;
+    }
+    if (aadLen > 0 && aad == nullptr) return -2;
+    const size_t ctlen = ctTagLen - 16;
+
+    uint8_t rk[240];
+    aes256_expand(key, rk);
+
+    uint8_t H[16];
+    uint8_t zero[16];
+    memset(zero, 0, 16);
+    aes_encrypt_block(zero, H, rk);
+
+    uint8_t J0[16];
+    if (nonceLen == 12) {
+        memcpy(J0, nonce, 12);
+        J0[12] = 0; J0[13] = 0; J0[14] = 0; J0[15] = 1;
+    } else {
+        ghash(H, nullptr, 0, nonce, nonceLen, J0);
+    }
+
+    uint8_t S[16];
+    ghash(H, aadLen > 0 ? aad : nullptr, aadLen, ctTag, ctlen, S);
+    uint8_t E0[16];
+    aes_encrypt_block(J0, E0, rk);
+    uint8_t expect[16];
+    for (int i = 0; i < 16; ++i) expect[i] = (uint8_t)(E0[i] ^ S[i]);
+
+    int rc = ct_equal(expect, ctTag + ctlen, 16) ? 0 : -1;
+    if (rc == 0 && ctlen > 0) {
+        uint8_t ctr[16];
+        memcpy(ctr, J0, 16);
+        inc32(ctr);
+        ctr_xcrypt(rk, ctr, ctTag, ctlen, out);
+    }
+
+    memset(rk, 0, sizeof(rk));
+    memset(H, 0, sizeof(H));
+    memset(J0, 0, sizeof(J0));
+    memset(S, 0, sizeof(S));
+    memset(E0, 0, sizeof(E0));
+    memset(expect, 0, sizeof(expect));
+    return rc;
+}
+
 // ---------------- SHA-256 ----------------
 
 const uint32_t K256[64] = {
@@ -493,45 +592,19 @@ Java_com_tv_live_security_SecurityCore_nativeAesGcmEncrypt(JNIEnv* env, jclass,
         return nullptr;
     }
 
-    uint8_t rk[240];
-    aes256_expand(k.p, rk);
-
-    uint8_t H[16];
-    uint8_t zero[16];
-    memset(zero, 0, 16);
-    aes_encrypt_block(zero, H, rk);
-
-    uint8_t J0[16];
-    if (v.len == 12) {
-        memcpy(J0, v.p, 12);
-        J0[12] = 0; J0[13] = 0; J0[14] = 0; J0[15] = 1;
-    } else {
-        ghash(H, nullptr, 0, v.p, (size_t)v.len, J0);
-    }
-
     uint8_t* ct = (uint8_t*)malloc((size_t)p.len + 16);
     if (ct == nullptr) {
         release(&k); release(&v); release(&p); release(&a);
         return nullptr;
     }
-    uint8_t ctr[16];
-    memcpy(ctr, J0, 16);
-    inc32(ctr);
-    ctr_xcrypt(rk, ctr, p.p, (size_t)p.len, ct);
-
-    uint8_t S[16];
-    ghash(H, a.ok ? a.p : nullptr, a.ok ? (size_t)a.len : 0, ct, (size_t)p.len, S);
-    uint8_t E0[16];
-    aes_encrypt_block(J0, E0, rk);
-    for (int i = 0; i < 16; ++i) ct[(size_t)p.len + i] = (uint8_t)(E0[i] ^ S[i]);
-
-    jbyteArray r = make_array(env, ct, (size_t)p.len + 16);
-
-    memset(H, 0, sizeof(H));
-    memset(J0, 0, sizeof(J0));
-    memset(S, 0, sizeof(S));
-    memset(E0, 0, sizeof(E0));
-    memset(rk, 0, sizeof(rk));
+    int rc = gcm_seal_core(k.p, v.p, (size_t)v.len, p.p, (size_t)p.len,
+                           a.ok ? a.p : nullptr, a.ok ? (size_t)a.len : 0, ct);
+    jbyteArray r = nullptr;
+    if (rc == 0) {
+        r = make_array(env, ct, (size_t)p.len + 16);
+    } else {
+        LOGE2("gcm enc: core rc=%d", rc);
+    }
     memset(ct, 0, (size_t)p.len + 16);
     free(ct);
     release(&k); release(&v); release(&p); release(&a);
@@ -554,51 +627,23 @@ Java_com_tv_live_security_SecurityCore_nativeAesGcmDecrypt(JNIEnv* env, jclass,
     }
 
     const size_t ctlen = (size_t)c.len - 16;
-    uint8_t rk[240];
-    aes256_expand(k.p, rk);
-
-    uint8_t H[16];
-    uint8_t zero[16];
-    memset(zero, 0, 16);
-    aes_encrypt_block(zero, H, rk);
-
-    uint8_t J0[16];
-    if (v.len == 12) {
-        memcpy(J0, v.p, 12);
-        J0[12] = 0; J0[13] = 0; J0[14] = 0; J0[15] = 1;
-    } else {
-        ghash(H, nullptr, 0, v.p, (size_t)v.len, J0);
+    uint8_t* pt = (uint8_t*)malloc(ctlen > 0 ? ctlen : 1);
+    if (pt == nullptr) {
+        release(&k); release(&v); release(&c); release(&a);
+        return nullptr;
     }
-
-    uint8_t S[16];
-    ghash(H, a.ok ? a.p : nullptr, a.ok ? (size_t)a.len : 0, c.p, ctlen, S);
-    uint8_t E0[16];
-    aes_encrypt_block(J0, E0, rk);
-    uint8_t expect[16];
-    for (int i = 0; i < 16; ++i) expect[i] = (uint8_t)(E0[i] ^ S[i]);
-
+    int rc = gcm_open_core(k.p, v.p, (size_t)v.len, c.p, (size_t)c.len,
+                           a.ok ? a.p : nullptr, a.ok ? (size_t)a.len : 0, pt);
     jbyteArray r = nullptr;
-    if (ct_equal(expect, c.p + ctlen, 16)) {
-        uint8_t* pt = (uint8_t*)malloc(ctlen > 0 ? ctlen : 1);
-        if (pt != nullptr) {
-            uint8_t ctr[16];
-            memcpy(ctr, J0, 16);
-            inc32(ctr);
-            ctr_xcrypt(rk, ctr, c.p, ctlen, pt);
-            r = make_array(env, pt, ctlen);
-            memset(pt, 0, ctlen > 0 ? ctlen : 1);
-            free(pt);
-        }
-    } else {
+    if (rc == 0) {
+        r = make_array(env, pt, ctlen);
+    } else if (rc == -1) {
         LOGE2("gcm dec: auth tag mismatch");
+    } else {
+        LOGE2("gcm dec: core rc=%d", rc);
     }
-
-    memset(H, 0, sizeof(H));
-    memset(J0, 0, sizeof(J0));
-    memset(S, 0, sizeof(S));
-    memset(E0, 0, sizeof(E0));
-    memset(expect, 0, sizeof(expect));
-    memset(rk, 0, sizeof(rk));
+    memset(pt, 0, ctlen > 0 ? ctlen : 1);
+    free(pt);
     release(&k); release(&v); release(&c); release(&a);
     return r;
 }
@@ -620,4 +665,31 @@ extern "C" void tvl_aes256_expand(const uint8_t key[32], uint8_t rk[240]) {
 extern "C" void tvl_aes_encrypt_block(const uint8_t in[16], uint8_t out[16],
                                       const uint8_t* rk) {
     aes_encrypt_block(in, out, rk);
+}
+
+// =============================================================
+// 【2026-10-21】以下 4 个转发器供 nbmovie.cpp（4K影视协议层）复用：
+// 协议只需「HMAC 签名 + GCM 加解密」两个原语，且要与 Java 侧
+// SecurityCore 走同一份实现，避免两套算法漂移。
+// 声明见 cpp/tvl_crypto.h。
+// =============================================================
+extern "C" void tvl_sha256(const uint8_t* data, size_t len, uint8_t out[32]) {
+    sha256(data, len, out);
+}
+
+extern "C" void tvl_hmac_sha256(const uint8_t* key, size_t keyLen,
+                                const uint8_t* msg, size_t msgLen, uint8_t out[32]) {
+    hmac_sha256(key, keyLen, msg, msgLen, out);
+}
+
+extern "C" int tvl_aes256_gcm_seal(const uint8_t key[32], const uint8_t* nonce, size_t nonceLen,
+                                   const uint8_t* plain, size_t plainLen,
+                                   const uint8_t* aad, size_t aadLen, uint8_t* out) {
+    return gcm_seal_core(key, nonce, nonceLen, plain, plainLen, aad, aadLen, out);
+}
+
+extern "C" int tvl_aes256_gcm_open(const uint8_t key[32], const uint8_t* nonce, size_t nonceLen,
+                                   const uint8_t* ctTag, size_t ctTagLen,
+                                   const uint8_t* aad, size_t aadLen, uint8_t* out) {
+    return gcm_open_core(key, nonce, nonceLen, ctTag, ctTagLen, aad, aadLen, out);
 }

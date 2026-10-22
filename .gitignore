@@ -38,6 +38,10 @@ mapping_output/
 mapping_release_v10/
 *.tmp
 *.bak
+# 备份文件（本项目用 <原名>.bak-<用途>-<日期> / <原名>.bak_<时间戳> 命名，
+# 普通 *.bak 规则匹配不到，必须单独列出，否则每次 git add 都会带进几十个备份）
+*.bak-*
+*.bak_*
 *.swp
 *~
 

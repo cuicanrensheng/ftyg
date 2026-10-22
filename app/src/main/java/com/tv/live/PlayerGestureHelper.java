@@ -14,6 +14,13 @@ public class PlayerGestureHelper {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static final long SCROLL_LOCK_DELAY = 500;
 
+    /**
+     * 【2026-10-22 L1-15】具名 Runnable：原 lockScroll 用
+     * {@code removeCallbacksAndMessages(null)} 清场，会把同 handler 上其它回调一并清掉。
+     * 当前只挂这一种复位，改为精确清理防未来新增回调被误伤。
+     */
+    private final Runnable mUnlockScrollRunnable = () -> isScrollLocked = false;
+
     public PlayerGestureHelper(Context context, GestureCallback callback) {
         this.callback = callback;
         gestureDetector = new GestureDetector(context, new MyGestureListener());
@@ -65,10 +72,9 @@ public class PlayerGestureHelper {
 
         private void lockScroll() {
             isScrollLocked = true;
-            mainHandler.removeCallbacksAndMessages(null);
-            mainHandler.postDelayed(() -> {
-                isScrollLocked = false;
-            }, SCROLL_LOCK_DELAY);
+            // 【2026-10-22 L1-15】只移除 scroll 解锁自身（勿再 removeCallbacksAndMessages(null)）
+            mainHandler.removeCallbacks(mUnlockScrollRunnable);
+            mainHandler.postDelayed(mUnlockScrollRunnable, SCROLL_LOCK_DELAY);
         }
     }
 

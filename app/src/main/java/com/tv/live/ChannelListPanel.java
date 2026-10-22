@@ -451,7 +451,42 @@ public class ChannelListPanel extends LinearLayout {
         rows.clear();
         rowChannels.clear();
 
-        for (int i = 0; i < filtered.size(); i++) {
+        tvPage.setText("共" + filtered.size() + "台");
+        // 【2026-10-22 ANR 修复】原实现一次性在主线程 new 出全部行（每行 1×LinearLayout +
+        //   2×TextView + 背景 drawable）。咪咕源 342 台 + 虎牙系 606 台 = 948 行时，主线程
+        //   连续建 View 超过 20s，触摸事件无法分发 → Input dispatching timed out ANR
+        //   （实测 trace：main Runnable @ TextView.<init> ← ChannelListPanel.text/makeRow/rebuild）。
+        //   改为分片构建：首片同步建好（首屏立即可见），其余每次 post 一帧分批补齐，
+        //   帧间可正常处理输入与绘制；重建代次 gen 保证旧分片任务不会污染新列表。
+        final int gen = ++rebuildGen;
+        appendRowsChunk(gen, 0, keepIdx, t0);
+    }
+
+    /** 每次 post 构建的行数：单行实测约 20ms（含 3 个 View + 背景），12 行约 250ms，
+     *  既能保持首屏即时，又把单次主线程占用压在输入分发超时阈值之内。 */
+    private static final int REBUILD_CHUNK = 12;
+
+    /** 重建代次：新的 rebuild() 会作废旧的分片任务（防止旧任务把行补进已清空的列表）。 */
+    private int rebuildGen;
+
+    /**
+     * 【2026-10-22 分片构建·定位待办】打开面板时要定位的「正在播放行」下标。
+     *
+     * <p>{@link #show()} 在 {@link #rebuild(boolean)} 之后立刻调 focusCurrentRowWithRetry()，
+     * 而分片构建此时只建好了首片（12 行）；若当前播放行在 59 行，旧实现会直接
+     * {@code rows.get(59)} → IndexOutOfBoundsException（2.0.220 实测崩溃）。
+     * 现在超出已建行数时只登记下标，由 {@link #appendRowsChunk} 建完后统一聚焦。
+     */
+    private int pendingFocusIdx = -1;
+
+    /**
+     * 分片构建行：从 {@code start} 起最多再建 {@link #REBUILD_CHUNK} 行；
+     * 未建完则 post 下一片，建完后恢复焦点并打点。
+     */
+    private void appendRowsChunk(final int gen, final int start, final int keepIdx, final long t0) {
+        if (gen != rebuildGen || closed) return;
+        final int end = Math.min(start + REBUILD_CHUNK, filtered.size());
+        for (int i = start; i < end; i++) {
             final Channel ch = filtered.get(i);
             View row = makeRow(ch, i);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -461,7 +496,11 @@ public class ChannelListPanel extends LinearLayout {
             rows.add(row);
             rowChannels.add(ch);
         }
-        tvPage.setText("共" + filtered.size() + "台");
+        if (end < filtered.size()) {
+            listBox.post(() -> appendRowsChunk(gen, end, keepIdx, t0));
+            return;
+        }
+
         clampFocusInside();
         // ⚠ 顺序很重要：先让目标行拿到焦点，再撤 listBox 的临时可聚焦性；
         // 反过来会把停在 listBox 上的焦点清空 → 又掉回控制栏。
@@ -483,6 +522,21 @@ public class ChannelListPanel extends LinearLayout {
         LogBridge.i(TAG, "频道列表 " + activeGroup + " 共 " + filtered.size()
                 + " 台（双栏，随焦点滚动），保留焦点行=" + keepIdx
                 + "，构建耗时=" + (System.currentTimeMillis() - t0) + "ms");
+
+        // 【2026-10-22 分片构建】打开时登记的「定位当前播放行」在此补做
+        //   （首片构建时目标行往往还没建出来，见 focusCurrentRow 的说明）。
+        if (pendingFocusIdx >= 0) {
+            final int want = pendingFocusIdx;
+            pendingFocusIdx = -1;
+            if (want < rows.size() && !hasFocusInside()) {
+                lastRowIdx = want;
+                if (rows.get(want).requestFocus()) {
+                    final int y = Math.max(0, want * rowPitch() - rowPitch());
+                    listScroll.post(() -> listScroll.scrollTo(0, y));
+                    LogBridge.i(TAG, "分片构建完成 → 定位到目标行[" + want + "]");
+                }
+            }
+        }
     }
 
     /** 撤掉 listBox 的"临时焦点持有者"身份（焦点已在某行上，撤掉不会丢失焦点） */
@@ -659,29 +713,15 @@ public class ChannelListPanel extends LinearLayout {
      * </ul>
      */
     private void clampFocusInside() {
-        java.util.List<View> tabs = new java.util.ArrayList<>();
-        for (View t : tabViews) {
-            if (t != null && t.isFocusable()) {
-                if (t.getId() == View.NO_ID) t.setId(View.generateViewId());
-                tabs.add(t);
-            }
-        }
+        // 【2026-10-22 P2-09】左列分组胶囊为虚拟焦点区（全部 setFocusable(false)，
+        //   高亮由自绘承担），tabViews 收不进 focusables → 原「左列」四向钉死循环
+        //   恒空转，已删除；仅保留右列频道的焦点锁定。
         java.util.List<View> list = new java.util.ArrayList<>();
         for (View v : rows) {
             if (v != null && v.isFocusable()) {
                 if (v.getId() == View.NO_ID) v.setId(View.generateViewId());
                 list.add(v);
             }
-        }
-        // 左列
-        for (int i = 0; i < tabs.size(); i++) {
-            View t = tabs.get(i);
-            t.setNextFocusLeftId(t.getId());
-            t.setNextFocusUpId((i == 0) ? t.getId() : tabs.get(i - 1).getId());
-            t.setNextFocusDownId((i == tabs.size() - 1) ? t.getId() : tabs.get(i + 1).getId());
-            t.setNextFocusRightId(list.isEmpty()
-                    ? t.getId()
-                    : list.get(Math.min(i, list.size() - 1)).getId());
         }
         // 右列：左键回当前选中的分组胶囊
         View backTab = activeTabView;
@@ -872,11 +912,24 @@ public class ChannelListPanel extends LinearLayout {
     private boolean focusCurrentRow() {
         if (rows.isEmpty()) return false;
         int idx = 0;
-        for (int i = 0; i < filtered.size(); i++) {
-            if (sameChannel(filtered.get(i), current)) {
-                idx = i;
-                break;
+        // 【2026-10-22 崩溃修复】current 可能为 null（面板在还没有"正在播放频道"时被打开，
+        //   如调试直达 debug_panel=chlist）。旧实现直接 current.getName() → NPE
+        //   （2.0.222 实测：Attempt to invoke virtual method getName() on a null object）。
+        if (current != null) {
+            for (int i = 0; i < filtered.size(); i++) {
+                if (sameChannel(filtered.get(i), current)) {
+                    idx = i;
+                    break;
+                }
             }
+        }
+        // 【2026-10-22 分片构建·崩溃修复】行还在后台补齐中（此刻只建了首片），
+        //   目标行可能还不存在 → 直接 rows.get(idx) 会 IndexOutOfBoundsException
+        //   （2.0.220 实测：Index 59 out of bounds for length 12，主线程 FATAL）。
+        //   这里只登记下标，由 appendRowsChunk 建完后统一聚焦。
+        if (idx >= rows.size()) {
+            pendingFocusIdx = idx;
+            return false;
         }
         lastRowIdx = idx;
         boolean ok = rows.get(idx).requestFocus();
@@ -885,7 +938,8 @@ public class ChannelListPanel extends LinearLayout {
             // 避免"焦点到了但行还在可视区外"。
             final int y = Math.max(0, idx * rowPitch() - rowPitch());
             listScroll.post(() -> listScroll.scrollTo(0, y));
-            LogBridge.i(TAG, "已定位到正在播放频道：第" + (idx + 1) + " 行 " + current.getName());
+            LogBridge.i(TAG, "已定位到" + (current == null ? "第一行（无正在播放频道）"
+                    : "正在播放频道：第" + (idx + 1) + " 行 " + current.getName()));
         }
         return ok;
     }

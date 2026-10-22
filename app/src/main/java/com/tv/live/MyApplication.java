@@ -112,6 +112,9 @@ public class MyApplication extends Application {
     public void onCreate() {
         super.onCreate();
         sInstance = this;
+        // 【2026-10-22 I1-07】尽早把 Application context 交给 SecurityCore：
+        //   绑定签名哈希要用 PackageManager，而 SecurityCore.init() 是无参静态方法。
+        try { SecurityCore.setAppContext(this); } catch (Throwable ignored) {}
         // 双保险：attachBaseContext 已设 IPv4 优先，这里再设一次（幂等、无副作用）。
         try {
             System.setProperty("java.net.preferIPv4Stack", "true");
@@ -408,6 +411,54 @@ public class MyApplication extends Application {
         }, 2000);
     }
 
+    /**
+     * 【2026-10-22 I1-07】Bugly 初始化（异步 + App ID 来自 native secstore）。
+     *
+     * <p>背景：原实现把 App ID 以字符串字面量写在 dex 里（`"4a23007223"`），
+     * 任何 `strings classes.dex` 都能捞到；且在主线程直接 init 会与 SO 加载抢时序。
+     *
+     * <p>现在：App ID 只在 libtvlive_security.so（secstore id=27）里，这里等 SO 加载完成
+     * （最多 4s，超时就跳过）后再初始化，全程脱离主线程。取不到只意味着「不上报崩溃」，
+     * 不影响任何功能。
+     */
+    private void initBuglyAsync() {
+        try {
+            Thread t = new Thread(() -> {
+                for (int i = 0; i < 80 && !SecurityCore.isLoaded(); i++) {
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+                String appId = null;
+                try {
+                    appId = SecurityCore.secureString(SecurityCore.C_BUGLY_APP_ID);
+                } catch (Throwable ignored) {
+                }
+                if (appId == null || appId.length() == 0) {
+                    LogBridge.w("MyApplication", "Bugly 跳过：native 常量不可用（不影响功能）");
+                    return;
+                }
+                try {
+                    com.tencent.bugly.crashreport.CrashReport.UserStrategy strategy =
+                            new com.tencent.bugly.crashreport.CrashReport.UserStrategy(MyApplication.this);
+                    strategy.setAppVersion(BuildConfig.VERSION_NAME);
+                    strategy.setAppReportDelay(10000); // 10秒延迟上报，避免启动时阻塞
+                    com.tencent.bugly.crashreport.CrashReport.initCrashReport(
+                            getApplicationContext(), appId, !BuildConfig.IS_DEBUG);
+                    LogCollector.getInstance().info("MyApplication", "Bugly 崩溃上报初始化完成");
+                } catch (Throwable e) {
+                    LogBridge.w("MyApplication", "Bugly init failed: " + e.getMessage());
+                }
+            }, "init-bugly");
+            t.setPriority(Thread.MIN_PRIORITY);
+            t.start();
+        } catch (Throwable e) {
+            LogBridge.w("MyApplication", "Bugly 线程启动失败: " + e.getMessage());
+        }
+    }
+
     private void initSecurity() {
 
         try {
@@ -547,20 +598,10 @@ public class MyApplication extends Application {
         }
 
         // 【2026-10-16】腾讯 Bugly 崩溃上报初始化（必须在 CrashHandler 之前）
-        try {
-            com.tencent.bugly.crashreport.CrashReport.UserStrategy strategy =
-                    new com.tencent.bugly.crashreport.CrashReport.UserStrategy(this);
-            strategy.setAppVersion(BuildConfig.VERSION_NAME);
-            strategy.setAppReportDelay(10000); // 10秒延迟上报，避免启动时阻塞
-            com.tencent.bugly.crashreport.CrashReport.initCrashReport(
-                    getApplicationContext(),
-                    "4a23007223", // App ID
-                    !BuildConfig.IS_DEBUG // debug 模式：release 包关闭
-            );
-            LogCollector.getInstance().info("MyApplication", "Bugly 崩溃上报初始化完成");
-        } catch (Throwable e) {
-            LogBridge.w("MyApplication", "Bugly init failed: " + e.getMessage());
-        }
+        // 【2026-10-22 I1-07】App ID 不再明文写在 dex 里：改为从 libtvlive_security.so
+        //   的 secstore 常量（id=27）取，且延后到 SO 就绪后再初始化——取不到只丢崩溃上报，
+        //   不影响任何功能，也绝不在主线程等 loadLibrary。
+        initBuglyAsync();
 
         try {
             CrashHandler.getInstance().init(this);
@@ -579,18 +620,27 @@ public class MyApplication extends Application {
         }
 
         // 【2026-10-16】启动本地广告剥离代理服务器（端口 10481）
+        // 【2026-10-22 I1-05】补 getRunningInstance() 守卫，与 initializeAsync 预启动对称：
+        //   此前此处无守卫，与预启动竞态时双实例并存（第二个 findAvailablePort 漂移绑
+        //   10482 并篡夺 runningInstance）。WebServerManager.start() 内已有静态单实例
+        //   守卫兜底，这里再加一层语义明确的跳过。
         try {
-            WebServerManager adStripServer = new WebServerManager(this, 10481);
-            adStripServer.start();
-            // start() 是异步的，等待最多 2 秒让服务器启动
-            for (int i = 0; i < 20; i++) {
-                if (adStripServer.isRunning()) break;
-                Thread.sleep(100);
-            }
-            if (adStripServer.isRunning()) {
-                LogCollector.getInstance().info("MyApplication", "广告剥离代理启动成功: 127.0.0.1:" + adStripServer.getPort());
+            if (WebServerManager.getRunningInstance() == null) {
+                WebServerManager adStripServer = new WebServerManager(this, 10481);
+                adStripServer.start();
+                // start() 是异步的，等待最多 2 秒让服务器启动
+                for (int i = 0; i < 20; i++) {
+                    if (adStripServer.isRunning()) break;
+                    Thread.sleep(100);
+                }
+                if (adStripServer.isRunning()) {
+                    LogCollector.getInstance().info("MyApplication", "广告剥离代理启动成功: 127.0.0.1:" + adStripServer.getPort());
+                } else {
+                    LogBridge.w("MyApplication", "广告剥离代理启动失败，端口可能被占用");
+                }
             } else {
-                LogBridge.w("MyApplication", "广告剥离代理启动失败，端口可能被占用");
+                LogCollector.getInstance().info("MyApplication", "广告剥离代理已在运行，跳过重复启动: 127.0.0.1:"
+                        + WebServerManager.getRunningInstance().getPort());
             }
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "广告剥离代理启动失败 (ignore): " + e.getMessage());

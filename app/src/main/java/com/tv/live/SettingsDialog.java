@@ -102,7 +102,6 @@ public class SettingsDialog extends android.app.Dialog {
     private static final long IGNORE_KEY_DELAY_MS = 500;
 
     private boolean isDismissing = false;
-    private boolean backHandled = false;
 
     public SettingsDialog(android.content.Context context) {
         super(context);
@@ -290,7 +289,6 @@ public class SettingsDialog extends android.app.Dialog {
     public void show() {
         mShowTime = System.currentTimeMillis();
         isDismissing = false;
-        backHandled = false;
 
         super.show();
         mainHandler.postDelayed(() -> {
@@ -1159,6 +1157,18 @@ public class SettingsDialog extends android.app.Dialog {
                 return;
             }
 
+            // 【2026-10-21】源2（4K影视 nbmovie 点播）：线路 = 详情接口 play_urls 的条目，
+            //   口径同源8（OTT 线路面板负责切换，这里只显示当前生效线路）。
+            String nbmVodId = currentChannel != null
+                    ? com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(currentChannel) : null;
+            if (!TextUtils.isEmpty(nbmVodId)) {
+                int curLine = com.tv.live.nbmovie.NbMovieUrlResolver.getSelectedLine(nbmVodId) + 1;
+                tv_channel_line.setText("线路" + curLine);
+                String nbmRes = playerManager.getCurrentResolutionLabel();
+                tv_resolution_status.setText(TextUtils.isEmpty(nbmRes) ? "自适应" : nbmRes);
+                return;
+            }
+
             // 【2026-10-13】源5（aiqiyi VOD）频道：线路 = video_detail 的 vod_url_with_player
             //   播放源；清晰度 = 该线路 url 的「品质$直链」标签（每线一档）。
             //   轴未就绪时惰性抓取（复用选集 single-flight），就绪后回调刷新本方法。
@@ -1829,7 +1839,6 @@ public class SettingsDialog extends android.app.Dialog {
                     popCapsule();
                     return true;
                 }
-                backHandled = true;
                 dismiss();
                 return true;
             }

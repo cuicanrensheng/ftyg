@@ -54,8 +54,24 @@ public final class M3uDiskCache {
     private final long failCooldownMs;
     private final Fetcher fetcher;
 
+    /**
+     * 【2026-10-22 I1-03】全部 M3uDiskCache 业务缓存文件名注册表。
+     *
+     * <p>启动清理（{@code CacheManager.AppCacheGovernor}）原先按「age>7 天即删」扫
+     * filesDir 全树，把各源磁盘缓存误删，表现为「放了几天的设备分组缓存反复重抓」。
+     * 构造时自动注册，新增源无需改清理端；清理端经
+     * {@link #isBusinessDiskCacheName(String)} 查询豁免。
+     */
+    private static final java.util.Set<String> sDiskCacheNames =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** 是否是 M3uDiskCache 业务磁盘缓存文件名（启动清理豁免判定用）。 */
+    public static boolean isBusinessDiskCacheName(String fileName) {
+        return fileName != null && sDiskCacheNames.contains(fileName);
+    }
+
     private volatile long lastFailAtMs = 0L;
-    private final AtomicBoolean refreshing = new AtomicBoolean(false);
+    private final AtomicBoolean refreshing = new AtomicBoolean();
     private final ExecutorService executor;
 
     public M3uDiskCache(String tag, String label, String fileName,
@@ -66,6 +82,7 @@ public final class M3uDiskCache {
         this.ttlMs = ttlMs;
         this.failCooldownMs = failCooldownMs;
         this.fetcher = fetcher;
+        sDiskCacheNames.add(fileName);
         final String threadName = "src-cache-" + fileName;
         this.executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
             @Override

@@ -32,8 +32,8 @@ android {
         applicationId "com.tv.live"
         minSdk 21
         targetSdk 36
-        versionCode 214
-        versionName "2.0.214"
+        versionCode 232
+        versionName "2.0.232"
         resConfigs "zh"
         multiDexEnabled true
 
@@ -213,6 +213,171 @@ androidComponents {
 //   2026-09-10 体积优化: 在 mergeReleaseAssets 后删除 cacert.pem
 //     （原来自 hyhal AAR；去SDK后该资产不再出现，此任务保留为无害兜底）
 // ============================================================
+// ============================================================
+// 【2026-10-21 P0 修复（I1-01）】DEX 完整性期望值注入（release 出包后处理）
+//
+//   背景：SecurityCore.verifyDexIntegrity 原比对硬编码常量 EXPECTED_DEX_B64，
+//     其值长期为占位符 "REPLACE_WITH_DEX_SHA256_BASE64"，命中即 return true，
+//     校验完全空转（二次打包 / 篡改检测不到，审计 P0 项）。
+//   方案：期望值改放 APK 内 assets/dexhash.png（运行时读取；占位符 44 字节 ASCII）。
+//     本任务在 assembleRelease 收尾（重命名后）执行：
+//       1) 按运行时同口径计算 APK 内全部 classes*.dex（数字序）的 SHA-256 → Base64(44字符)
+//       2) 原地改写 assets/dexhash.png 条目内容（STORED 等长，同步更新本地头/中央目录 CRC）
+//       3) apksigner 以 release 签名配置重签名（内容变更必然使原签名失效）
+//     任一步骤失败：APK 保持原样（占位符留存），运行时降级为「未配置」告警，不阻断构建。
+//     debug 包不注入（BuildConfig.IS_DEBUG 直接跳过校验）。
+//   运行时口径：SecurityCore.IntegrityCheck.computeDexHash / SecurityCheck.verifyDexIntegrity。
+//   .png 扩展名原因：本 AGP 版本 packagingOptions.resources 无 noCompress 入口，
+//     .png 默认 STORED 进包，注入任务才能等长原地改写（压缩流改写会变长、破坏 zip 结构）。
+// ============================================================
+def injectDexHashIntoApk = { File apk ->
+    try {
+        // —— 1. 定位 apksigner.jar（SDK build-tools，取最高版本） ——
+        def sdkDir = null
+        try { sdkDir = project.android.sdkDirectory } catch (Throwable ignored) {}
+        if (sdkDir == null) {
+            def env = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+            if (env) sdkDir = new File(env)
+        }
+        def apksignerJar = null
+        if (sdkDir != null) {
+            def btDir = new File(sdkDir, "build-tools")
+            def candidates = btDir.listFiles()?.findAll {
+                it.isDirectory() && new File(it, "lib/apksigner.jar").isFile()
+            } ?: []
+            candidates.sort { a, b ->
+                def va = a.name.split("\\.").collect { it.isInteger() ? it.toInteger() : 0 }
+                def vb = b.name.split("\\.").collect { it.isInteger() ? it.toInteger() : 0 }
+                for (int i = 0; i < Math.max(va.size(), vb.size()); i++) {
+                    def x = i < va.size() ? va[i] : 0
+                    def y = i < vb.size() ? vb[i] : 0
+                    if (x != y) return x <=> y
+                }
+                return 0
+            }
+            if (!candidates.isEmpty()) {
+                apksignerJar = new File(candidates.last(), "lib/apksigner.jar")
+            }
+        }
+        if (apksignerJar == null) {
+            println "[DEX校验] 未找到 apksigner.jar（build-tools），跳过注入（运行时按未配置降级）：${apk.name}"
+            return
+        }
+
+        // —— 2. release 签名配置（与 signingConfigs.release 同源） ——
+        def ksFile = file("release.keystore")
+        def ksPass = findProperty("storePassword")
+        def ksAlias = findProperty("keyAlias")
+        def keyPass = findProperty("keyPassword")
+        if (!ksFile.isFile() || !ksPass || !ksAlias || !keyPass) {
+            println "[DEX校验] release 签名配置不完整（storePassword/keyAlias/keyPassword），跳过注入：${apk.name}"
+            return
+        }
+
+        // —— 3. 计算期望哈希（口径同 IntegrityCheck.computeDexHash：classes*.dex 数字序拼接） ——
+        def dexIdx = { String name ->
+            def m = (name =~ /classes(\d+)?\.dex/)
+            if (!m) return Integer.MAX_VALUE
+            def g = m[0][1]
+            (g == null || g.isEmpty()) ? 0 : g.toInteger()
+        }
+        byte[] digest
+        def zf = new java.util.zip.ZipFile(apk)
+        try {
+            def entries = Collections.list(zf.entries()).findAll {
+                !it.isDirectory() && (it.name ==~ /classes(\d+)?\.dex/)
+            }
+            if (entries.isEmpty()) throw new IllegalStateException("APK 内无 classes*.dex")
+            entries.sort { a, b -> dexIdx(a.name) <=> dexIdx(b.name) ?: a.name <=> b.name }
+            def md = java.security.MessageDigest.getInstance("SHA-256")
+            byte[] buf = new byte[65536]
+            entries.each { e ->
+                def is = zf.getInputStream(e)
+                try {
+                    int n
+                    while ((n = is.read(buf)) > 0) md.update(buf, 0, n)
+                } finally { is.close() }
+            }
+            digest = md.digest()
+        } finally { zf.close() }
+        def expected = java.util.Base64.encoder.encodeToString(digest)
+        if (expected.length() != 44) throw new IllegalStateException("base64 长度异常: ${expected}")
+
+        // —— 4. 原地改写 assets/dexhash.png（等长 STORED，更新本地头 + 中央目录 CRC） ——
+        def u16 = { byte[] d, int o -> (d[o] & 0xFF) | ((d[o + 1] & 0xFF) << 8) }
+        def u32 = { byte[] d, int o ->
+            (d[o] & 0xFF) | ((d[o + 1] & 0xFF) << 8) | ((d[o + 2] & 0xFF) << 16) | ((d[o + 3] & 0xFF) << 24)
+        }
+        def putU32 = { byte[] d, int o, int v ->
+            d[o] = (byte) (v & 0xFF); d[o + 1] = (byte) ((v >> 8) & 0xFF)
+            d[o + 2] = (byte) ((v >> 16) & 0xFF); d[o + 3] = (byte) ((v >> 24) & 0xFF)
+        }
+        byte[] data = apk.bytes
+        int eocd = -1
+        for (int i = data.length - 22; i >= 0; i--) {
+            if (data[i] == 0x50 && data[i + 1] == 0x4b && data[i + 2] == 0x05 && data[i + 3] == 0x06) {
+                eocd = i; break
+            }
+        }
+        if (eocd < 0) throw new IllegalStateException("EOCD 未找到")
+        int cdCount = u16(data, eocd + 10)
+        int p = u32(data, eocd + 16)
+        boolean patched = false
+        for (int i = 0; i < cdCount; i++) {
+            if (u32(data, p) != 0x02014b50) throw new IllegalStateException("中央目录条目签名异常 @${p}")
+            int method = u16(data, p + 10)
+            int compSize = u32(data, p + 20)
+            int nameLen = u16(data, p + 28)
+            int extraLen = u16(data, p + 30)
+            int commentLen = u16(data, p + 32)
+            int localOffset = u32(data, p + 42)
+            String name = new String(data, p + 46, nameLen, "UTF-8")
+            if (name == "assets/dexhash.png") {
+                if (method != 0) throw new IllegalStateException("条目非 STORED（method=${method}），无法等长改写")
+                if (compSize != 44) throw new IllegalStateException("条目长度异常（${compSize}≠44）")
+                if (u32(data, localOffset) != 0x04034b50) throw new IllegalStateException("本地头签名异常")
+                int lNameLen = u16(data, localOffset + 26)
+                int lExtraLen = u16(data, localOffset + 28)
+                int dataStart = localOffset + 30 + lNameLen + lExtraLen
+                if (dataStart + 44 > data.length) throw new IllegalStateException("数据越界")
+                byte[] newContent = expected.getBytes("UTF-8")
+                System.arraycopy(newContent, 0, data, dataStart, 44)
+                def crc = new java.util.zip.CRC32()
+                crc.update(newContent)
+                putU32(data, p + 16, (int) crc.value)          // 中央目录 CRC
+                putU32(data, localOffset + 14, (int) crc.value) // 本地头 CRC
+                patched = true
+                break
+            }
+            p += 46 + nameLen + extraLen + commentLen
+        }
+        if (!patched) throw new IllegalStateException("assets/dexhash.png 条目未找到")
+        apk.bytes = data
+
+        // —— 5. apksigner 重签名（keystore 同 release 配置，证书不变 → 签名校验仍通过） ——
+        def javaBin = new File(System.getProperty("java.home"),
+                "bin/java" + (System.getProperty("os.name").toLowerCase().contains("win") ? ".exe" : ""))
+        def pb = new ProcessBuilder(javaBin.absolutePath, "-jar", apksignerJar.absolutePath, "sign",
+                "--ks", ksFile.absolutePath,
+                "--ks-pass", "pass:${ksPass}",
+                "--ks-key-alias", ksAlias.toString(),
+                "--key-pass", "pass:${keyPass}",
+                "--v1-signing-enabled", "true",
+                "--v2-signing-enabled", "true",
+                apk.absolutePath)
+        pb.redirectErrorStream(true)
+        def proc = pb.start()
+        def signLog = proc.inputStream.text
+        int code = proc.waitFor()
+        if (code != 0) throw new IllegalStateException("apksigner 重签名失败(${code}): ${signLog}")
+
+        println "[DEX校验] 已注入 DEX 期望哈希并重签名：${apk.name} classes*.dex SHA-256(base64)=${expected}"
+    } catch (Throwable t) {
+        // 任何失败都不阻断构建：APK 保持原样，运行时按「未配置」告警降级
+        println "[DEX校验] ⚠️ 注入失败（APK 未改动，运行时按未配置降级）：${apk.name} — ${t.message}"
+    }
+}
+
 project.afterEvaluate {
     tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach {
         doLast {
@@ -284,6 +449,11 @@ project.afterEvaluate {
                             logger.lifecycle "Post-build renamed: ${apk.name} -> ${newName}"
                         }
                     }
+                }
+                // 【2026-10-21 P0 修复（I1-01）】对重命名后的最终 APK 注入 DEX 期望哈希
+                //   （等长改写 assets/dexhash.png + apksigner 重签名；失败不阻断构建）
+                fileTree(dir: outputDir, include: "tv_live_release_*.apk").each { apkFile ->
+                    injectDexHashIntoApk(apkFile)
                 }
             }
         }

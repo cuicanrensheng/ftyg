@@ -33,7 +33,8 @@ import okhttp3.Response;
  *
  * 流程：
  *   1) 遍历有效 tagId 取频道清单（字段：tvName / contentId / tvLogo）
- *   2) 逐个频道调 /channel/get_channel_source 取 sourceLabels
+ *   2) 固定 8 线程并行调 /channel/get_channel_source 取 sourceLabels
+ *      （第三方站点允许有上限并发；「请求必须串行」红线仅约束自有服务器，见 project_memory）
  *   3) 只保留 http(s) 源（实测约 84% 频道有），按清晰度降序：首个为主源，其余为备源
  *   4) 输出 M3U 文本，交给 PlaylistParser 复用既有解析链路
  *

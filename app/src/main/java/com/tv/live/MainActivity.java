@@ -1856,10 +1856,9 @@ public class MainActivity extends AppCompatActivity {
             displayManager.release();
             displayManager = null;
         }
-        if (channelPanelController != null) {
-            channelPanelController.release();
-            channelPanelController = null;
-        }
+        // 【2026-10-22 L1-11】channelPanelController.release() 删除：上方 lifecycleHelper.releaseAll()
+        //   已经 setChannelPanelController 的 lambda 调过一次，此处再显式调一次即双重 release
+        //   （release 内多为空判+置 null，暂无崩径，但属于重复劳动，保留一条路径）
         if (appCoreManager != null) {
             appCoreManager.release();
             appCoreManager = null;

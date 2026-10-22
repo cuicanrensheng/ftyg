@@ -18,6 +18,7 @@ import com.tv.live.util.LogBridge.LogCollector;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -80,6 +81,19 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
     private static final int HUYA_RETRY_MAX = 5;
     /** 逐次退避（ms），下标即第几次重试 */
     private static final long[] HUYA_RETRY_DELAYS = {120L, 220L, 350L, 500L, 700L};
+
+    /**
+     * 【2026-10-21 CDN timeout 兜底】建连/响应阶段超时（SocketTimeoutException）退避重试。
+     * <p>背景：点播/直播分片直连 CDN 时，5s connectTimeout 期间网络抖动会直接抛
+     * "打开连接失败: timeout" → 播放器"媒体加载错误 SocketTimeoutException" → 缓冲黑屏
+     * （日志 11:14/11:18 各连续两次，CDN 抖动时周期性复发）。
+     * <p>对策：数据源内部先退避重试，与虎牙 403 抖动同一思路——不惊动播放器。
+     * 只重试「超时」，线程被 interrupt（播放器 seek/切台取消旧加载，即日志里的
+     * "thread interrupted"）不算网络失败，立即上抛，避免把取消误当失败再空等一轮。
+     */
+    private static final int TIMEOUT_RETRY_MAX = 2;
+    /** 逐次退避（ms），下标即第几次重试；总最坏等待约 5+0.3+5+1.2 ≈ 11.5s < STUCK_TIMEOUT(20s) */
+    private static final long[] TIMEOUT_RETRY_DELAYS = {300L, 1200L};
 
     private int maxRedirects = 5;
     private int connectTimeout = 10000;
@@ -229,9 +243,30 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             // 这里先在数据源内部退避重试，重试耗尽才打标（LAST_HTTP_403_TS 等）并抛出。
             String openUrl = dataSpec.uri.toString();
             int attempt = 0;
+            int timeoutRetry = 0;
             while (true) {
-                connection = openConnection(dataSpec);
-                responseCode = connection.getResponseCode();
+                try {
+                    connection = openConnection(dataSpec);
+                    responseCode = connection.getResponseCode();
+                } catch (IOException ioe) {
+                    // 【2026-10-21 CDN timeout 兜底】建连/响应阶段超时（含 connect timeout）时
+                    //   退避重试再上抛，避免一次超时就直接"媒体加载错误"导致黑屏。
+                    //   线程被 interrupt（播放器 seek/切台取消旧加载）不算超时，立即上抛不重试，
+                    //   否则会把"取消"误当"网络失败"再等一轮重试，反而拉长恢复时间。
+                    boolean threadInterrupted = Thread.currentThread().isInterrupted();
+                    boolean isTimeout = (ioe instanceof SocketTimeoutException) && !threadInterrupted;
+                    if (!isTimeout || timeoutRetry >= TIMEOUT_RETRY_MAX) {
+                        throw ioe;
+                    }
+                    timeoutRetry++;
+                    long delay = TIMEOUT_RETRY_DELAYS[Math.min(timeoutRetry - 1, TIMEOUT_RETRY_DELAYS.length - 1)];
+                    printLog(true, (currentChannelName.isEmpty() ? "" : currentChannelName + " ")
+                            + "CDN 连接超时，第 " + timeoutRetry + "/" + TIMEOUT_RETRY_MAX
+                            + " 次退避重试（+" + delay + "ms）: " + urlStr);
+                    connection = null;
+                    sleepQuietly(delay);
+                    continue;
+                }
                 if (!shouldRetryHuyaStatus(openUrl, responseCode) || attempt >= HUYA_RETRY_MAX) {
                     break;
                 }
@@ -375,7 +410,18 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             return bytesToRead;
         } catch (IOException e) {
             closeConnectionQuietly();
-            printLog(true, "打开连接失败: " + e.getMessage());
+            // 【2026-10-21 降噪】播放器 seek/切台取消旧加载 → "打开连接失败: thread interrupted"，
+            //   属预期行为而非网络故障。降级为 warn：不再打 error（LogCollector 对 TYPE_ERROR
+            //   会自动包装 RuntimeException 上报 ExceptionReporter，每次快进/快退都会刷 error）。
+            boolean threadInterrupted = Thread.currentThread().isInterrupted()
+                    || e instanceof java.io.InterruptedIOException
+                    || (e.getMessage() != null && e.getMessage().contains("thread interrupted"));
+            if (threadInterrupted) {
+                LogCollector.getInstance().warn(TAG, "[" + getTimeStr() + "] 打开连接失败: "
+                        + e.getMessage() + "（播放器取消加载，忽略）");
+            } else {
+                printLog(true, "打开连接失败: " + e.getMessage());
+            }
             throw new HttpDataSource.HttpDataSourceException(e, dataSpec, HttpDataSource.HttpDataSourceException.TYPE_OPEN);
         }
     }

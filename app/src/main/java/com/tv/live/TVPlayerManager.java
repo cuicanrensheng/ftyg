@@ -113,19 +113,6 @@ public class TVPlayerManager {
     private static final long SOURCE_FAILED_COOLDOWN_MS = 30000;
     private static final long MIN_STALL_WARN_THRESHOLD = 2000;
 
-    // ------------------------------------------------------------------
-    // 【2026-10-12 卡顿自动换线】补上「源7 卡顿兜底」这一环。
-    //   背景（2026-10-10 实测）：源7 频道「天才，女友」卡顿时表现为「播 2 秒卡 8 秒」，
-    //   播放占空比仅 23%，根因是该线路 CDN 带宽只有 ~137 KB/s（同片另一条线路 ~315 KB/s）。
-    //   而 totalStallTime 一直在累加，却从未被任何决策使用 —— 于是在一条慢线上卡到底。
-    //   现在：当前频道累计严重卡顿超过阈值，就自动换到下一条 sid 重播。
-    // ------------------------------------------------------------------
-
-    /** 当前频道累计严重卡顿时长达到该值即触发自动换线（ms） */
-    private static final long STALL_SWITCH_TOTAL_MS = 15000L;
-    /** 同一频道最多自动换线次数，防止在两条都慢的线路之间来回横跳 */
-    private static final int MAX_AFHGRJ_AUTO_SWITCH = 2;
-
     private static final String KEY_REDIRECT_MAX_COUNT = "redirect_max_count";
     private static final String KEY_REDIRECT_CROSS_DOMAIN = "redirect_cross_domain";
     private static final String KEY_REDIRECT_CROSS_PROTOCOL = "redirect_cross_protocol";
@@ -172,13 +159,39 @@ public class TVPlayerManager {
     private PlayerView playerView;
 
     private Player.Listener playerListener;
-    private String currentUrl;
+    // 【2026-10-22 P2-05】currentUrl 由 IO/主线程多线程读写（open 回调在主线程、URL 派发在后台），
+    //   补 volatile 保证可见性（审计 I1-05/P2-05 同类问题：isRunning 亦已在 WebServerManager 补）
+    private volatile String currentUrl;
     private int currentChannelNumber = 0;
     private TextView channelNumberTextView;
     private String currentChannelName = "";
     private int mDecoderMode = DECODER_MODE_AUTO;
 
     private boolean isSwitching = false;
+    /** 【2026-10-22 P1-04】解码器切换看门狗·10s 条件复查：切换期旧卡顿看门狗已被摘除，
+     *  若 10s 仍未就绪且无新播放事件兜底，此处补挂 startStuckDetection，避免切换后卡死无人兜底 */
+    private final Runnable switchingCheckRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isSwitching) return;
+            boolean ready = (player != null && player.getPlaybackState() == Player.STATE_READY);
+            if (ready) {
+                LogBridge.i(TAG, "【解码器切换】10s 条件复查：已就绪");
+            } else {
+                LogBridge.w(TAG, "【解码器切换】10s 条件复查：仍未就绪，补挂卡顿看门狗");
+                startStuckDetection();
+            }
+        }
+    };
+    /** 【2026-10-22 P1-04】解码器切换看门狗·30s 绝对兜底：任何播放事件都未到时的强制解锁 */
+    private final Runnable switchingUnlockRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isSwitching) return;
+            LogBridge.w(TAG, "【解码器切换】30s 绝对兜底：强制解锁切换锁");
+            isSwitching = false;
+        }
+    };
 
     private Channel currentChannel;
     private int backupRetryIndex = -1;
@@ -188,8 +201,6 @@ public class TVPlayerManager {
     private long totalStallTime = 0;
     private boolean isStalled = false;
     private long lastStallStartTime = 0;
-    /** 【2026-10-12 卡顿自动换线】当前频道已自动换线次数（防横跳；换台时归零） */
-    private int afhgrjAutoSwitchLineCount = 0;
 
     /**
      * 【2026-10-11 源7 联播】「本片所有集数已播完」标记。
@@ -225,12 +236,33 @@ public class TVPlayerManager {
     private volatile long renyiboSwitchingUntilMs = 0L;
     /** 【2026-10-13 源5 联播】换集宽限期时长（与源7 同规格） */
     private static final long RENYIBO_SWITCH_GRACE_MS = 20000L;
+
     /**
-     * 【2026-10-12 卡顿自动换线】只累计「严重卡顿」（≥ {@link #MIN_STALL_WARN_THRESHOLD}）的时长。
-     * 不能直接用 {@link #totalStallTime} 判阈值——它把 <2s 的正常抖动也累加了，
-     * 健康线路看一部片零散缓冲也能凑到 15s，会把好线路误换掉。
+     * 【2026-10-22 源8 联播/换线】「本片所有集数已播完」标记（与源5/源7 同语义）。
+     * 每次 {@link #playUrlInternal} 主动起播都会清零。
      */
-    private long severeStallTime = 0;
+    private volatile boolean rybPlaybackFinished = false;
+
+    /**
+     * 【2026-10-22 源8 联播/换线】自动换集/换线的「宽限期」截止时刻（elapsedRealtime）。
+     * 与源5/源7 同规格：换线要逐条 resolve 探活（约 2~4s），宽限 20s 防看门狗误判重试。
+     */
+    private volatile long rybSwitchingUntilMs = 0L;
+    /** 【2026-10-22 源8】换集/换线宽限期时长（与源5/源7 同规格） */
+    private static final long RYB_SWITCH_GRACE_MS = 20000L;
+
+    /**
+     * 【2026-10-22 源2 联播/换线】「本片所有集数已播完」标记（与源5/源7 同语义）。
+     * 每次 {@link #playUrlInternal} 主动起播都会清零。
+     */
+    private volatile boolean nbmPlaybackFinished = false;
+
+    /**
+     * 【2026-10-22 源2 联播/换线】自动换集/换线的「宽限期」截止时刻（elapsedRealtime）。
+     */
+    private volatile long nbmSwitchingUntilMs = 0L;
+    /** 【2026-10-22 源2】换集/换线宽限期时长（与源5/源7 同规格） */
+    private static final long NBM_SWITCH_GRACE_MS = 20000L;
     private int retryCount = 0;
     /** 【2026-10-17 启动体验】最近一次「播放就绪」的时刻（elapsedRealtime）；0 = 本次会话尚未就绪过 */
     private long lastPlayReadyAtMs = 0;
@@ -239,6 +271,14 @@ public class TVPlayerManager {
     private int renyiboRefreshCount = 0;
     /** 【2026-10-17 源5点播·失效自动换线】本播放会话触发计数，播放就绪清零，防循环 */
     private int mRenYiBoVodLineSwitchCount = 0;
+    /** 【2026-10-22 源8·失效自动换线】本播放会话触发计数，播放就绪清零，防循环 */
+    private int mRybLineSwitchCount = 0;
+    /** 【2026-10-22 源2·失效自动换线】本播放会话触发计数，播放就绪清零，防循环 */
+    private int mNbmLineSwitchCount = 0;
+    /** 【2026-10-22 源8·失效自动换线】单会话最多换线条数（与源5 点播同值） */
+    private static final int MAX_RYB_LINE_SWITCH = 4;
+    /** 【2026-10-22 源2·失效自动换线】单会话最多换线条数（与源5 点播同值） */
+    private static final int MAX_NBM_LINE_SWITCH = 4;
     /** 上次源5 直链重拉时间戳（冷却用） */
     private long lastRenyiboRefreshAtMs = 0;
     /** 源6(咪咕)重解析计数与时间戳（冷却用） */
@@ -360,6 +400,10 @@ public class TVPlayerManager {
     private Runnable stuckCheckRunnable;
 
     private Handler mHandler;
+    /** 【2026-10-22 P2-04】应用是否处于后台（onBackground/onForeground 维护）；后台窗口内 autoRetry 直接跳过 */
+    private volatile boolean isInBackground = false;
+    /** 【2026-10-22 P2-01】虎牙 5xx 的 300ms 快速重试 Runnable（挂 mHandler，cancelRetry 可精确移除） */
+    private Runnable mHuya5xxRetryRunnable;
     private Runnable hideChannelRunnable;
 
     /**
@@ -638,6 +682,20 @@ public class TVPlayerManager {
                             mHandler.postDelayed(this, 2000);
                             return;
                         }
+                        if (rybPlaybackFinished
+                                || android.os.SystemClock.elapsedRealtime() < rybSwitchingUntilMs) {
+                            // 【2026-10-22 源8 联播/换线】整片已播完 / 正在换集或换线：不按「卡住」重试。
+                            LogBridge.d(TAG, "【源8 联播】已全部播完或正在换集/换线，跳过卡住检测的重试");
+                            mHandler.postDelayed(this, 2000);
+                            return;
+                        }
+                        if (nbmPlaybackFinished
+                                || android.os.SystemClock.elapsedRealtime() < nbmSwitchingUntilMs) {
+                            // 【2026-10-22 源2 联播/换线】整片已播完 / 正在换集或换线：不按「卡住」重试。
+                            LogBridge.d(TAG, "【源2 联播】已全部播完或正在换集/换线，跳过卡住检测的重试");
+                            mHandler.postDelayed(this, 2000);
+                            return;
+                        }
                         LogBridge.w(TAG, "检测到播放器异常状态(state=" + state + ")，自动重试...");
                         autoRetry("播放卡住");
                         return;
@@ -906,7 +964,10 @@ public class TVPlayerManager {
                 .setBufferDurationsMs(
                     12000,   // minBufferMs: 播放中水位（5000→12000，虎牙串行分片空窗下更抗耗）
                     60000,   // maxBufferMs（12000→60000，给足重建空间，参考原版默认 50s）
-                    800,     // bufferForPlaybackMs: 起播门槛（1200→800，加快首帧）
+                    1200,    // bufferForPlaybackMs: 起播门槛（10-16 曾改 800 加快首帧；
+                             //   【2026-10-22】按 10.8 版口径改回 1200——冷启动首个分片播完后
+                             //   易出现等下一分片发布的瞬态卡顿，起播缓冲厚 0.4s 可缓解；
+                             //   09-15/09-19 两轮实测首帧仅晚约 0.2s，代价可忽略）
                     2000     // bufferForPlaybackAfterRebufferMs（5000→2000，卡后快速恢复，避免 5s+ 黑帧）
                 )
                 .build();
@@ -1012,7 +1073,9 @@ public class TVPlayerManager {
         return sb.toString();
     }
 
-    private void initPlayerListener() {
+    // 【2026-10-22 P2-03】方法级 synchronized(this)：守卫与赋值/注册同一临界区，
+    //   防主线程 performDecoderSwitch 与后台 initPlayer 竞态双注册/泄漏旧 listener
+    private synchronized void initPlayerListener() {
         if (playerListener != null) return;
         playerListener = new Player.Listener() {
             @Override
@@ -1020,7 +1083,8 @@ public class TVPlayerManager {
                 String errDetail = buildErrorDiagnostic(error);
                 LogBridge.e(TAG, errDetail);
                 com.tv.live.util.LogBridge.LogCollector.getInstance().error(TAG, "[ERR_DIAG] " + errDetail);
-                isSwitching = false;
+                // 【2026-10-22 P1-04】统一收口：清掉 10s 复查 / 30s 兜底两个定时任务并解锁
+                clearSwitchingLock();
 
                 Throwable rootCause = error.getCause();
                 boolean isRedirectError = false;
@@ -1054,6 +1118,12 @@ public class TVPlayerManager {
                     if (listener != null) {
                         listener.onPlayError(error.getMessage() + " | playUrl=" + (currentUrl == null ? "(空)" : currentUrl));
                     }
+                    // 【2026-10-22 P1-01】重定向失败原先仅通知 listener 即 return，恢复链在此
+                    //   断开 → 黑屏干等，直到用户手动换台。闭合恢复链：走源错误档 autoRetry
+                    //   （上限 2 次后进 trySwitchBackup→换线→刷新→跳台兜底）。
+                    //   注意 reason 不含 "RedirectFailedException" 且 cause 传 null，否则会被
+                    //   autoRetry 入口的重定向豁免逻辑拦截（该豁免是为防其他路径重试风暴）。
+                    autoRetry("重定向失败", null);
                     return;
                 }
 
@@ -1107,7 +1177,8 @@ public class TVPlayerManager {
                     HuyaSDKParser.notifyPlaybackSettled();
                     notifyLiveInfoUpdate();
                     showChannelAndAutoHide();
-                    isSwitching = false;
+                    // 【2026-10-22 P1-04】播放就绪 = 切换成功，统一解锁并清定时任务
+                    clearSwitchingLock();
                     if (listener != null) listener.onPlayReady();
                     // 【2026-09-27 换台卡顿专项】播放就绪 = 本轮已恢复，必须撤掉排队中的重试，
                     //   否则那个 autoRetry 会在几秒后再次 playHuyaStream → 重新 prepare，
@@ -1125,6 +1196,9 @@ public class TVPlayerManager {
                                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(
                                         currentChannel.getChannelId()));
                     }
+                    // 【2026-10-22 源8/源2·失效自动换线】播放恢复 = 新一轮稳定：清零换线计数
+                    mRybLineSwitchCount = 0;
+                    mNbmLineSwitchCount = 0;
                     // 【2026-09-19 404 升级】播放就绪 = 当前线路已稳定，清零连续404计数
                     mHuya404Streak = 0;
                     startStuckDetection();
@@ -1154,14 +1228,16 @@ public class TVPlayerManager {
                     if (listener != null) listener.onPlayEnd();
                     // 【2026-10-11 源7 自动联播】整集播完：有下一集 → 自动续播；末集 → 停播。
                     //   必须在 autoRetry 之前接管，否则会被「播放结束自动重试」重播本集（用户实测）。
-                    // 【2026-10-13 源5 自动联播】同机制接入 renyibo-vod（爱其意 VOD）：
-                    //   两个 handle* 均返回 false（非源7/源5）才走原有 autoRetry 重连。
-                    if (!handleAfhgrjEpisodeEnded() && !handleRenyiboEpisodeEnded()) {
+                    // 【2026-10-13 源5 自动联播】同机制接入 renyibo-vod（爱其意 VOD）。
+                    // 【2026-10-22 源8/源2 自动联播】同机制接入 renyibo（ryb://）与 4K影视（nbm://）。
+                    //   四个 handle* 均返回 false（非点播源）才走原有 autoRetry 重连。
+                    if (!handleAfhgrjEpisodeEnded() && !handleRenyiboEpisodeEnded()
+                            && !handleRybEpisodeEnded() && !handleNbMovieEpisodeEnded()) {
                         autoRetry("播放结束");
                     }
                 } else if (state == Player.STATE_IDLE) {
                     logPlayback("空闲状态 (STATE_IDLE)");
-                    isSwitching = false;
+                    clearSwitchingLock();
                     if (listener != null) listener.onIdle();
                     updateWakeLock(false);
                 }
@@ -1178,11 +1254,8 @@ public class TVPlayerManager {
                         totalStallTime += stallDuration;
                         if (stallDuration >= MIN_STALL_WARN_THRESHOLD) {
                             logWarn("严重卡顿结束，时长：" + stallDuration + "ms");
-                            // 【2026-10-12 卡顿自动换线】只累计「严重」卡顿的时长（不含 <2s 抖动），
-                            // 累计超阈值就换线。延后一会儿再执行：此刻正在回调里恢复播放，立刻重播会打架。
-                            // 【2026-10-16】用户要求：取消卡顿自动换线，只在源失效时才切源
-                            // severeStallTime += stallDuration;
-                            // mHandler.postDelayed(() -> maybeAutoSwitchAfhgrjLine(), 800L);
+                            // 【2026-10-16】用户要求：取消卡顿自动换线，只在源失效时才切源；
+                            // 【2026-10-22 P2-09】原 maybeAutoSwitchAfhgrjLine 及相关常量已整段删除
                         } else {
                             // 【日志优化】短暂缓冲 <500ms 用 debug 级，>=500ms 才输出 info 级
                             if (stallDuration >= 500) {
@@ -1499,6 +1572,54 @@ public class TVPlayerManager {
         }, "Ryb-Resolve").start();
     }
 
+    /** 【2026-10-21】4K影视（nbmovie）当前正在解析的地址（去重用） */
+    private volatile String nbmResolvingUrl = "";
+
+    /**
+     * 【2026-10-21 源2 追加 4K影视】惰性解析并播放 —— 与 {@link #resolveRybAndPlay} 同构，纯 HTTP：
+     * 首次请求先走 X25519 密钥交换换 session，之后详情/播放地址均走 NM 加密帧通道。
+     *
+     * @param rawUrl {@code nbm://<vodId>} 或 {@code nbm://<vodId>@<line>-<ep>}
+     */
+    private void resolveNbmAndPlay(String rawUrl, long initialSeekPosition) {
+        com.tv.live.nbmovie.NbMovieUrlResolver.attach(context);
+        synchronized (this) {
+            if (rawUrl.equals(nbmResolvingUrl)) {
+                LogBridge.d(TAG, "【4K影视】解析进行中，忽略重复请求");
+                return;
+            }
+            nbmResolvingUrl = rawUrl;
+        }
+        LogBridge.i(TAG, "【4K影视】起播解析 → " + rawUrl);
+        new Thread(() -> {
+            String finalUrl = null;
+            try {
+                finalUrl = com.tv.live.nbmovie.NbMovieUrlResolver.resolve(rawUrl);
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "【4K影视】解析异常: " + t.getMessage());
+            }
+            final String resolved = finalUrl;
+            mHandler.post(() -> {
+                nbmResolvingUrl = "";
+                if (!TextUtils.equals(currentUrl, rawUrl)) {
+                    LogBridge.d(TAG, "【4K影视】解析完成但已切台，丢弃");
+                    return;
+                }
+                if (TextUtils.isEmpty(resolved)) {
+                    LogBridge.w(TAG, "【4K影视】解析失败，转自动重试");
+                    autoRetry("4K影视(nbmovie)解析失败");
+                    return;
+                }
+                LogBridge.i(TAG, "【4K影视】落地地址就绪 → " + resolved);
+                try {
+                    com.tv.live.MyApplication.prewarmStreamAsync(resolved);
+                } catch (Throwable ignored) {
+                }
+                doPlay(resolved, initialSeekPosition);
+            });
+        }, "Nbm-Resolve").start();
+    }
+
     /** 源7（afhgrj 影视）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
     private volatile String afhgrjResolvingUrl = "";
 
@@ -1680,6 +1801,111 @@ public class TVPlayerManager {
             return true;
         } catch (Throwable t) {
             LogBridge.w(TAG, "【源5 换线】发起失败: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 【2026-10-22 源8·线路级失效兜底】当前频道是源8（{@code ryb://<slug>[@<src>-<ep>]}）
+     * 且播放彻底失败（重试达上限判失效源）时：后台轮转切换到该片其他线路
+     * （详情页 PLAY_SOURCES 条目，逐条 resolve 探活、保持当前集），
+     * 找到可用线路即重播。每播放会话最多触发 {@link #MAX_RYB_LINE_SWITCH} 次，防循环。
+     *
+     * <p>与 {@link #trySwitchRenyiboVodLine()}（源5 点播）同机制；差异仅在取流方式：
+     * 源8 无测速直链维度，用「resolve 成功即视为可用」探活。
+     *
+     * @return true = 已接管（结果无论成败都走其内部回调）；false = 非源8或已超限，调用方继续兜底链
+     */
+    private boolean trySwitchRybLine() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String url = ch.getMainPlayUrl();
+        if (!com.tv.live.ryb.RybUrlResolver.isRybUrl(url)) return false;   // 非源8：不接管
+        if (mRybLineSwitchCount >= MAX_RYB_LINE_SWITCH) {
+            LogBridge.w(TAG, "【源8 换线】本会话触发已达上限(" + MAX_RYB_LINE_SWITCH + ")，转下一条兜底链");
+            return false;
+        }
+        mRybLineSwitchCount++;
+        final String chName = currentChannelName;
+        LogBridge.i(TAG, "【源8 换线】当前线路播放失败 → 后台轮转其他线路（第 "
+                + mRybLineSwitchCount + "/" + MAX_RYB_LINE_SWITCH + " 次）");
+        try {
+            new Thread(() -> {
+                String newRaw = null;
+                try {
+                    newRaw = com.tv.live.ryb.RybUrlResolver.tryNextLineAuto(url);
+                } catch (Throwable t) {
+                    LogBridge.w(TAG, "【源8 换线】异常: " + t.getMessage());
+                }
+                final String raw = newRaw;
+                mHandler.post(() -> {
+                    if (raw != null) {
+                        LogBridge.i(TAG, "【源8 换线】已切到可用线路，重播 " + chName);
+                        // 换线期间抑制「卡住检测」误判重试（探活解析 2~4s，与联播换集同规格宽限）
+                        rybSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + RYB_SWITCH_GRACE_MS;
+                        retryCount = 0;   // 换线重播 = 新一轮：重置重试计数，否则新线一遇抖动立刻又判失效
+                        playUrlInternal(raw);
+                    } else {
+                        LogBridge.w(TAG, "【源8 换线】无可用线路，转下一条兜底链");
+                        if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
+                    }
+                });
+            }, "Ryb-LineSwitch").start();
+            return true;
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【源8 换线】发起失败: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 【2026-10-22 源2·线路级失效兜底】当前频道是源2（{@code nbm://<vodId>[@<line>-<ep>]}）
+     * 且播放彻底失败（重试达上限判失效源）时：后台轮转切换到该片其他线路
+     * （详情接口 play_urls 条目，逐条 resolve 探活、保持当前集），
+     * 找到可用线路即重播。每播放会话最多触发 {@link #MAX_NBM_LINE_SWITCH} 次，防循环。
+     *
+     * <p>与 {@link #trySwitchRybLine()} 同机制（差异仅在协议与取流通道）。
+     *
+     * @return true = 已接管（结果无论成败都走其内部回调）；false = 非源2或已超限，调用方继续兜底链
+     */
+    private boolean trySwitchNbmLine() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String url = ch.getMainPlayUrl();
+        if (!com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(url)) return false;   // 非源2：不接管
+        if (mNbmLineSwitchCount >= MAX_NBM_LINE_SWITCH) {
+            LogBridge.w(TAG, "【源2 换线】本会话触发已达上限(" + MAX_NBM_LINE_SWITCH + ")，转下一条兜底链");
+            return false;
+        }
+        mNbmLineSwitchCount++;
+        final String chName = currentChannelName;
+        LogBridge.i(TAG, "【源2 换线】当前线路播放失败 → 后台轮转其他线路（第 "
+                + mNbmLineSwitchCount + "/" + MAX_NBM_LINE_SWITCH + " 次）");
+        try {
+            new Thread(() -> {
+                String newRaw = null;
+                try {
+                    newRaw = com.tv.live.nbmovie.NbMovieUrlResolver.tryNextLineAuto(url);
+                } catch (Throwable t) {
+                    LogBridge.w(TAG, "【源2 换线】异常: " + t.getMessage());
+                }
+                final String raw = newRaw;
+                mHandler.post(() -> {
+                    if (raw != null) {
+                        LogBridge.i(TAG, "【源2 换线】已切到可用线路，重播 " + chName);
+                        // 换线期间抑制「卡住检测」误判重试（探活解析 2~4s，与联播换集同规格宽限）
+                        nbmSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + NBM_SWITCH_GRACE_MS;
+                        retryCount = 0;   // 换线重播 = 新一轮：重置重试计数，否则新线一遇抖动立刻又判失效
+                        playUrlInternal(raw);
+                    } else {
+                        LogBridge.w(TAG, "【源2 换线】无可用线路，转下一条兜底链");
+                        if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
+                    }
+                });
+            }, "Nbm-LineSwitch").start();
+            return true;
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【源2 换线】发起失败: " + t.getMessage());
             return false;
         }
     }
@@ -2667,6 +2893,12 @@ public class TVPlayerManager {
             mHandler.removeCallbacks(retryRunnable);
             retryRunnable = null;
         }
+        // 【2026-10-22 P2-01】虎牙 5xx 快速重试同样摘除（原为匿名 Handler，cancelRetry 管不到；
+        //   release() 经 cancelRetry() 间接收益，无需在 release 里重复）
+        if (mHuya5xxRetryRunnable != null) {
+            mHandler.removeCallbacks(mHuya5xxRetryRunnable);
+            mHuya5xxRetryRunnable = null;
+        }
         isRetrying = false;
     }
 
@@ -2676,6 +2908,8 @@ public class TVPlayerManager {
         dropHuyaFinalUrl(mLastHuyaFinalUrlKey);
         if (e instanceof RedirectFailedException) {
             if (listener != null) listener.onPlayError("源跳转失败：" + e.getMessage());
+            // 【2026-10-22 P1-01】同 onPlayerError 分支：闭合恢复链，避免黑屏干等
+            autoRetry("重定向失败", null);
             return;
         }
         autoRetry("播放异常：" + e.getMessage(), e);
@@ -2698,10 +2932,6 @@ public class TVPlayerManager {
         }
     }
 
-    /**
-     * 【源8 4kvm】当前频道是源8时，失效其 m3u8 缓存，
-     * 4kvm 的 m3u8 地址有时效性，播放失败说明缓存已过期，下次重解析。
-     */
     /** 【源8 renyibo】播放失败时作废本片解析缓存，下次重解析。 */
     private void invalidateRybResolvedCache() {
         Channel ch = currentChannel;
@@ -2709,6 +2939,16 @@ public class TVPlayerManager {
         String url = ch.getMainPlayUrl();
         if (com.tv.live.ryb.RybUrlResolver.isRybUrl(url)) {
             com.tv.live.ryb.RybUrlResolver.invalidateByUrl(url);
+        }
+    }
+
+    /** 【2026-10-21 4K影视】播放失败时作废本片解析缓存，下次重解析。 */
+    private void invalidateNbmResolvedCache() {
+        Channel ch = currentChannel;
+        if (ch == null) return;
+        String url = ch.getMainPlayUrl();
+        if (com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(url)) {
+            com.tv.live.nbmovie.NbMovieUrlResolver.invalidateByUrl(url);
         }
     }
 
@@ -2721,6 +2961,8 @@ public class TVPlayerManager {
         invalidateAfhgrjResolvedCache();
         // ★【源8 renyibo】同理：作废本片缓存，下次重解析（线路/集数可能已变）
         invalidateRybResolvedCache();
+        // ★【2026-10-21 4K影视】同理：作废本片缓存，下次重解析（线路/集数可能已变）
+        invalidateNbmResolvedCache();
 
         if (cause != null) {
             Throwable t = cause;
@@ -2735,6 +2977,13 @@ public class TVPlayerManager {
             return;
         }
         if (isRetrying) return;
+        // 【2026-10-22 P2-04】后台窗口内跳过自动重试：onBackground 已「暂停 + 解绑 Surface」，
+        //   此时重试只会把 player prepare 到失效 Surface 上纯空转，还顺带作废各源解析缓存；
+        //   回前台由 onForeground 重绑恢复，真正需要重试的场景（前台播放出错）不受影响。
+        if (isInBackground) {
+            logWarn("应用在后台，跳过自动重试（Surface 已解绑，重试必空转）");
+            return;
+        }
 
         boolean isNetworkError = isNetworkError(cause) || (reason != null && (reason.contains("网络") || reason.contains("卡住")));
         int maxRetry = isNetworkError ? MAX_RETRY_COUNT_NETWORK : MAX_RETRY_COUNT;
@@ -2748,6 +2997,15 @@ public class TVPlayerManager {
                     // 【2026-10-17 源5点播·线路级兜底】当前线路失效 → 自动轮转其他线路重播
                     //   （畅享失效 → 备用1 → 官方①…；专属逻辑优先于下面的各源刷新兜底）
                     if (trySwitchRenyiboVodLine()) {
+                        return;
+                    }
+                    // 【2026-10-22 源8·线路级兜底】renyibo 当前线路失效 → 轮转其他线路
+                    //   （逐条 resolve 探活，保持当前集），优先于下面的各源刷新兜底
+                    if (trySwitchRybLine()) {
+                        return;
+                    }
+                    // 【2026-10-22 源2·线路级兜底】4K影视当前线路失效 → 轮转其他线路重播
+                    if (trySwitchNbmLine()) {
                         return;
                     }
                     // 畅享源失效兜底：备线用尽前，先尝试实时重拉最新签名源重播
@@ -2909,13 +3167,23 @@ public class TVPlayerManager {
         }
         retryCount++;
         logWarn("【虎牙 CDN 临时错误(503/504)】快速重试当前线路（第" + retryCount + "/" + maxRetry + "次），不清缓存");
-        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+        // 【2026-10-22 P2-01】300ms 快速重试从「匿名 Handler + 匿名 lambda」提为字段 Runnable：
+        //   ① cancelRetry()/release() 可精确 removeCallbacks（原来匿名 Handler 管不到，换台/释放后
+        //      仍可能 prepare 旧地址）；
+        //   ② 重试落点前校验 currentUrl 未变——300ms 内用户已换台则不重试旧地址。
+        final String retryUrl = currentUrl;
+        mHuya5xxRetryRunnable = () -> {
             isRetrying = false;
+            if (retryUrl == null || !retryUrl.equals(currentUrl)) {
+                logWarn("虎牙 5xx 重试落点时播放地址已变更，跳过（防旧地址霸屏）");
+                return;
+            }
             if (player != null) {
                 player.prepare();
                 player.setPlayWhenReady(true);
             }
-        }, 300);
+        };
+        mHandler.postDelayed(mHuya5xxRetryRunnable, 300);
     }
 
     /**
@@ -3362,6 +3630,9 @@ public class TVPlayerManager {
             return;
         }
         isSwitching = true;
+        // 【2026-10-22 P1-04】10s 条件复查：切换期旧卡顿看门狗已被摘除（下方 removeCallbacks），
+        // 若一直没有任何播放事件兜底，卡死将无人处理；复查时未就绪则补挂 stuck 检测。
+        mHandler.postDelayed(switchingCheckRunnable, 10000);
         long currentPosition = player != null ? player.getCurrentPosition() : 0;
 
         try {
@@ -3389,7 +3660,8 @@ public class TVPlayerManager {
                         playerView.setPlayer(player);
                     }
                 } finally {
-                    if (!hasUrl) isSwitching = false;
+                    // 【2026-10-22 P1-04】无地址可播 = 切换直接失败，立即解锁（不占 30s 窗口）
+                    if (!hasUrl) clearSwitchingLock();
                 }
             });
         }
@@ -3406,10 +3678,26 @@ public class TVPlayerManager {
             }
 
             playUrlInternal(currentUrl, currentPosition);
-            mHandler.postDelayed(() -> { isSwitching = false; }, 30000);
+            // 【2026-10-22 P1-04】30s 绝对兜底：提为字段 runnable 便于 clearSwitchingLock 精确移除
+            // （原匿名 Runnable 无法被单独取消，就绪/出错路径只能各自置 flag）
+            mHandler.postDelayed(switchingUnlockRunnable, 30000);
         } else if (playerView == null) {
-            isSwitching = false;
+            clearSwitchingLock();
         }
+    }
+
+    /**
+     * 【2026-10-22 P1-04】统一解除解码器切换锁：清掉 10s 条件复查与 30s 绝对兜底两个
+     * 定时任务并解锁。由 onPlayerError / STATE_READY / STATE_IDLE 及 performDecoderSwitch
+     * 的早退分支（无地址、playerView 为空）调用。
+     *
+     * <p>原实现的缺口：isSwitching 仅在「有播放事件」时被置回，若 playUrlInternal 早退 /
+     * 解析长期挂起（无任何播放事件），切换锁要卡 30s，期间再次切换解码器全部被忽略。
+     */
+    private void clearSwitchingLock() {
+        mHandler.removeCallbacks(switchingCheckRunnable);
+        mHandler.removeCallbacks(switchingUnlockRunnable);
+        isSwitching = false;
     }
 
     public int getDecoderMode() {
@@ -3681,6 +3969,8 @@ public class TVPlayerManager {
     public void onForeground() {
 
         try {
+            // 【2026-10-22 P2-04】复位后台标志：autoRetry 恢复放行（回前台重绑 Surface 后重试才有意义）
+            isInBackground = false;
             if (player != null && playerView != null) {
                 // 【2026-09-29 黑屏修复】不再盲信 surfaceReady 布尔量：
                 //   退出重进（返回键 finishAffinity → release → 重建）时，Surface 往往尚未就绪，
@@ -3874,6 +4164,8 @@ public class TVPlayerManager {
     public void onBackground() {
 
         try {
+            // 【2026-10-22 P2-04】置后台标志：autoRetry 入口据此跳过（Surface 随后被解绑，重试必空转）
+            isInBackground = true;
             // 【2026-09-29 黑屏修复】原实现只有 `if (player != null) { }` 空块 + 置 pendingBindPlayer，
             //   完全依赖异步的 surfaceDestroyed 去改 surfaceReady。但系统在退后台时并不保证回调
             //   在 onPause 之前送达，导致回前台时 surfaceReady 残留 true，onForeground 走错分支
@@ -4176,53 +4468,6 @@ public class TVPlayerManager {
         totalStallTime = 0;
         isStalled = false;
         lastStallStartTime = 0;
-        afhgrjAutoSwitchLineCount = 0;
-        severeStallTime = 0;
-    }
-
-    /**
-     * 【2026-10-12 卡顿自动换线】当前频道累计严重卡顿超过 {@link #STALL_SWITCH_TOTAL_MS} 时，
-     * 自动切到该片的下一条 sid（线路）重播。
-     *
-     * <p>只对源7（afhgrj）生效——只有它有「同片多线路」这个维度。其它源的换线
-     * （虎牙/咪咕/畅享）各自已有独立机制，不在此处介入。
-     *
-     * <p>三重刹车：①当前片至少 2 条线路；②同一频道最多换 {@link #MAX_AFHGRJ_AUTO_SWITCH} 次；
-     * ③每次换完把 {@link #totalStallTime} 清零，避免刚换完又立刻二次触发。
-     * 手动选线路走 {@link #switchAfhgrjLine(int)}，与本方法互不冲突（都写 sWorkingSid）。
-     */
-    private void maybeAutoSwitchAfhgrjLine() {
-        Channel ch = currentChannel;
-        if (ch == null) return;
-        String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
-        if (TextUtils.isEmpty(vodId)) return;                       // 只处理源7
-        int[] sids = com.tv.live.afhgrj.AfhgrjUrlResolver.sidsOf(vodId);
-        if (sids.length <= 1) return;                               // 没有可换的线路
-        if (afhgrjAutoSwitchLineCount >= MAX_AFHGRJ_AUTO_SWITCH) return;
-        if (severeStallTime < STALL_SWITCH_TOTAL_MS) return;
-
-        int cur = com.tv.live.afhgrj.AfhgrjUrlResolver.workingSidOf(vodId);
-        int next = -1;
-        for (int i = 0; i < sids.length; i++) {
-            if (sids[i] == cur) {
-                next = sids[(i + 1) % sids.length];
-                break;
-            }
-        }
-        if (next <= 0) next = sids[0];
-        if (next == cur) return;
-
-        afhgrjAutoSwitchLineCount++;
-        severeStallTime = 0;
-        LogBridge.w(TAG, "【影视源7】累计严重卡顿 " + STALL_SWITCH_TOTAL_MS + "ms 以上，自动换线 sid "
-                + cur + " → " + next + "（第 " + afhgrjAutoSwitchLineCount
-                + "/" + MAX_AFHGRJ_AUTO_SWITCH + " 次）vodId=" + vodId);
-        com.tv.live.afhgrj.AfhgrjUrlResolver.rememberSid(vodId, next);
-        // 作废落地缓存与测速缓存：换线后必须重新解析并重新取样，否则会复用慢线的旧结果
-        com.tv.live.afhgrj.AfhgrjUrlResolver.invalidate(vodId);
-        String newRaw = com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME + vodId
-                + (afhgrjCurNid > 0 ? ("-" + next + "-" + afhgrjCurNid) : ("-" + next));
-        playUrlInternal(newRaw);
     }
 
     private boolean isHuyaRoomUrl(String url) {
@@ -4262,6 +4507,9 @@ public class TVPlayerManager {
         afhgrjPlaybackFinished = false;
         // 【2026-10-13 源5 联播】同语意：主动起播解除源5「已全部播完」标记。
         renyiboPlaybackFinished = false;
+        // 【2026-10-22 源8/源2 联播】同语意：主动起播解除源8/源2「已全部播完」标记。
+        rybPlaybackFinished = false;
+        nbmPlaybackFinished = false;
 
         try { AppCacheInspector.onBeforePlayback(context); } catch (Throwable ignored) {}
 
@@ -4478,9 +4726,12 @@ public class TVPlayerManager {
             if (player == null || url == null || url.trim().isEmpty()) return;
             // 【2026-10-17 OTT 续播】退后台暂停过的同一部片子（含 1003 重试再次 doPlay）
             //   → 直接把暂停位置当作起播 seek 位置；换成别的片子则丢弃，避免串台。
-            if (mVodPausedPositionMs > 0) {
-                String curName = (currentChannel == null) ? null : currentChannel.getName();
-                if (mVodPausedChannel == null || mVodPausedChannel.equals(curName)) {
+                if (mVodPausedPositionMs > 0) {
+                    String curName = (currentChannel == null) ? null : currentChannel.getName();
+                    // 【2026-10-22 P2-02】续播仅当暂停时的频道与当前频道精确匹配；
+                    //   mVodPausedChannel 为 null（无点播暂停记录）时不得放行，否则任意频道
+                    //   都会继承上一部的暂停位置（续播串台隐患）
+                    if (mVodPausedChannel != null && mVodPausedChannel.equals(curName)) {
                     if (initialSeekPosition <= 0) initialSeekPosition = mVodPausedPositionMs;
                     LogBridge.i(TAG, "doPlay: 沿用后台暂停位置 " + initialSeekPosition + "ms 续播");
                 } else {
@@ -4529,13 +4780,15 @@ public class TVPlayerManager {
             boolean isAfhgrjPending = com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(playUrl);
             // 【2026-10-19】内置源8（renyibo）：ryb://<slug> 是待解析地址（纯 HTTP 惰性解析）
             boolean isRybPending = com.tv.live.ryb.RybUrlResolver.isRybUrl(playUrl);
+            // 【2026-10-21】内置源2 追加的 4K影视：nbm://<vodId> 是待解析地址（NM 加密帧惰性解析）
+            boolean isNbmPending = com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(playUrl);
             LogBridge.d(TAG, "doPlay: url=" + playUrl.substring(0, Math.min(100, playUrl.length())) + " isHls=" + isHlsUrl(playUrl) + " isRealStream=" + isRealStream);
 
             String finalUrl;
             // 【2026-10-07】mMiguDirectPlay：咪咕切线路/切清晰度时置位 —— 本次起播必须
             // 直接采用传入的源串，不能被「频道线路表」覆盖（咪咕频道 backupUrls 不含这些源）。
             if (currentChannel != null && !isRealStream && !isZgyjVod && !isYunTuLb
-                    && !isRenyiboPending && !isAfhgrjPending && !isRybPending
+                    && !isRenyiboPending && !isAfhgrjPending && !isRybPending && !isNbmPending
                     && !isRenyiboResolvedStream
                     && !mHuyaDirectPlay && !mMiguDirectPlay) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
@@ -4634,6 +4887,13 @@ public class TVPlayerManager {
                 return;
             }
 
+            // ★【2026-10-21】内置源2 追加的 4K影视：M3U 里存的是 nbm://<vodId>（EPG 切集时为 @line-ep），
+            //   起播这一刻才走 NM 加密帧通道取详情/播放地址拿真实 m3u8 —— 纯 HTTP，照源8 的做法。
+            if (com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(finalUrl)) {
+                resolveNbmAndPlay(finalUrl, initialSeekPosition);
+                return;
+            }
+
             // ★内置源6（咪咕）：M3U 里存的是待解析地址 miguhd://<pID> 或 nowtv://<tvId>，
             //   在起播这一刻才换成带签名的真实 m3u8，避免预解析导致签名过期 / 批量请求。
             //   轮播 / 回看（tvnow://、lunbolbk://、lunboParser_…）同属咪咕解析链，一并分流。
@@ -4722,6 +4982,8 @@ public class TVPlayerManager {
                 || com.tv.live.afhgrj.AfhgrjUrlResolver.isAfhgrjUrl(u)
                 // 【2026-10-19 源8 renyibo】点播形态，同样走本地代理剥离广告
                 || com.tv.live.ryb.RybUrlResolver.isRybUrl(u)
+                // 【2026-10-21 源2 追加 4K影视】点播形态，同样走本地代理剥离广告
+                || com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(u)
                 || com.tv.live.migu.source.ZgyjVodApi.isZgyjVodUrl(u)
                 || com.tv.live.migu.source.CarouselApi.isYunTuLookBackUrl(u);
     }
@@ -4731,8 +4993,8 @@ public class TVPlayerManager {
 
         // 【2026-10-17】直播直连标记：直播 m3u8（非点播上下文）不走代理，并加 live offset。
         //   实测（09:51）直连后无代理延迟打底，播放器紧贴直播边缘 → BUFFERING↔READY 每秒 20+ 次微颤；
-        //   加 6s 偏移后播放位置落后边缘 6s，缓冲可正常蓄起（与虎牙线 targetOffset=20s 同理，
-        //   直播只取 6s 折中，兼顾延迟与稳定）。
+        //   【2026-10-22】offset 由 6s 调至 20s 再至 30s（6s 折中在 10s 分片线上缓冲攒不满；
+        //   20s 又被 PLTV 清单陈旧度吃掉，见下方 HLS 分支注释；30s = media3 默认值 = 10.8 行为）。
         boolean isLiveHls = isHlsUrl(url) && url.contains(".m3u8") && !isVodPlayContext(url);
 
         // 【广告剥离】仅 m3u8 点播走本地代理剥离广告
@@ -4751,18 +5013,21 @@ public class TVPlayerManager {
             } else {
             WebServerManager webServer = WebServerManager.getRunningInstance();
             if (webServer == null || !webServer.isRunning()) {
-                LogBridge.w(TAG, "广告剥离代理未运行，尝试启动...");
-                try {
-                    webServer = new WebServerManager(context, 10481);
-                    webServer.start();
-                    for (int i = 0; i < 20; i++) {
-                        if (webServer.isRunning()) break;
-                        Thread.sleep(100);
+                // 【2026-10-22 P1-02】原实现在主线程 for+Thread.sleep(100)×20 等待代理
+                //   就绪（端口被占/启动失败时满 2s 后才降级直连，阻塞 UI 延迟首帧，ANR 边缘）。
+                //   改为：主线程零阻塞——后台启动代理，本次先用直连起播（代理正常在
+                //   Application 启动期已就绪，仅冷启动竞态等极端情况走此降级；不切换
+                //   已在播放的会话，下次播放代理已就绪自然走代理）。
+                LogBridge.w(TAG, "【广告剥离】代理未就绪，后台启动中，本次直连起播");
+                final WebServerManager starting = new WebServerManager(context, 10481);
+                com.tv.live.util.AppExecutors.io(() -> {
+                    try {
+                        starting.start();
+                    } catch (Exception e) {
+                        LogBridge.e(TAG, "广告剥离代理后台启动失败: " + e.getMessage());
                     }
-                } catch (Exception e) {
-                    LogBridge.e(TAG, "广告剥离代理启动失败: " + e.getMessage());
-                }
-            }
+                });
+            } else {
             if (webServer != null && webServer.isRunning()) {
                 String originalUrl = url;
                 String proxyUrl = webServer.getAdStripProxyUrl(url, currentChannelName);
@@ -4789,6 +5054,7 @@ public class TVPlayerManager {
                 // } catch (Exception ignored) {}
             } else {
                 LogBridge.w(TAG, "【广告剥离】代理不可用，直连原始地址");
+            }
             }
             }
         }
@@ -4845,11 +5111,26 @@ public class TVPlayerManager {
                     // 【2026-10-17 直播直连】显式给直播一个 live offset：
                     //   直连后没有代理的几百毫秒延迟打底，播放器会紧贴直播边缘，
                     //   每次都只能拿到刚产出的一小段 → BUFFERING↔READY 每秒 20+ 次微颤（实测）。
-                    //   落后边缘 6s 播放，缓冲才有空间蓄起来；直播延迟 +6s（电视直播可接受）。
+                    //   落后边缘播放，缓冲才有空间蓄起来；直播延迟 +offset（电视直播可接受）。
+                    // 【2026-10-22 卡顿专项·offset 6s→20s→30s（四版本同机同网 A/B 实证）】
+                    //   ① 分片 10s × 5.2MB（≈4.2Mbps），传输 4.1s（≈10Mbps，带宽 2.5 倍余量，非网速问题）；
+                    //      分片启动间隔正常 10s（=内容时长零余量），尖刺 12-21s（约 30% 间隔超 11s）。
+                    //   ② media3 源码（HlsMediaSource.getTargetLiveOffsetUs）：不设 LiveConfiguration 时
+                    //      默认 offset = 3 × targetDuration（RFC 8216）——本线 TARGETDURATION:10 → 30s。
+                    //   ③ 10.8 版（2.0.3）doPlayNormal 无 LiveConfiguration，即跑默认 30s：
+                    //      起播落后清单最新分片 3 片、可预载 3 片（缓冲容量 30s）→ 实测 5 分钟 0 卡顿，
+                    //      20s/15s/14s 清单滞后全部吸收。
+                    //   ④ 显式 20s（2.0.216/217）实测：起播只落后 2 片；且缓冲容量 ≈
+                    //      max(offset − 清单陈旧度, 0)——PLTV 清单生成滞后实时 10-37s
+                    //      （实测最新分片 PROGRAM-DATE-TIME 一度落后 41s），容量被压到 0-10s，
+                    //      15s 空隙即严重卡顿 4967ms（2.0.217 复现）。
+                    //   ⑤ 30s = 本线 media3 默认值 = 10.8 实际行为，恢复「预载 3 片、缓冲拉满」；
+                    //      显式 30s 同时给短分片流（默认 3×targetDuration 可能 <10s）一个 offset 下限，
+                    //      防 10-17 的贴边微颤复现。代价：直播延迟约 30s（10.8 即此延迟）。
                     mediaItem = new MediaItem.Builder()
                             .setUri(finalUrl)
                             .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
-                                    .setTargetOffsetMs(6000)
+                                    .setTargetOffsetMs(30000)
                                     .build())
                             .build();
                 } else {
@@ -4864,7 +5145,7 @@ public class TVPlayerManager {
                     HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(
                             new ChanxiangM3u8DataSource.Factory(httpFactory))
                             .setAllowChunklessPreparation(true)
-                            .setPlaylistParserFactory(new AdAwareHlsPlaylistParserFactory());
+                            .setPlaylistParserFactory(new LoggingHlsPlaylistParserFactory());
                     mediaSource = hlsFactory.createMediaSource(mediaItem);
                     mediaSource.addEventListener(mHandler, mMediaSourceListener);
                 } else {
@@ -5020,10 +5301,11 @@ public class TVPlayerManager {
                             .build();
                     // 【2026-10-13 直播硬跳过】虎牙为纯直播源 → 显式关闭广告剥离
                     //（直播 m3u8 无 ENDLIST，即使开启也会被剥离器原样放行；此处显式 false 更清晰）
+                    // 【2026-10-22 P2-09】ChanxiangM3u8DataSource 的 stripAds 形参从未被读取，已删除
                     HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(
-                            new ChanxiangM3u8DataSource.Factory(httpFactory, false))
+                            new ChanxiangM3u8DataSource.Factory(httpFactory))
                             .setAllowChunklessPreparation(true)
-                            .setPlaylistParserFactory(new AdAwareHlsPlaylistParserFactory());
+                            .setPlaylistParserFactory(new LoggingHlsPlaylistParserFactory());
                     mediaSource = hlsFactory.createMediaSource(mediaItem);
                     mediaSource.addEventListener(mHandler, mMediaSourceListener);
                 } else {
@@ -5051,171 +5333,92 @@ public class TVPlayerManager {
     }
 
     private void fetchAndParseMasterPlaylistNormal(String masterUrl) {
-        if (isParsingMasterPlaylist) return;
+        if (isParsingMasterPlaylist) {
+            // 【2026-10-21 P0修复】入口守卫命中必须打 i 级日志：release 下 d 级被 proguard 剥离，
+            // 若无此日志，「换台后清晰度菜单不更新/串台」无法经 9527 通道定位
+            LogBridge.i(TAG, "【普通源】主播放列表解析进行中，跳过本次请求: "
+                    + masterUrl.substring(0, Math.min(100, masterUrl.length())));
+            return;
+        }
         isParsingMasterPlaylist = true;
         ensurePlaylistExecutor().execute(() -> {
-            // 【2026-10-12 主播放列表 EOF 修复】HttpURLConnection 复用连接池时可能拿到
-            // 被服务端/CDN 已关闭的 keep-alive 连接 → getResponseCode() 抛
-            // "unexpected end of stream"(EOF，零字节)。此为瞬时可自愈问题：
-            // 第 1 次失败后立即用全新连接（Connection: close）重试一次。
-            final int MAX_ATTEMPTS = 2;
-            for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                java.net.HttpURLConnection connection = null;
-                try {
-                    LogBridge.d(TAG, "【普通源】解析主播放列表" + (attempt > 1 ? "（第 " + attempt + " 次重试）" : "")
-                            + ": " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
+            // 【2026-10-21 P0修复】任务体整体包 try/finally 兜底重置标志位：
+            // HTTP_OK 成功 / 重定向无 Location / 明确失败码三条 return 路径均需覆盖，
+            // 否则首次成功后标志位永久卡死，换台解析被静默拦截、variantList 陈旧导致清晰度串台
+            try {
+                // 【2026-10-12 主播放列表 EOF 修复】HttpURLConnection 复用连接池时可能拿到
+                // 被服务端/CDN 已关闭的 keep-alive 连接 → getResponseCode() 抛
+                // "unexpected end of stream"(EOF，零字节)。此为瞬时可自愈问题：
+                // 第 1 次失败后立即用全新连接（Connection: close）重试一次。
+                final int MAX_ATTEMPTS = 2;
+                for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                    java.net.HttpURLConnection connection = null;
+                    try {
+                        LogBridge.d(TAG, "【普通源】解析主播放列表" + (attempt > 1 ? "（第 " + attempt + " 次重试）" : "")
+                                + ": " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
 
-                    java.net.URL url = new java.net.URL(masterUrl);
-                    connection = (java.net.HttpURLConnection) url.openConnection();
-                    connection.setRequestMethod("GET");
-                    connection.setConnectTimeout(5000);
-                    connection.setReadTimeout(5000);
-                    connection.setInstanceFollowRedirects(true);
-                    if (attempt > 1) {
-                        // 强制不复用连接池，规避陈旧 keep-alive 连接
-                        connection.setRequestProperty("Connection", "close");
-                    }
-                    connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)");
-                    connection.setRequestProperty("Accept", "*/*");
-
-                    int code = connection.getResponseCode();
-                    LogBridge.d(TAG, "【普通源】主播放列表响应码: " + code);
-
-                    if (code == java.net.HttpURLConnection.HTTP_OK) {
-                        StringBuilder content = new StringBuilder();
-                        try (java.io.InputStream is = connection.getInputStream();
-                             java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(is))) {
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-                                content.append(line).append("\n");
-                            }
-                        }
-                        String playlist = content.toString();
-                        LogBridge.d(TAG, "【普通源】主播放列表长度: " + playlist.length());
-                        parseMasterPlaylist(playlist, masterUrl);
+                        java.net.URL url = new java.net.URL(masterUrl);
+                        connection = (java.net.HttpURLConnection) url.openConnection();
+                        connection.setRequestMethod("GET");
+                        connection.setConnectTimeout(5000);
+                        connection.setReadTimeout(5000);
+                        connection.setInstanceFollowRedirects(true);
                         if (attempt > 1) {
-                            LogBridge.i(TAG, "【普通源】主播放列表重试成功（EOF 已自愈）");
+                            // 强制不复用连接池，规避陈旧 keep-alive 连接
+                            connection.setRequestProperty("Connection", "close");
                         }
-                        return;
-                    } else if (code == java.net.HttpURLConnection.HTTP_MOVED_TEMP
-                            || code == java.net.HttpURLConnection.HTTP_MOVED_PERM) {
-                        String newUrl = connection.getHeaderField("Location");
-                        LogBridge.d(TAG, "【普通源】重定向到: " + newUrl);
-                        isParsingMasterPlaylist = false;
-                        if (newUrl != null) {
-                            fetchAndParseMasterPlaylistNormal(newUrl);
+                        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)");
+                        connection.setRequestProperty("Accept", "*/*");
+
+                        int code = connection.getResponseCode();
+                        LogBridge.d(TAG, "【普通源】主播放列表响应码: " + code);
+
+                        if (code == java.net.HttpURLConnection.HTTP_OK) {
+                            StringBuilder content = new StringBuilder();
+                            try (java.io.InputStream is = connection.getInputStream();
+                                 java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(is))) {
+                                String line;
+                                while ((line = reader.readLine()) != null) {
+                                    content.append(line).append("\n");
+                                }
+                            }
+                            String playlist = content.toString();
+                            LogBridge.d(TAG, "【普通源】主播放列表长度: " + playlist.length());
+                            parseMasterPlaylist(playlist, masterUrl);
+                            if (attempt > 1) {
+                                LogBridge.i(TAG, "【普通源】主播放列表重试成功（EOF 已自愈）");
+                            }
+                            return;
+                        } else if (code == java.net.HttpURLConnection.HTTP_MOVED_TEMP
+                                || code == java.net.HttpURLConnection.HTTP_MOVED_PERM) {
+                            String newUrl = connection.getHeaderField("Location");
+                            LogBridge.d(TAG, "【普通源】重定向到: " + newUrl);
+                            // 提前放行标志位，使递归调用能通过自身入口守卫；finally 仍会兜底重置
+                            isParsingMasterPlaylist = false;
+                            if (newUrl != null) {
+                                fetchAndParseMasterPlaylistNormal(newUrl);
+                            }
+                            // 重定向无 Location：按失败处理，不再重试（finally 兜底重置标志位）
+                            return;
+                        } else {
+                            // 明确的非成功状态码（404/500…）：重试无意义，直接放弃（finally 兜底重置标志位）
+                            LogBridge.w(TAG, "【普通源】主播放列表请求失败: code=" + code);
+                            synchronized (variantListLock) { variantList.clear(); }
                             return;
                         }
-                        // 重定向无 Location：按失败处理，不再重试
-                        return;
-                    } else {
-                        // 明确的非成功状态码（404/500…）：重试无意义，直接放弃
-                        LogBridge.w(TAG, "【普通源】主播放列表请求失败: code=" + code);
-                        synchronized (variantListLock) { variantList.clear(); }
-                        return;
-                    }
-                } catch (Exception e) {
-                    LogBridge.e(TAG, "【普通源】解析主播放列表失败(第 " + attempt + "/" + MAX_ATTEMPTS + " 次): ", e);
-                    if (attempt >= MAX_ATTEMPTS) {
-                        synchronized (variantListLock) { variantList.clear(); }
-                    }
-                    // attempt < MAX_ATTEMPTS：继续下一轮重试（新连接）
-                } finally {
-                    if (connection != null) {
-                        try { connection.disconnect(); } catch (Exception ignored) {}
-                    }
-                }
-            }
-            isParsingMasterPlaylist = false;
-        });
-    }
-
-    private void fetchAndParseMasterPlaylistHuya(String masterUrl) {
-        if (isParsingMasterPlaylist) return;
-        isParsingMasterPlaylist = true;
-        ensurePlaylistExecutor().execute(() -> {
-            java.net.HttpURLConnection connection = null;
-            try {
-                LogBridge.d(TAG, "【虎牙源】解析主播放列表: " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
-
-                java.net.URL url = new java.net.URL(masterUrl);
-                connection = (java.net.HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
-
-                connection.setInstanceFollowRedirects(false);
-
-                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
-                connection.setRequestProperty("Referer", "https://www.huya.com/");
-                connection.setRequestProperty("Origin", "https://www.huya.com");
-                connection.setRequestProperty("Accept", "*/*");
-                connection.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
-                connection.setRequestProperty("Accept-Encoding", "identity");
-                connection.setRequestProperty("Connection", "keep-alive");
-
-                if (mPendingPlaybackHeaders != null && !mPendingPlaybackHeaders.isEmpty()) {
-                    for (Map.Entry<String, String> e : mPendingPlaybackHeaders.entrySet()) {
-                        connection.setRequestProperty(e.getKey(), e.getValue());
-                    }
-                }
-
-                String cookies = android.webkit.CookieManager.getInstance().getCookie(masterUrl);
-                if (cookies != null && !cookies.isEmpty()) {
-                    connection.setRequestProperty("Cookie", cookies);
-                    LogBridge.d(TAG, "【虎牙源】发送 Cookie: " + cookies.substring(0, Math.min(80, cookies.length())));
-                }
-
-                int code = connection.getResponseCode();
-                LogBridge.d(TAG, "【虎牙源】主播放列表响应码: " + code);
-
-                if (code == java.net.HttpURLConnection.HTTP_OK) {
-                    StringBuilder content = new StringBuilder();
-                    try (java.io.InputStream is = connection.getInputStream();
-                         java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(is))) {
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            content.append(line).append("\n");
+                    } catch (Exception e) {
+                        LogBridge.e(TAG, "【普通源】解析主播放列表失败(第 " + attempt + "/" + MAX_ATTEMPTS + " 次): ", e);
+                        if (attempt >= MAX_ATTEMPTS) {
+                            synchronized (variantListLock) { variantList.clear(); }
+                        }
+                        // attempt < MAX_ATTEMPTS：继续下一轮重试（新连接）
+                    } finally {
+                        if (connection != null) {
+                            try { connection.disconnect(); } catch (Exception ignored) {}
                         }
                     }
-                    String playlist = content.toString();
-                    LogBridge.d(TAG, "【虎牙源】主播放列表长度: " + playlist.length());
-
-                } else if (code == java.net.HttpURLConnection.HTTP_MOVED_TEMP
-                        || code == java.net.HttpURLConnection.HTTP_MOVED_PERM) {
-
-                    String newUrl = connection.getHeaderField("Location");
-                    LogBridge.d(TAG, "【虎牙源】手动重定向住: " + newUrl);
-                    isParsingMasterPlaylist = false;
-                    if (newUrl != null) {
-                        fetchAndParseMasterPlaylistHuya(newUrl);
-                        return;
-                    }
-                } else {
-
-                    try (java.io.InputStream es = connection.getErrorStream()) {
-                        if (es != null) {
-                            StringBuilder err = new StringBuilder();
-                            byte[] buf = new byte[1024];
-                            int len;
-                            while ((len = es.read(buf)) != -1) {
-                                err.append(new String(buf, 0, len));
-                            }
-                            if (err.length() > 0) {
-                                LogBridge.e(TAG, "【虎牙源】错误响应体: " + err.substring(0, Math.min(200, err.length())));
-                            }
-                        }
-                    }
-                    LogBridge.w(TAG, "【虎牙源】主播放列表请求失败: code=" + code);
-
                 }
-            } catch (Exception e) {
-                LogBridge.e(TAG, "【虎牙源】解析主播放列表失败: ", e);
-
             } finally {
-                if (connection != null) {
-                    try { connection.disconnect(); } catch (Exception ignored) {}
-                }
                 isParsingMasterPlaylist = false;
             }
         });
@@ -6918,6 +7121,97 @@ public class TVPlayerManager {
         });
     }
 
+    // ------------------------------------------------------------------
+    // 【2026-10-22 源8 自动联播】专用回调（独立槽位）
+    //
+    // 与源5/源7 同理：不复用 OnPlayStateListener 单例槽位，也不用其他源的槽位，
+    // 各自独立，保证 OttHomeActivity 的源8 回调不会被别的逻辑清掉。
+    // ------------------------------------------------------------------
+
+    public interface OnRybEpisodeListener {
+        /** 自动联播已切到第 {@code ordinal} 集（1 基） */
+        void onRybEpisodeChanged(int ordinal);
+
+        /** 全部集数已播完（末集结束）——界面负责退出全屏等收尾 */
+        void onRybAllEpisodesEnded();
+    }
+
+    private volatile OnRybEpisodeListener rybEpisodeListener;
+
+    public void setOnRybEpisodeListener(OnRybEpisodeListener l) {
+        this.rybEpisodeListener = l;
+    }
+
+    public OnRybEpisodeListener getOnRybEpisodeListener() {
+        return rybEpisodeListener;
+    }
+
+    private void notifyRybEpisodeChanged(final int ordinal) {
+        final OnRybEpisodeListener l = rybEpisodeListener;
+        if (l == null) return;
+        mHandler.post(() -> {
+            try {
+                l.onRybEpisodeChanged(ordinal);
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    private void notifyRybAllEpisodesEnded() {
+        final OnRybEpisodeListener l = rybEpisodeListener;
+        if (l == null) return;
+        mHandler.post(() -> {
+            try {
+                l.onRybAllEpisodesEnded();
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-22 源2 自动联播】专用回调（独立槽位，同上）
+    // ------------------------------------------------------------------
+
+    public interface OnNbMovieEpisodeListener {
+        /** 自动联播已切到第 {@code ordinal} 集（1 基） */
+        void onNbMovieEpisodeChanged(int ordinal);
+
+        /** 全部集数已播完（末集结束）——界面负责退出全屏等收尾 */
+        void onNbMovieAllEpisodesEnded();
+    }
+
+    private volatile OnNbMovieEpisodeListener nbmEpisodeListener;
+
+    public void setOnNbMovieEpisodeListener(OnNbMovieEpisodeListener l) {
+        this.nbmEpisodeListener = l;
+    }
+
+    public OnNbMovieEpisodeListener getOnNbMovieEpisodeListener() {
+        return nbmEpisodeListener;
+    }
+
+    private void notifyNbMovieEpisodeChanged(final int ordinal) {
+        final OnNbMovieEpisodeListener l = nbmEpisodeListener;
+        if (l == null) return;
+        mHandler.post(() -> {
+            try {
+                l.onNbMovieEpisodeChanged(ordinal);
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
+    private void notifyNbMovieAllEpisodesEnded() {
+        final OnNbMovieEpisodeListener l = nbmEpisodeListener;
+        if (l == null) return;
+        mHandler.post(() -> {
+            try {
+                l.onNbMovieAllEpisodesEnded();
+            } catch (Throwable ignored) {
+            }
+        });
+    }
+
     /**
      * 【2026-10-11 源7 自动联播】整集播完时的处理。
      *
@@ -6949,7 +7243,6 @@ public class TVPlayerManager {
             if (it != null && !TextUtils.isEmpty(it.customPlayUrl)) {
                 LogBridge.i(TAG, "【源7 联播】第" + (idx + 1) + "集播完 → 自动播放第" + (next + 1) + "集："
                         + it.customPlayUrl);
-                afhgrjAutoSwitchLineCount = 0;
                 // 换集解析期间抑制「卡住检测」重试，避免把联播打乱
                 afhgrjSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + AFHGRJ_SWITCH_GRACE_MS;
                 playUrlInternal(it.customPlayUrl);
@@ -7026,6 +7319,97 @@ public class TVPlayerManager {
             if (it != null && TextUtils.equals(it.customPlayUrl, url)) return i;
         }
         return -1;
+    }
+
+    /**
+     * 【2026-10-22 源8 自动联播】整集播完时的处理（与源5/源7 同机制）。
+     *
+     * <p>源8（renyibo，{@code ryb://<slug>[@<src>-<ep>]}）惰性解析起播，
+     * 当前集下标由 {@link com.tv.live.ryb.RybUrlResolver#getCurrentEpisode(String)} 记录
+     * （起播解析/切集时写 sCurEp，联播推进后自动更新）；选集列表与 EPG 面板同源
+     * （{@link com.tv.live.ryb.RybUrlResolver#getEpisodes(String)}，按当前选中线路生成）。
+     *
+     * @return {@code true} = 已接管（调用方不要再 autoRetry 重播本集）；
+     *         {@code false} = 非源8，走原有重连逻辑
+     */
+    private boolean handleRybEpisodeEnded() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String slug = com.tv.live.ryb.RybUrlResolver.vodIdOf(ch);
+        if (TextUtils.isEmpty(slug)) return false;   // 非源8：不接管
+
+        final List<Channel.EpgItem> eps = com.tv.live.ryb.RybUrlResolver.getEpisodes(slug);
+        if (eps == null || eps.isEmpty()) {
+            LogBridge.w(TAG, "【源8 联播】选集列表为空 → 停止播放（不重播）slug=" + slug);
+            rybPlaybackFinished = true;
+            notifyRybAllEpisodesEnded();
+            return true;
+        }
+        // 当前集下标由 resolver 记录（起播解析/切集时写 sCurEp）；未知/负值当第 1 集
+        int idx = com.tv.live.ryb.RybUrlResolver.getCurrentEpisode(slug);
+        if (idx < 0) idx = 0;
+        int next = idx + 1;
+        if (next < eps.size()) {
+            Channel.EpgItem it = eps.get(next);
+            if (it != null && !TextUtils.isEmpty(it.customPlayUrl)) {
+                LogBridge.i(TAG, "【源8 联播】第" + (idx + 1) + "集播完 → 自动播放第" + (next + 1) + "集："
+                        + it.customPlayUrl);
+                // 换集解析期间抑制「卡住检测」重试，避免把联播打乱
+                rybSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + RYB_SWITCH_GRACE_MS;
+                playUrlInternal(it.customPlayUrl);
+                notifyRybEpisodeChanged(next + 1);
+                return true;
+            }
+        }
+        LogBridge.i(TAG, "【源8 联播】已是最后一集（共 " + eps.size() + " 集）→ 停止播放，不再重播");
+        rybPlaybackFinished = true;
+        notifyRybAllEpisodesEnded();
+        return true;
+    }
+
+    /**
+     * 【2026-10-22 源2 自动联播】整集播完时的处理（与源8/源5/源7 同机制）。
+     *
+     * <p>源2（4K影视，{@code nbm://<vodId>[@<line>-<ep>]}）惰性解析起播，
+     * 当前集下标由 {@link com.tv.live.nbmovie.NbMovieUrlResolver#getCurrentEpisode(String)}
+     * 记录；选集列表与 EPG 面板同源（按当前选中线路生成）。
+     *
+     * @return {@code true} = 已接管（调用方不要再 autoRetry 重播本集）；
+     *         {@code false} = 非源2，走原有重连逻辑
+     */
+    private boolean handleNbMovieEpisodeEnded() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String vodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch);
+        if (TextUtils.isEmpty(vodId)) return false;   // 非源2：不接管
+
+        final List<Channel.EpgItem> eps = com.tv.live.nbmovie.NbMovieUrlResolver.getEpisodes(vodId);
+        if (eps == null || eps.isEmpty()) {
+            LogBridge.w(TAG, "【源2 联播】选集列表为空 → 停止播放（不重播）vodId=" + vodId);
+            nbmPlaybackFinished = true;
+            notifyNbMovieAllEpisodesEnded();
+            return true;
+        }
+        // 当前集下标由 resolver 记录（起播解析/切集时写 sCurEp）；未知/负值当第 1 集
+        int idx = com.tv.live.nbmovie.NbMovieUrlResolver.getCurrentEpisode(vodId);
+        if (idx < 0) idx = 0;
+        int next = idx + 1;
+        if (next < eps.size()) {
+            Channel.EpgItem it = eps.get(next);
+            if (it != null && !TextUtils.isEmpty(it.customPlayUrl)) {
+                LogBridge.i(TAG, "【源2 联播】第" + (idx + 1) + "集播完 → 自动播放第" + (next + 1) + "集："
+                        + it.customPlayUrl);
+                // 换集解析期间抑制「卡住检测」重试，避免把联播打乱
+                nbmSwitchingUntilMs = android.os.SystemClock.elapsedRealtime() + NBM_SWITCH_GRACE_MS;
+                playUrlInternal(it.customPlayUrl);
+                notifyNbMovieEpisodeChanged(next + 1);
+                return true;
+            }
+        }
+        LogBridge.i(TAG, "【源2 联播】已是最后一集（共 " + eps.size() + " 集）→ 停止播放，不再重播");
+        nbmPlaybackFinished = true;
+        notifyNbMovieAllEpisodesEnded();
+        return true;
     }
 
     public interface OnLiveInfoUpdateListener {

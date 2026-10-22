@@ -122,6 +122,20 @@ public class PanelFocusHistory {
     }
 
     /**
+     * 【2026-10-22 L1-09】清除全部 7 个区域记录的位置（面板关闭后由
+     * ChannelPanelController#clearPanelFocus 调用，下次打开面板重新按默认逻辑定位）。
+     * lastLeftZone/lastRightZone 一并复位为 ZONE_NONE，由 focusLastLeft/focusLastRight
+     * 的默认分支（左→频道列表、右→频道列表）承接。
+     */
+    public void resetAll() {
+        for (int z = 0; z < ZONE_COUNT; z++) {
+            resetPosition(z);
+        }
+        lastLeftZone = ZONE_NONE;
+        lastRightZone = ZONE_NONE;
+    }
+
+    /**
      * 把焦点放回左侧面板最近停留的位置。
      *
      * @param channelFallbackPosition 无历史时频道列表的落点（通常是正在播放的频道下标）
@@ -263,6 +277,18 @@ public class PanelFocusHistory {
             cur = (View) cur.getParent();
         }
         return ZONE_NONE;
+    }
+
+    /**
+     * 【2026-10-22 L1-08】当前焦点所在区域。
+     *
+     * <p>{@link #ZONE_NONE} 表示焦点不在面板任何区域内（用户已 LEFT 离开面板、
+     * 焦点在播放器上或别处）。供「今天」自动定位回调做守卫：焦点已离开时
+     * 不得再把焦点抢回右侧 EPG。
+     */
+    public int currentZone() {
+        if (root == null) return ZONE_NONE;
+        return zoneOf(root.findFocus());
     }
 
     private static boolean isLeftZone(int zone) {

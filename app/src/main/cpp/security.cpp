@@ -390,11 +390,80 @@ static const uint8_t KEY_PART_B[16] = {
     0x18, 0xfa, 0x82, 0x59, 0xa0, 0x21, 0x6c, 0xd7
 };
 
-// 【2026-10-14】token 不再从 Java 侧传入，直接编译期硬编码（与旧 FIXED_TOKEN 同值）。
-    // Java 侧不再有 "TVLiveSec!2026Se" 字符串。
-    static uint8_t g_runtime_token[16] = {
-        'T','V','L','i','v','e','S','e','c','!','2','0','2','6','S','e'
-    };
+// 【2026-10-22 I1-07 卫生项】token 不再以可读 ASCII 落进 .rodata。
+//   原实现是 {'T','V','L','i','v','e','S','e','c','!','2','0','2','6','S','e'}，
+//   一条 `strings libtvlive_security.so | grep TVLive` 就能捞到，等于把 AES 工作密钥的
+//   三分之一直接写在明面上。现在改为 XOR 编码存放，首次使用时在栈上解出运行时副本。
+static const uint8_t TOKEN_ENC[16] = {
+    0x69, 0xc7, 0x47, 0x8d, 0x21, 0x49, 0xfb, 0x73,
+    0x0c, 0xf2, 0x70, 0xb8, 0x37, 0x8c, 0x22, 0xab
+};
+static const uint8_t TOKEN_PAD[16] = {
+    0x3d, 0x91, 0x0b, 0xe4, 0x57, 0x2c, 0xa8, 0x16,
+    0x6f, 0xd3, 0x42, 0x88, 0x05, 0xba, 0x71, 0xce
+};
+static volatile uint8_t g_runtime_token[16];
+static volatile bool    g_token_ready = false;
+
+// ⚠ 必须走 volatile 读：实测（2026-10-22）第一版用 static const 普通数组，
+//   clang 直接把 TOKEN_ENC[i]^TOKEN_PAD[i] 常量折叠成 "TVLiveSec!2026Se" 塞回 .rodata，
+//   加密形同虚设（strings 仍能搜到）。volatile 让编译器无法假定内容。
+static void ensure_runtime_token() {
+    if (g_token_ready) return;
+    const volatile uint8_t* e = TOKEN_ENC;
+    const volatile uint8_t* q = TOKEN_PAD;
+    for (int i = 0; i < 16; ++i) g_runtime_token[i] = (uint8_t)(e[i] ^ q[i]);
+    g_token_ready = true;
+}
+
+// =============================================================
+// 【2026-10-22 I1-07 彻底治理（离线版）】签名证书哈希参与密钥派生
+//
+// 原状：期望签名是 Java 里的一个 String 常量（dex 明文），校验失败就
+//       toast + killProcess —— 两者都可被一行 patch 干掉（改成 return true
+//       或删掉调用），防护等于不存在。
+//
+// 现在：期望值只存在于 .so；Java 在 init 时把当前证书 SHA-256 绑定进来，
+//       native 用它参与 AES 工作密钥 / secstore 常量的派生：
+//       签名不匹配 → 派生出的密钥是错的 → 所有加密常量解成乱码、接口地址全废，
+//       功能自然失效。攻击者要绕过必须逆向 .so 改比对逻辑，成本远高于 patch 一个 String。
+//
+// 不误伤：只有 Java 成功绑定过签名（g_sig_bound）才启用污染；绑定失败/未初始化时
+//       行为与旧版完全一致，避免初始化解序问题把正常包打死。
+// =============================================================
+static const uint8_t EXPECTED_SIG_SHA256[32] = {
+    0xc5, 0x07, 0x5e, 0x74, 0x49, 0x37, 0xc5, 0xb2, 0x80, 0xb2, 0xa8, 0x34, 0x5a, 0xa0, 0xdd, 0x1f,
+    0x4a, 0xa6, 0x8e, 0x26, 0x00, 0x90, 0x04, 0x5a, 0x55, 0x5b, 0x6b, 0x4d, 0x55, 0xdd, 0x40, 0x04
+};
+static uint8_t g_sig_sha256[32];
+static volatile int g_sig_bound = 0;   // Java 是否已绑定（volatile：防编译器按初值做乐观假设）
+static volatile int g_sig_ok    = 0;   // 绑定值与期望是否一致
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_tv_live_security_SecurityCore_nativeBindSignature(JNIEnv* env, jclass, jbyteArray sig) {
+    if (!sig || env->GetArrayLength(sig) != 32) return;
+    env->GetByteArrayRegion(sig, 0, 32, (jbyte*) g_sig_sha256);
+    uint8_t diff = 0;
+    for (int i = 0; i < 32; ++i) diff = (uint8_t)(diff | (g_sig_sha256[i] ^ EXPECTED_SIG_SHA256[i]));
+    g_sig_ok    = (diff == 0) ? 1 : 0;
+    g_sig_bound = 1;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_tv_live_security_SecurityCore_nativeSignatureOk(JNIEnv*, jclass) {
+    return (g_sig_bound && g_sig_ok) ? JNI_TRUE : JNI_FALSE;
+}
+
+/** 供其它编译单元（secstore.cpp）查询：签名已绑定且不匹配 → 应产出垃圾值 */
+extern "C" int tvl_signature_poisoned(void) {
+    return (g_sig_bound && !g_sig_ok) ? 1 : 0;
+}
+
+/** 诊断用：1 = 已进入「常量污染」状态（签名不匹配），0 = 正常/未绑定 */
+extern "C" JNIEXPORT jint JNICALL
+Java_com_tv_live_security_SecurityCore_nativePoisoned(JNIEnv*, jclass) {
+    return (g_sig_bound && !g_sig_ok) ? 1 : 0;
+}
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_tv_live_security_SecurityCore_nativeSetToken(JNIEnv* env, jclass, jbyteArray token) {
@@ -403,9 +472,18 @@ Java_com_tv_live_security_SecurityCore_nativeSetToken(JNIEnv* env, jclass, jbyte
 }
 
 static void build_aes_key(uint8_t out[32]) {
+    ensure_runtime_token();
+    const volatile uint8_t* ta = KEY_PART_A;
+    const volatile uint8_t* tb = KEY_PART_B;
+    const volatile uint8_t* tk = g_runtime_token;
+    for (int i = 0; i < 16; ++i) out[i]      = (uint8_t)(ta[i] ^ tk[i]);
+    for (int i = 0; i < 16; ++i) out[16 + i] = (uint8_t)(tb[i] ^ tk[i]);
 
-    for (int i = 0; i < 16; ++i) out[i]      = KEY_PART_A[i] ^ g_runtime_token[i];
-    for (int i = 0; i < 16; ++i) out[16 + i] = KEY_PART_B[i] ^ g_runtime_token[i];
+    // 【2026-10-22 I1-07】签名不匹配 → 搅乱工作密钥（解出乱码，而不是显式退出）。
+    //   判定只看 g_sig_bound：未绑定（初始化顺序/异常）时保持旧行为，绝不误伤正常包。
+    if (g_sig_bound && !g_sig_ok) {
+        for (int i = 0; i < 32; ++i) out[i] ^= (uint8_t)(0xA7 + i * 29);
+    }
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL

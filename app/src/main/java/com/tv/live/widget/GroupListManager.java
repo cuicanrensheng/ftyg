@@ -326,6 +326,9 @@ public class GroupListManager {
             }
         };
         lvGroup.setAdapter(adapter);
+        // 【2026-10-22 L1-13】全量重建（setGroups/adapter 重建路径）刻意归零选中位：
+        //   换源/重拉属于「重置」语义；增量路径 rebuildKeepingSelection 才保留上次分组。
+        //   若将来要回填，应复用 rebuildKeepingSelection 的增量思路而非在此处按记忆还原。
         selectedPosition = 0;
         focusedPosition = 0;
         adapter.notifyDataSetChanged();

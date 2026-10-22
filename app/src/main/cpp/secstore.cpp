@@ -120,6 +120,10 @@ OBF_DEF(K_VODP_YKTX,    "http://jx.nbpicture.xyz/jx?url=",                      
  *  返回两种形态：49.233.180.127:7788/cache/m3u8/<hash>.m3u8 或整集视频直链（xhscdn 伪装）。 */
 OBF_DEF(K_VODP_DMM,     "http://49.233.180.127:7788/dmm.php/?url=",              0xc3);
 
+/** id=27 · 腾讯 Bugly App ID（2026-10-22 I1-07 卫生项：从 dex 明文搬进 .so）。
+ *  Bugly 初始化晚于 SecurityCore.init，取值失败仅退化为「不上报崩溃」，不影响功能。 */
+OBF_DEF(K_BUGLY_APP_ID, "4a23007223",                                            0x5d);
+
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id) {
@@ -151,8 +155,19 @@ Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id)
         case 24: obf::decode_to(K_VODP_ACE,     buf, sizeof(buf)); break;
         case 25: obf::decode_to(K_VODP_YKTX,    buf, sizeof(buf)); break;
         case 26: obf::decode_to(K_VODP_DMM,     buf, sizeof(buf)); break;
+        case 27: obf::decode_to(K_BUGLY_APP_ID, buf, sizeof(buf)); break;
         default: return nullptr;
     }
+    // 【2026-10-22 I1-07】签名不匹配 → 把常量就地搅乱再返回：
+    //   接口地址/密钥全变成无效串，App 自然起不来直播/点播，无需依赖可被 patch 的 killProcess。
+    //   未绑定时 tvl_signature_poisoned() 恒为 0，行为与旧版一致。
+    extern int tvl_signature_poisoned(void);
+    if (tvl_signature_poisoned()) {
+        for (size_t i = 0; buf[i] != 0 && i < sizeof(buf); ++i) {
+            buf[i] = (char)((buf[i] ^ 0x5A) + 1);
+        }
+    }
+
     jstring s = env->NewStringUTF(buf);
     memset(buf, 0, sizeof(buf));   // 明文只活在这一帧
     return s;

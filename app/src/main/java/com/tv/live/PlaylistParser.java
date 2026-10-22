@@ -36,15 +36,18 @@ public class PlaylistParser {
     }
 
     /**
-     * 解析 M3U 内容，不做去重/合并（源8专用）。
+     * 【历史遗留，2026-10-22 标注】不去重版本的 M3U 解析入口。
      *
-     * <p>标准 {@link #parseContent(String)} 用 tvgId/name 作为 key，相同 key 的条目会
-     * 合并为一个频道（addBackupUrl）。源8的片单分组包含大量重复视频（24个片单内容相同），
-     * 用户要求「是多少视频就显示多少视频」，因此提供此不去重版本。
+     * <p>本方法为旧 4kvm 时代「源8 片单分组含大量重复视频、用户要求是多少视频就显示多少
+     * 视频」的特殊承诺而写。<b>现行口径已变更</b>：源8 已换 renyibo，M3U 由构建端按 slug
+     * 去重、tvg-id 天然唯一（见 AppCoreManager#parseLiveSource 硬编码 noDedup=false），
+     * 不再需要不去重特殊路径。全工程已无调用方，保留仅供追溯备查，请勿在新代码中调用。
      *
      * @param content M3U 文本
      * @return 频道列表（包含重复条目）
+     * @deprecated 现行口径为构建端去重，不再使用
      */
+    @Deprecated
     public static List<Channel> parseContentNoDedup(String content) throws Exception {
         if (content == null || content.isEmpty()) {
             return new ArrayList<>();
@@ -171,7 +174,7 @@ public class PlaylistParser {
     }
 
     /**
-     * 不去重版本的 M3U 解析（源8片单分组专用）。
+     * 不去重版本的 M3U 解析（历史遗留，见 {@link #parseContentNoDedup} 的口径说明）。
      * 相同 tvgId/name 的条目不会合并，每条都作为独立频道保留。
      */
     private static List<Channel> parseInternalNoDedup(BufferedReader br, List<Channel> channels) throws Exception {
@@ -313,6 +316,8 @@ public class PlaylistParser {
      *       起播时抓播放页 player_aaaa 取真实 m3u8（惰性解析）。</li>
      *   <li>内置源8（renyibo 影视）{@code ryb://<slug>}（2026-10-19 换源）—— 待解析地址，
      *       起播时抓详情页 PLAY_SOURCES 取真实 m3u8（惰性解析，纯 HTTP）。</li>
+     *   <li>内置源2 追加的 4K影视 {@code nbm://<vodId>}（2026-10-21 新增）—— 待解析地址，
+     *       起播时走 NM 加密帧通道（X25519 换密钥 + AES-256-GCM）取真实 m3u8（惰性解析）。</li>
      * </ul>
      */
     public static boolean isSupportedUri(String uri) {
@@ -323,7 +328,8 @@ public class PlaylistParser {
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoVodSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME)
-                || uri.startsWith(com.tv.live.ryb.RybUrlResolver.SCHEME);
+                || uri.startsWith(com.tv.live.ryb.RybUrlResolver.SCHEME)
+                || uri.startsWith(com.tv.live.nbmovie.NbMovieUrlResolver.SCHEME);
     }
 
     private static int findFirstHttpComma(String line) {

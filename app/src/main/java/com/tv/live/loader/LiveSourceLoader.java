@@ -157,6 +157,8 @@ public class LiveSourceLoader {
                 final boolean isMigu = url.startsWith("migu://");
                 final boolean isAfhgrj = url.startsWith("afhgrj://");
                 final boolean isRyb = url.startsWith("ryb://");
+                // 【2026-10-21】源2（内置源2，外链 M3U）：加载出口追加 4K影视 4 个点播分组
+                final boolean isSource2 = isSource2Url(url);
                 String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isRyb) ? url : getAcceleratedUrl(url);
                 LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 开始加载：" + acceleratedUrl);
                 LogBridge.d(TAG, "LOAD: source #" + (i+1) + " downloading: " + acceleratedUrl);
@@ -184,6 +186,12 @@ public class LiveSourceLoader {
                     } else {
                         rawContent = downloadRawContent(acceleratedUrl);
                     }
+                    // 【2026-10-21】源2：在下载出口追加 4K影视（nbmovie）4 个点播分组
+                    //   （首页/电影/电视剧/动漫），地址为 nbm://<vodId> 惰性解析。
+                    //   幂等：已含 nbm:// 频道则跳过（缓存命中/重复加载时不重复注入）。
+                    if (isSource2) {
+                        rawContent = appendNbmovieGroups(context, rawContent);
+                    }
                     // 【2026-10-19 用户口径】给「没有自家直播频道」的源补上「央视」分组：
                     //   源4（影视轮播）/源7/源8 切过去后「直播」板块是空的，补一份内置央视列表
                     //   （取自内置源1 的央视条目，31 个频道，带 catvod 台标，随包离线可用）。
@@ -210,6 +218,10 @@ public class LiveSourceLoader {
                     // 【2026-10-11 海报】源7：Channel 直接绑定海报，Channel 直达 OTT，不依赖 M3U tvg-logo
                     if (isAfhgrj) {
                         applyAfhgrjPosters(channels);
+                    }
+                    // 【2026-10-21】源2：为追加的 4K影视 nbm:// 频道绑定海报
+                    if (isSource2) {
+                        applyNbmoviePosters(channels);
                     }
 
                     cacheManager.saveFileCache("live_source", rawContent);
@@ -303,6 +315,109 @@ public class LiveSourceLoader {
             bound++;
         }
         LogBridge.i(TAG, "【影视源7】海报绑定完成：共 " + bound + " 部绑定成功"
+                + (noPoster > 0 ? "，" + noPoster + " 部无海报数据" : ""));
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-21 源2 追加 4K影视】nbmovie 分组注入 + 海报绑定 + 源2 判定
+    // ------------------------------------------------------------------
+
+    /**
+     * 判定某 URL 是否为「内置源2」。
+     *
+     * <p>源2 是外链 M3U（LIVE_URL_2），地址由 SecurityCore 解密得出，
+     * LIVE_URL_2 / LIVE_URL_2_RAW / getLiveUrl2() 三者取值同源，
+     * 用户显式选源时 effectiveUrl 可能取其中任意一种形态，故全部比对。
+     */
+    static boolean isSource2Url(String url) {
+        if (url == null || url.isEmpty()) return false;
+        if (url.equals(UrlConfig.LIVE_URL_2)) return true;
+        if (url.equals(UrlConfig.LIVE_URL_2_RAW)) return true;
+        try {
+            return url.equals(UrlConfig.getLiveUrl2());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * 【2026-10-21】给源2 的 M3U 出口追加 4K影视（nbmovie）4 个点播分组。
+     *
+     * <p>幂等：内容中已含 {@code nbm://} 频道（重复加载/旧缓存）时直接返回。
+     * 追加时剥掉片段的 {@code #EXTM3U} 头（PlaylistParser 只认第一行）。
+     *
+     * <p>【2026-10-21 用户批准】成人内容清洗：入口先过
+     * {@link com.tv.live.nbmovie.NbMovieSourceLoader#filterAdult(String)}，
+     * 再判幂等——升级前写入的 {@code live_source} 缓存含未过滤的 nbm 成人条目，
+     * 直接判幂等会跳过导致残留。
+     *
+     * @return 追加后的 M3U；拉取失败时返回原内容并打 warn（不影响源2 原有直播频道）
+     */
+    private static String appendNbmovieGroups(Context ctx, String m3u) {
+        if (m3u == null || m3u.isEmpty()) return m3u;
+        String cleaned = com.tv.live.nbmovie.NbMovieSourceLoader.filterAdult(m3u);
+        if (cleaned == null || cleaned.isEmpty()) return cleaned;
+        m3u = cleaned;
+        if (m3u.contains("nbm://")) {
+            LogBridge.d(TAG, "【4K影视】源2 已含 nbm:// 频道，跳过追加");
+            return m3u;
+        }
+        String nbmM3u;
+        try {
+            nbmM3u = com.tv.live.nbmovie.NbMovieSourceLoader.loadAllLiveAsM3u(ctx);
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【4K影视】拉取分组 M3U 异常：" + t.getMessage());
+            return m3u;
+        }
+        if (nbmM3u == null || nbmM3u.isEmpty()) {
+            LogBridge.w(TAG, "【4K影视】分组 M3U 为空（站点不可达或解析失败），源2 仅保留原有直播频道");
+            return m3u;
+        }
+        // 剥掉片段的 #EXTM3U 头行，避免文件中段出现第二个头
+        String body = nbmM3u;
+        if (body.startsWith("#EXTM3U")) {
+            int nl = body.indexOf('\n');
+            body = nl >= 0 ? body.substring(nl + 1) : "";
+        }
+        int added = 0;
+        for (int i = 0; i >= 0 && i < body.length(); ) {
+            int j = body.indexOf("#EXTINF", i);
+            if (j < 0) break;
+            added++;
+            i = body.indexOf('\n', j);
+            if (i < 0) break;
+            i++;
+        }
+        StringBuilder sb = new StringBuilder(m3u);
+        if (!m3u.endsWith("\n")) sb.append('\n');
+        sb.append(body);
+        if (!body.endsWith("\n")) sb.append('\n');
+        LogBridge.i(TAG, "【4K影视】源2 已追加点播分组，共 " + added + " 个频道");
+        return sb.toString();
+    }
+
+    /**
+     * 【2026-10-21】源2：为追加的 4K影视 {@code nbm://} 频道直接绑定海报 URL。
+     *
+     * <p>对照 {@link #applyAfhgrjPosters}：仅处理 nbm:// 协议串频道，
+     * 其余源2 原有直播频道不碰。
+     */
+    private static void applyNbmoviePosters(List<Channel> channels) {
+        int bound = 0, noPoster = 0;
+        for (Channel c : channels) {
+            String url = c.getMainPlayUrl();
+            if (url == null || !url.startsWith("nbm://")) continue;
+            String vodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(c);
+            if (vodId == null || vodId.isEmpty()) continue;
+            String poster = com.tv.live.nbmovie.NbMovieSourceLoader.posterOf(vodId);
+            if (poster == null || poster.isEmpty()) {
+                noPoster++;
+                continue;
+            }
+            c.setLogoUrl(poster);
+            bound++;
+        }
+        LogBridge.i(TAG, "【4K影视】海报绑定完成：共 " + bound + " 部绑定成功"
                 + (noPoster > 0 ? "，" + noPoster + " 部无海报数据" : ""));
     }
 
@@ -719,9 +834,15 @@ public class LiveSourceLoader {
     /**
      * 缓存命中时补组：源7/源8 的 {@code live_source} 缓存可能是升级前写入的（不含卫视），
      * 启动直接读缓存会绕过网络分支，这里按当前源补一次，保证新版首次启动就能看到卫视。
+     *
+     * <p>【2026-10-21】源2：同理，旧缓存是升级前写入的（不含 4K影视 4 个点播分组），
+     * 缓存命中时补一次 {@code nbm://} 分组。
      */
     public static String appendExtraGroupsForCache(Context ctx, String m3u, String sourceUrl) {
         if (m3u == null || m3u.isEmpty() || sourceUrl == null) return m3u;
+        if (isSource2Url(sourceUrl)) {
+            return appendNbmovieGroups(ctx, m3u);
+        }
         if (!sourceUrl.startsWith("afhgrj://") && !sourceUrl.startsWith("ryb://")) return m3u;
         return appendCctvAndWeishi(ctx, m3u);
     }

@@ -1,38 +1,30 @@
 package com.tv.live.util;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * DNS 广告拦截工具（独立工具类）
+ * 广告域名黑名单工具（域名级匹配）
  *
- * 原理：在应用内部 DNS 解析阶段拦截广告域名，将其解析到 127.0.0.1，
- * 使广告请求无法到达真实服务器。
+ * <p>实际生效机制：{@link #isUrlBlocked(String)} 由 RedirectLoggingHttpDataSource.open()
+ * 在每次请求前调用，命中即抛 HttpDataSourceException 拦截（见该处「DNS 广告拦截」分支）。
+ * 分片 URL 的关键词拦截在 M3u8AdStripper.isAdUrl，两者互补。
  *
- * 特点：
+ * <p>特点：
  * 1. 无需 VPN 权限，无需 root
  * 2. 支持精确域名匹配和通配符匹配（*.example.com）
  * 3. 支持正则表达式匹配
  * 4. 可动态添加/删除拦截规则
- * 5. 提供 OkHttp Dns 接口实现，可直接接入 ExoPlayer/OkHttp
  *
- * 使用方式：
- * - OkHttp: client.newBuilder().dns(DnsAdBlocker.getDnsInterceptor()).build()
- * - 手动检查: if (DnsAdBlocker.isBlocked(url)) { 拒绝请求 }
+ * <p>【2026-10-22 P2-09】原 OkHttp Dns 接口实现（getDnsInterceptor）与 resolve() 无任何
+ * 调用方（ExoPlayer 链路并不走 OkHttp Dns），已删除；类注释此前后者不符。
  */
 public final class DnsAdBlocker {
 
     private static final String TAG = "DnsAdBlocker";
-
-    /** 被拦截域名返回的假 IP */
-    private static final String BLOCKED_IP = "127.0.0.1";
 
     /** 精确匹配的域名集合 */
     private static final Set<String> sExactBlocklist = new HashSet<>();
@@ -223,33 +215,6 @@ public final class DnsAdBlocker {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    /**
-     * DNS 解析：被拦截的域名返回 127.0.0.1，否则正常解析
-     * @param hostname 域名
-     * @return IP 地址列表
-     */
-    public static List<InetAddress> resolve(String hostname) throws UnknownHostException {
-        if (isBlocked(hostname)) {
-            LogBridge.w(TAG, "DNS 拦截: " + hostname + " -> " + BLOCKED_IP);
-            return Collections.singletonList(InetAddress.getByName(BLOCKED_IP));
-        }
-        // 正常解析
-        return Arrays.asList(InetAddress.getAllByName(hostname));
-    }
-
-    /**
-     * 获取 OkHttp Dns 接口实现
-     * 用法: okHttpClient.newBuilder().dns(DnsAdBlocker.getDnsInterceptor()).build()
-     */
-    public static okhttp3.Dns getDnsInterceptor() {
-        return new okhttp3.Dns() {
-            @Override
-            public List<InetAddress> lookup(String hostname) throws UnknownHostException {
-                return resolve(hostname);
-            }
-        };
     }
 
     /**

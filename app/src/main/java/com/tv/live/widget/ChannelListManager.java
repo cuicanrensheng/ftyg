@@ -22,6 +22,9 @@ public class ChannelListManager {
     private int selectedPosition = 0;
     private int focusedPosition = -1;
     private int currentPlayIndex = 0;
+    /** 【2026-10-22 L1-07】setFilteredChannels 去重锚点：播放行名未变化时保持用户浏览行，不拽回播放行 */
+    private String lastFilteredPlayName = null;
+    private String lastFilteredSelectedName = null;
 
     // 【2026-10-20 焦点降亮 / 八次调整】三态：
     //   焦点（focused）  → 暗金（橄榄）底 #FF3C3525 + 2dp 白描边 + 黄字 #FFFFD166（list_item_focused）
@@ -312,8 +315,26 @@ public class ChannelListManager {
             }
         }
 
-        selectedPosition = playIndex;
-        focusedPosition = playIndex;
+        // 【2026-10-22 L1-07】播放行名未变化时保持用户当前浏览行（增量合并/过滤刷新不再把
+        // 选择拽回正在播放的频道）；仅首次进入或换台（播放行变化）时才定位到播放行。
+        // 保持时先按频道名反查（增量合并可能在旧下标前插行，纯下标保留会指错行），
+        // 反查不到再按旧下标钳制到新列表范围内。
+        boolean playRowChanged = (currentPlayChannelName == null)
+                ? (lastFilteredPlayName != null)
+                : !currentPlayChannelName.equals(lastFilteredPlayName);
+        lastFilteredPlayName = currentPlayChannelName;
+        if (playRowChanged) {
+            selectedPosition = playIndex;
+            focusedPosition = playIndex;
+        } else {
+            int keep = (lastFilteredSelectedName != null) ? names.indexOf(lastFilteredSelectedName) : -1;
+            if (keep < 0) keep = Math.min(selectedPosition, Math.max(names.size() - 1, 0));
+            if (keep < 0) keep = playIndex;
+            selectedPosition = keep;
+            focusedPosition = keep;
+        }
+        lastFilteredSelectedName = (selectedPosition >= 0 && selectedPosition < names.size())
+                ? names.get(selectedPosition) : null;
         this.currentPlayIndex = playIndex;
         final int finalPlayIndex = playIndex;
 

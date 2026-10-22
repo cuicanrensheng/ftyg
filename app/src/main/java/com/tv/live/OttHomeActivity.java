@@ -113,6 +113,12 @@ public class OttHomeActivity extends AppCompatActivity {
     /** 【2026-10-13 源5】当前播放的选集下标（-1=未知/非源5），用于 renyibo EPG 面板高亮 */
     private int mCurrentRenyiboEpisodeIdx = -1;
     private EpgManager.OnEpgDataReadyListener epgDataReadyListener;
+    /**
+     * 【2026-10-22 O4】控制栏信息条的 EPG 就绪监听（initVodControlBar 注册）。
+     * 原为匿名 lambda：OTT⇄直播每切换一次就新注册一条且永不注销，N 次后累积 N 个已销毁
+     * Activity 的回调（EpgManager 的监听器 List 只增不减）→ 提为字段，onDestroy 成对注销。
+     */
+    private EpgManager.OnEpgDataReadyListener vodBarEpgDataReadyListener;
 
     // ==================== 【2026-10-11】OTT 播放历史 + 源7 联播/续播 ====================
 
@@ -142,6 +148,10 @@ public class OttHomeActivity extends AppCompatActivity {
     private TVPlayerManager.OnAfhgrjEpisodeListener afhgrjEpisodeListener;
     /** 【2026-10-13 源5 联播】专用回调（独立槽位，与源7 各自独立，互不清理） */
     private TVPlayerManager.OnRenyiboEpisodeListener renyiboEpisodeListener;
+    /** 【2026-10-22 源8 联播】专用回调（独立槽位，与源5/源7 各自独立，互不清理） */
+    private TVPlayerManager.OnRybEpisodeListener rybEpisodeListener;
+    /** 【2026-10-22 源2 联播】专用回调（独立槽位，与源8/源5/源7 各自独立，互不清理） */
+    private TVPlayerManager.OnNbMovieEpisodeListener nbmEpisodeListener;
     private TextView tvMetadata;
     private TextView tvPreviewTip;
     private TextView tvBreadcrumb;
@@ -518,8 +528,10 @@ public class OttHomeActivity extends AppCompatActivity {
                 // 【2026-10-17 用户口径】直播**取消「单击屏幕切换播放/暂停」**：
                 //   直播流暂停没有意义，误触后画面停住很容易被当成卡死。
                 //   直播下单击只做两件事：控制栏没显示→唤起；已显示→收起（不改播放状态）。
-                //   点播（源7/源5）保持原行为：单击 = 播放/暂停。
-                final boolean vodPlayback = isSource7Playing() || isRenyiboVodChannel(playingChannel);
+                // 点播（源7/源8/源2/源5）保持原行为：单击 = 播放/暂停。
+                // 【2026-10-22 O1】统一四源口径：原 isSource7Playing() || isRenyiboVodChannel()
+                //   两源判定漏源8/源2，全屏单击对它们走直播语义（只收控制栏不暂停）。
+                final boolean vodPlayback = isAnyVodPlaying();
                 if (ottControllerShowing) {
                     if (vodPlayback) {
                         mPlayerManager.togglePlayWhenReady();
@@ -570,11 +582,18 @@ public class OttHomeActivity extends AppCompatActivity {
                 enterFullscreenImmediately();
             }
         });
-        // 【2026-10-17 OTT 详情页】长按 OK：弹出影片详情 + 播放线路切换（仅源7 影视有详情数据）
+        // 【2026-10-17 OTT 详情页】长按 OK：弹出影片详情 + 播放线路切换
         gvChannel.setOnItemLongClickListener((parent, view, position, id) -> {
             if (position < 0 || position >= shownChannels.size()) return false;
             Channel ch = shownChannels.get(position);
-            showVodDetail(ch);
+            // 【2026-10-22 O13】长按入口与单击对齐：点播频道走 VodDetailPanel 详情页
+            //   （旧 showVodDetail 仅源7 影视有数据、其余源只弹 Toast，同一功能两套实现不对称）；
+            //   直播频道（源7 一起看等仍有详情数据的）保持旧弹窗。
+            if (isVodChannel(ch)) {
+                openVodDetail(ch, position);
+            } else {
+                showVodDetail(ch);
+            }
             return true;
         });
 
@@ -842,6 +861,60 @@ public class OttHomeActivity extends AppCompatActivity {
         };
         mPlayerManager.setOnRenyiboEpisodeListener(renyiboEpisodeListener);
 
+        // 【2026-10-22 源8 联播】专用回调（独立槽位，与源5/源7 同构）：
+        //   自动联播换集 → 同步选集面板高亮 + 播放历史 + 「正在播放·第N集」；
+        //   全部播完 → 退出全屏并收起控制栏（与源5 同行为）。
+        //   源8 当前集下标由 RybUrlResolver 的 sCurEp 驱动（起播/换集/联播均写），
+        //   选集高亮与「正在播放」实时读该状态，此处只做面板刷新与历史落库。
+        rybEpisodeListener = new TVPlayerManager.OnRybEpisodeListener() {
+            @Override
+            public void onRybEpisodeChanged(int ordinal) {
+                Channel ch = playingChannel;
+                if (ch == null) return;
+                String slug = com.tv.live.ryb.RybUrlResolver.vodIdOf(ch);
+                if (!TextUtils.isEmpty(slug)) {
+                    appConfig.addOttHistory(ch.getName(), slug, ordinal);
+                }
+                renderHistoryPanel();
+                refreshEpgPanel(ch);
+                // 「正在播放 · 第N集」也要跟着联播更新（否则一直停在起播那一集）
+                refreshNowPlayingProgram();
+            }
+
+            @Override
+            public void onRybAllEpisodesEnded() {
+                LogBridge.i(TAG, "【OTT·源8】全部集数播完 → 退出全屏并停止");
+                if (fullscreen) setFullscreen(false);
+                hideSource7Controller();
+            }
+        };
+        mPlayerManager.setOnRybEpisodeListener(rybEpisodeListener);
+
+        // 【2026-10-22 源2 联播】专用回调（独立槽位，与源8 同构）
+        nbmEpisodeListener = new TVPlayerManager.OnNbMovieEpisodeListener() {
+            @Override
+            public void onNbMovieEpisodeChanged(int ordinal) {
+                Channel ch = playingChannel;
+                if (ch == null) return;
+                String vodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch);
+                if (!TextUtils.isEmpty(vodId)) {
+                    appConfig.addOttHistory(ch.getName(), vodId, ordinal);
+                }
+                renderHistoryPanel();
+                refreshEpgPanel(ch);
+                // 「正在播放 · 第N集」也要跟着联播更新（否则一直停在起播那一集）
+                refreshNowPlayingProgram();
+            }
+
+            @Override
+            public void onNbMovieAllEpisodesEnded() {
+                LogBridge.i(TAG, "【OTT·源2】全部集数播完 → 退出全屏并停止");
+                if (fullscreen) setFullscreen(false);
+                hideSource7Controller();
+            }
+        };
+        mPlayerManager.setOnNbMovieEpisodeListener(nbmEpisodeListener);
+
         // 【2026-09-29 方案 A 电信 IPTV 风格】LiveInfo（分辨率/码率/格式/音频）回调刷元数据小字
         mPlayerManager.setOnLiveInfoUpdateListener(info -> mainHandler.post(() -> refreshMetadata()));
     }
@@ -867,7 +940,10 @@ public class OttHomeActivity extends AppCompatActivity {
             public void onLiveSourceFailed(String errorMsg) {
                 mainHandler.post(() -> {
                     if (allChannels.isEmpty()) {
-                        showEmpty(getString(R.string.ott_channel_empty));
+                        // 【2026-10-22 O7】空列表文案按一级板块分流（对齐 applyFilter）：
+                        //   点播板块冷启动/加载失败时应提示「暂无点播频道」而非「暂无直播频道」
+                        showEmpty(getString((topSection == SECTION_VOD)
+                                ? R.string.ott_vod_empty : R.string.ott_channel_empty));
                     }
                 });
             }
@@ -889,7 +965,9 @@ public class OttHomeActivity extends AppCompatActivity {
                 // 假失败，随后数据到达又恢复 —— 正是用户报的「加载分组和频道失败，几分钟后才成功」。
                 // 修正：只有界面**真的一个频道都没有**时才提示空列表。
                 mainHandler.post(() -> {
-                    if (allChannels.isEmpty()) showEmpty(getString(R.string.ott_channel_empty));
+                    // 【2026-10-22 O7】同 onLiveSourceFailed：按板块分流空列表文案
+                    if (allChannels.isEmpty()) showEmpty(getString((topSection == SECTION_VOD)
+                            ? R.string.ott_vod_empty : R.string.ott_channel_empty));
                 });
             }
         });
@@ -1100,6 +1178,46 @@ public class OttHomeActivity extends AppCompatActivity {
      * 截图里的「电影 / 恐怖 / 电视剧 / 综艺 / 动漫」分组就来自这类频道，
      * 界面重构后它们只出现在「点播」板块。
      */
+    /**
+     * 【2026-10-22 源6 咪咕·板块隔离】咪咕「剧场/片库」分组集合。
+     *
+     * <p>咪咕 342 台全部是 {@code nowtv://} 惰性解析地址，单看 scheme 分不出直播/点播，
+     * 必须按分组判定：以下分组素材是「一部剧/一部片/一个合集」的片库（点播形态，
+     * 与原版 剧场组 口径一致，见 MiguSourceLoader/NowTvSourceApi 注释）；
+     * 其余分组（央视/卫视/体育/财经/教育/地方/美女）才是真直播频道。
+     *
+     * <p>只影响 OTT 一级板块归属（直播板块/点播板块），<b>不改变播放与控制栏语义</b>
+     * （咪咕剧场仍是「轮播 + EPG 节目单 + 回看」的直播形态，单击直接起播，
+     * 不走 VodDetailPanel —— 该面板目前只有源7 的详情数据源）。
+     */
+    private static final java.util.Set<String> MIGU_THEATER_GROUPS =
+            new java.util.HashSet<>(java.util.Arrays.asList(
+                    "央视大剧", "热播剧集", "经典韩剧", "儿童动画",
+                    "电影", "综艺", "少儿", "人文记录", "春晚"));
+
+    /** 是否为咪咕「剧场/片库」频道（nowtv:// + 剧场分组） */
+    private static boolean isMiguTheaterChannel(Channel c) {
+        if (c == null) return false;
+        try {
+            if (!com.tv.live.migu.MiguSourceLoader.isNowTvUrl(c.getMainPlayUrl())) return false;
+        } catch (Throwable t) {
+            return false;
+        }
+        String g = GroupListManager.getNormalizedGroup(c);
+        return g != null && MIGU_THEATER_GROUPS.contains(g);
+    }
+
+    /**
+     * 【2026-10-22 板块归属】点播板块收录范围。
+     *
+     * <p>自 2.0.222 起咪咕剧场片库已并入 {@link #isVodChannel}（与控制栏口径统一），
+     * 本方法保留为语义别名：板块分流与「点播控制栏/详情页」必须始终同一口径，
+     * 否则会出现「归在点播板块却用直播控制栏」的错位。
+     */
+    private static boolean inVodSection(Channel c) {
+        return isVodChannel(c);
+    }
+
     private static boolean isVodChannel(Channel c) {
         if (c == null) return false;
         if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(c) != null) return true;
@@ -1108,9 +1226,49 @@ public class OttHomeActivity extends AppCompatActivity {
         //   （最多 3 行）、「正在播放」取不到集数回落成组名、起播不记历史也不续播
         //   （用户报障：源8 的正在播放与 EPG 集数显示异常，源7 正常）。
         if (com.tv.live.ryb.RybUrlResolver.vodIdOf(c) != null) return true;
+        // 【2026-10-21 源2 追加 4K影视】nbm:// 与源7/源8 同为「频道即一部影片」的点播形态。
+        //   漏这一条 → 4K影视频道被当成直播频道：落到「直播」板块、左栏走直播节目单通路。
+        if (com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(c) != null) return true;
+        // 【2026-10-22 源6 咪咕】剧场/片库分组（央视大剧/热播剧集/经典韩剧/儿童动画/电影/
+        //   综艺/少儿/人文记录/春晚）=「频道即一部剧/片」，与源5/7/8/2 同口径：
+        //   归到点播板块，并用**点播控制栏**（上下集/进度条/倍速/选集），不是直播控制栏。
+        //   ⚠ 判定必须放在最后：咪咕频道是 nowtv://，不会命中上面四条源专属前缀。
+        if (isMiguTheaterChannel(c)) return true;
         // ⚠ 源5 的 vodIdOfChannelId 对非源5 频道返回 ""（不是 null）→ 必须 isEmpty 判断
         return !TextUtils.isEmpty(
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(c.getChannelId()));
+    }
+
+    /**
+     * 【2026-10-22 O1】当前是否正在播放任意点播源（源7/源8/源2/源5点播）。
+     *
+     * <p>统一点播判定口径：此前多处各自写 {@code isSource7Playing() || isRenyiboVodChannel(...)}
+     * 两源判定，漏源8/源2 → 全屏按上下键变成 {@code playRelativeChannel} 切台（跳到别的
+     * 影片）而非切集、全屏单击走直播语义（不暂停）、倍速不显示。判定与
+     * {@link #isVodChannel} 完全一致（channelId 四源前缀）。
+     */
+    private boolean isAnyVodPlaying() {
+        return isVodChannel(playingChannel);
+    }
+
+    /**
+     * 【2026-10-21 日志修复】点播频道的来源标签（仅日志用）。
+     *
+     * <p>判定口径与 {@link #isVodChannel} 一致（afhgrj: → 源7；ryb:// → 源8；
+     * nbm: → 源2(4K影视)；renyibo-vod: → 源5）。此前详情页日志硬编码「源8」，
+     * 其他点播源的详情页也打该文案，造成「源8 在活动」的误判。
+     */
+    private static String vodSourceTag(Channel c) {
+        if (c == null) return "点播";
+        if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(c) != null) return "源7";
+        if (com.tv.live.ryb.RybUrlResolver.vodIdOf(c) != null) return "源8";
+        if (com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(c) != null) return "源2(4K影视)";
+        if (!TextUtils.isEmpty(
+                com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(c.getChannelId()))) {
+            return "源5";
+        }
+        if (isMiguTheaterChannel(c)) return "源6(咪咕)";
+        return "点播";
     }
 
     // -------------------- 「我的」板块（播放记录 + 收藏） --------------------
@@ -1192,7 +1350,10 @@ public class OttHomeActivity extends AppCompatActivity {
         // 切换直播源时 AppCoreManager 会先回一次空列表（缓存已清、网络数据未回），
         // 此时保留当前分组与频道不动，等新源数据到达再整体刷新，避免分组 Tab 闪没。
         if (list.isEmpty()) {
-            if (allChannels.isEmpty()) showEmpty(getString(R.string.ott_channel_empty));
+            // 【2026-10-22 O7】applyChannels 同时承载直播/点播两个板块的频道（allChannels 混合存放，
+            //   板块分流发生在 applyFilter），空列表文案必须按当前板块取
+            if (allChannels.isEmpty()) showEmpty(getString((topSection == SECTION_VOD)
+                    ? R.string.ott_vod_empty : R.string.ott_channel_empty));
             return;
         }
 
@@ -1435,7 +1596,7 @@ public class OttHomeActivity extends AppCompatActivity {
         final boolean vodSection = (topSection == SECTION_VOD);
         for (Channel c : allChannels) {
             if (c == null) continue;
-            boolean vod = isVodChannel(c);
+            boolean vod = inVodSection(c);
             if (vodSection) {
                 if (!vod) continue;          // 点播板块只收影视片
             } else if (vod) {
@@ -1545,7 +1706,7 @@ public class OttHomeActivity extends AppCompatActivity {
         for (Channel c : allChannels) {
             if (c == null) continue;
             // 【2026-10-17 界面重构 v2】板块隔离：直播板块不显示影视片，点播板块只显示影视片
-            boolean vod = isVodChannel(c);
+            boolean vod = inVodSection(c);
             if (vodSection != vod) continue;
             if (all.equals(currentGroup)
                     || currentGroup.equals(GroupListManager.getNormalizedGroup(c))) {
@@ -1785,18 +1946,19 @@ public class OttHomeActivity extends AppCompatActivity {
         }
     };
 
-    /** 【2026-10-19】按广告时间窗自动显示/收起遮罩的轮询（1s 一次，仅在源8 播放时跑） */
+    /** 【2026-10-19】按广告时间窗自动显示/收起遮罩的轮询（1s 一次，仅在点播播放时跑） */
     private final Runnable adMaskTickRunnable = new Runnable() {
         @Override
         public void run() {
             if (topAdMask == null || playingChannel == null
-                    || com.tv.live.ryb.RybUrlResolver.vodIdOf(playingChannel) == null) {
+                    || (com.tv.live.ryb.RybUrlResolver.vodIdOf(playingChannel) == null
+                        && com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(playingChannel) == null)) {
                 stopAdMaskTick();
                 if (topAdMask != null) topAdMask.setVisibility(View.GONE);
                 return;
             }
             long[] w = com.tv.live.util.M3u8AdStripper.getAdWindows(
-                    com.tv.live.ryb.RybUrlResolver.sLastResolvedUrl);
+                    currentVodLastResolvedUrl());
             long pos = (mPlayerManager == null) ? 0 : mPlayerManager.getCurrentPosition();
             boolean show = false;
             if (w != null) {
@@ -1937,7 +2099,7 @@ public class OttHomeActivity extends AppCompatActivity {
     private Boolean mmrTopBanner(long posMs) {
         android.media.MediaMetadataRetriever mmr = null;
         try {
-            String url = com.tv.live.ryb.RybUrlResolver.sLastResolvedUrl;
+            String url = currentVodLastResolvedUrl();
             if (android.text.TextUtils.isEmpty(url)) return null;
             mmr = new android.media.MediaMetadataRetriever();
             mmr.setDataSource(url, new java.util.HashMap<String, String>());
@@ -2010,11 +2172,27 @@ public class OttHomeActivity extends AppCompatActivity {
      */
     private void prewarmBannerProbes() {
         long[] w = com.tv.live.util.M3u8AdStripper.getAdWindows(
-                com.tv.live.ryb.RybUrlResolver.sLastResolvedUrl);
+                currentVodLastResolvedUrl());
         if (w == null) return;
         for (int i = 0; i + 2 < w.length; i += 3) {
             windowHasBanner(w[i] - w[i + 2]);
         }
+    }
+
+    /**
+     * 【2026-10-21】当前点播频道最近一次解析出的真实流地址（源8 ryb / 4K影视 nbm）。
+     * 广告时间窗按该地址索引；非点播返回 null。
+     */
+    private String currentVodLastResolvedUrl() {
+        Channel ch = playingChannel;
+        if (ch == null) return null;
+        if (com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch) != null) {
+            return com.tv.live.nbmovie.NbMovieUrlResolver.sLastResolvedUrl;
+        }
+        if (com.tv.live.ryb.RybUrlResolver.vodIdOf(ch) != null) {
+            return com.tv.live.ryb.RybUrlResolver.sLastResolvedUrl;
+        }
+        return null;
     }
 
     private void startAdMaskTick() {
@@ -2034,9 +2212,10 @@ public class OttHomeActivity extends AppCompatActivity {
         }
         if (topAdMask == null || playerView == null) return;
         mainHandler.removeCallbacks(hideTopAdMaskRunnable);
-        boolean isRyb = playingChannel != null
-                && com.tv.live.ryb.RybUrlResolver.vodIdOf(playingChannel) != null;
-        if (!isRyb) {
+        boolean isVodPlaying = playingChannel != null
+                && (com.tv.live.ryb.RybUrlResolver.vodIdOf(playingChannel) != null
+                    || com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(playingChannel) != null);
+        if (!isVodPlaying) {
             stopAdMaskTick();
             topAdMask.setVisibility(View.GONE);
             return;
@@ -2117,8 +2296,10 @@ public class OttHomeActivity extends AppCompatActivity {
         final String rnVodId = com.tv.live.renyibo.RenYiBoVodSourceLoader
                 .vodIdOfChannelId(channel.getChannelId());                                    // 源5
         final String rybSlug = com.tv.live.ryb.RybUrlResolver.vodIdOf(channel);                // 源8
+        final String nbmVodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(channel);        // 源2追加4K影视
         final String histVodId = (vodId != null) ? vodId
-                : (!TextUtils.isEmpty(rnVodId) ? rnVodId : rybSlug);                           // 写历史用的 id
+                : (!TextUtils.isEmpty(rnVodId) ? rnVodId
+                : (!TextUtils.isEmpty(nbmVodId) ? nbmVodId : rybSlug));                       // 写历史用的 id
         final int resumeOrdinal = vodChannel ? appConfig.getOttHistoryOrdinal(channel.getName()) : 0;
         final int resumeIdx = (resumeOrdinal > 0) ? (resumeOrdinal - 1) : -1;
 
@@ -2330,6 +2511,14 @@ public class OttHomeActivity extends AppCompatActivity {
      */
     private void openVodDetail(Channel ch, int position, boolean instant) {
         if (ch == null || isFinishing()) return;
+        // 【2026-10-22 源6 咪咕】咪咕剧场没有详情数据（无简介、无集数，只有按天回看）：
+        //   点卡片直接起播，跳过详情页。放在本入口统一拦，遥控点击 / 触摸点击 / 长按全覆盖。
+        if (isMiguTheaterChannel(ch)) {
+            LogBridge.i(TAG, "【详情页】咪咕剧场频道跳过详情页 → 直接播放：" + ch.getName());
+            playChannel(ch);
+            enterFullscreenImmediately();
+            return;
+        }
         if (detailPanel != null && detailPanel.isShowing()) return;
         FrameLayout root = findViewById(R.id.ott_root);
         if (root == null) return;
@@ -2340,8 +2529,19 @@ public class OttHomeActivity extends AppCompatActivity {
         //   用户在详情页读简介/挑线路时集数已抓好，按下播放即刻有列表（此前要等按下播放才联网）。
         com.tv.live.ryb.RybUrlResolver.setForegroundSlug(
                 com.tv.live.ryb.RybUrlResolver.vodIdOf(ch));
+        // 【2026-10-21】4K影视（nbmovie）同理
+        com.tv.live.nbmovie.NbMovieUrlResolver.setForegroundSlug(
+                com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch));
+        // 【2026-10-22 L1-03】源7/源5 同理：标记「用户正在查看」，EPG 预取闸门放行
+        com.tv.live.afhgrj.AfhgrjUrlResolver.setForegroundVodId(
+                com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch));
+        com.tv.live.renyibo.RenYiBoVodSourceLoader.setForegroundVodId(
+                com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(
+                        ch.getChannelId()));
+        // 【2026-10-21 日志修复】源标签按频道实际来源动态标注：此前硬编码「源8」，
+        //   源5/源7/源2 的详情页也打这条，排查时误以为源8 在活动（实测零请求）。
         LogBridge.i(TAG, "【详情页】打开：" + ch.getName()
-                + "（源8 集数预取已放行）");
+                + "（" + vodSourceTag(ch) + " 集数预取已放行）");
         // 该片自己的续播集数（不是「当前正在播的频道」的集数）
         int epIdx = historyEpisodeIndex(ch);
         detailPanel = new VodDetailPanel(this, root, ch, epIdx, new VodDetailPanel.Host() {
@@ -2705,7 +2905,9 @@ public class OttHomeActivity extends AppCompatActivity {
         //   只依赖 ryb:// 协议判定，源1~7 其它频道行为零变化。
         //   漏这条分支时 ryb 的选集被当成「直播节目单」处理（filterToday/sortByTime + 最多 3 行）
         //   → 用户看到「只显示第01~03集」（用户报障：源8 EPG 集数显示异常）。
-        if (com.tv.live.ryb.RybUrlResolver.vodIdOf(ch) != null) {
+        // 【2026-10-21】4K影视（nbm://）同形态，一并走该面板（数据源/高亮口径已按源分派）。
+        if (com.tv.live.ryb.RybUrlResolver.vodIdOf(ch) != null
+                || com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch) != null) {
             refreshRybEpgPanel(ch);
             return;
         }
@@ -3011,6 +3213,8 @@ public class OttHomeActivity extends AppCompatActivity {
     private SeekHintBar seekHint;
     /** 直播：频道列表抽屉 / 切台信息条 */
     private ChannelListPanel channelListPanel;
+    /** 【2026-10-22 源6 咪咕】回看面板（今天 + 过去 7 天，按节目取回看地址） */
+    private MiguCatchUpPanel miguCatchUpPanel;
     /** 抽屉刚打开的时间戳：抢焦点需要一帧，期间不判"焦点离开" */
     private long panelOpenedAtMs;
     /**
@@ -3058,8 +3262,10 @@ public class OttHomeActivity extends AppCompatActivity {
 
     /**
      * 【2026-10-11 源7 / 2026-10-13 扩展源5】全屏下唤起播放器控制栏（可拖动进度、±15s、继续/暂停）。
-     * 非全屏 / 非点播频道（源7 afhgrj、源5 renyibo-vod）/ 播放器未就绪时直接返回，
-     * 其它源因此完全不受影响。
+     *
+     * <p>【2026-10-22 P2-09】注释修正：方法末行恒 {@code return true}——现行口径为
+     * <b>全源全屏都允许呼出控制栏</b>（源4 影视/源6 咪咕等直播频道也可用暂停/信息），
+     * 不再是早期「仅源7/源5 点播、其它源完全不受影响」。
      */
     private void showSource7Controller() {
         if (!fullscreen || !isVodControllerEligible()) return;
@@ -3068,9 +3274,11 @@ public class OttHomeActivity extends AppCompatActivity {
         if (channelInfoBar != null) channelInfoBar.hide();
         mainHandler.removeCallbacks(hideOttControllerRunnable);
         // 点播=追剧形态（上/下集+进度条+倍速），直播=简化形态（仅播放/清晰度/比例）
-        boolean vod = isSource7Playing() || isRenyiboVodChannel(playingChannel)
-                || com.tv.live.ryb.RybUrlResolver.vodIdOf(playingChannel) != null;
+        // 【2026-10-22 O1】统一四源口径（原两源判定漏源8/源2）
+        boolean vod = isAnyVodPlaying();
         vodBar.setVodMode(vod);
+        // 【2026-10-22 源6 咪咕】咪咕剧场：无集数、只有按天回看 → 控制栏走咪咕分支
+        vodBar.setMiguMode(vod && isMiguTheaterChannel(playingChannel));
         vodBar.show();
         ottControllerShowing = true;
         mainHandler.postDelayed(hideOttControllerRunnable, CONTROLLER_HIDE_MS);
@@ -3082,7 +3290,8 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【v1.6】抽屉打开期间不允许自动收起控制栏：否则 5s 到点会把抽屉一起关掉（实测抽屉自己消失）
         // 【2026-10-17】直播的「频道列表」抽屉也必须算进来 —— 之前只判 capsule/episode，
         // 导致直播里打开频道列表后 5 秒被自动收起，紧接着焦点被系统丢给控制栏「‹ 上一频道」。
-        if (capsulePanel != null || episodePanel != null || channelListPanel != null) {
+        if (capsulePanel != null || episodePanel != null || channelListPanel != null
+                || miguCatchUpPanel != null) {
             LogBridge.i(TAG, "【OTT·控制栏】抽屉打开中，忽略自动收起");
             mainHandler.removeCallbacks(hideOttControllerRunnable);
             return;
@@ -3118,7 +3327,6 @@ public class OttHomeActivity extends AppCompatActivity {
                     float s = (mPlayerManager == null) ? 1f : mPlayerManager.getPlaybackSpeed();
                     return String.format(java.util.Locale.US, "%.1f×", s);
                 }
-                @Override public String barAspectLabel() { return ASPECT_LABELS[mAspectIdx]; }
                 @Override public String barQualityLabel() {
                     // 【2026-10-17 按源清晰度】胶囊文字跟当前源走（源3 自动 / 源7 1080P）
                     return qualityChipLabel();
@@ -3144,6 +3352,8 @@ public class OttHomeActivity extends AppCompatActivity {
                 @Override public void barShowQuality() { showQualityPanel(); }
                 @Override public void barShowLine() { showLinePanel(); }
                 @Override public void barShowEpisodes() { showEpisodePanel(); }
+                /** 【2026-10-22 源6 咪咕】咪咕没有集数 → 控制栏「回看」胶囊打开 8 天回看面板 */
+                @Override public void barShowCatchUp() { showMiguCatchUpPanel(); }
                 @Override public void barShowChannelList() { showChannelListPanel(); }
                 @Override public void barShowEpg() { showEpgPanel(); }
                 /** 【2026-10-18 用户口径】控制栏「设置」胶囊 → 两级「播放设置」弹窗
@@ -3179,15 +3389,17 @@ public class OttHomeActivity extends AppCompatActivity {
             channelInfoBar = new ChannelInfoBar(this);
             channelInfoBar.attachTo(root);
             // EPG 异步就绪后刷新信息条（首次换台时常还没解析完，否则一直显示"直播中"）
+            // 【2026-10-22 O4】监听器提为字段（见声明处）：onDestroy 成对注销，防泄漏
             try {
+                vodBarEpgDataReadyListener = () -> {
+                    if (channelInfoBar != null
+                            && channelInfoBar.getVisibility() == View.VISIBLE
+                            && playingChannel != null) {
+                        showChannelInfo(playingChannel);
+                    }
+                };
                 EpgManager.getInstance(getApplicationContext())
-                        .registerEpgDataReadyListener(() -> {
-                            if (channelInfoBar != null
-                                    && channelInfoBar.getVisibility() == View.VISIBLE
-                                    && playingChannel != null) {
-                                showChannelInfo(playingChannel);
-                            }
-                        });
+                        .registerEpgDataReadyListener(vodBarEpgDataReadyListener);
             } catch (Throwable ignored) {
             }
             LogBridge.i(TAG, "【OTT·控制栏】已初始化");
@@ -3210,9 +3422,9 @@ public class OttHomeActivity extends AppCompatActivity {
      * 直播走与全屏上/下键完全一致的 {@link #playRelativeChannel(int)}（当前分组列表内翻台）。
      */
     private void stepChannelOrEpisode(int delta) {
-        // 【2026-10-19】源8（renyibo）是点播追剧形态，上一集/下一集走切集而不是切台
-        boolean vod = isSource7Playing() || isRenyiboVodChannel(playingChannel)
-                || com.tv.live.ryb.RybUrlResolver.vodIdOf(playingChannel) != null;
+        // 【2026-10-22 O1】统一四源口径：源7/源8/源2/源5 均为点播追剧形态，
+        //   上一集/下一集走切集而不是切台（原两源判定漏源8/源2 → 控制栏按确认键跳片）
+        boolean vod = isAnyVodPlaying();
         if (vod) {
             switchVodEpisode(delta);
         } else {
@@ -3462,7 +3674,10 @@ public class OttHomeActivity extends AppCompatActivity {
         while (!capsuleStack.isEmpty()) {
             capsuleStack.peek().close();
         }
-        if (capsulePanel == null && episodePanel == null && channelListPanel == null) return;
+        // 【2026-10-22 咪咕回看】必须把 miguCatchUpPanel 算进来：否则只开回看弹窗时
+        //   这里提前 return → 返回键"关闭抽屉"什么都没关（用户实测 bug）。
+        if (capsulePanel == null && episodePanel == null && channelListPanel == null
+                && miguCatchUpPanel == null) return;
         lastFocusInPanel = null;
         // 主动关闭（返回键 / 选中提交 / 换面板）：期间焦点本来就该回控制栏，
         // 先让焦点看门狗闭嘴，否则它会把焦点抢回正在关闭的抽屉 → 返回键失效。
@@ -3480,6 +3695,10 @@ public class OttHomeActivity extends AppCompatActivity {
         if (channelListPanel != null) {
             channelListPanel.close();
             channelListPanel = null;
+        }
+        if (miguCatchUpPanel != null) {
+            miguCatchUpPanel.dismiss();
+            miguCatchUpPanel = null;
         }
     }
 
@@ -3550,6 +3769,9 @@ public class OttHomeActivity extends AppCompatActivity {
         if (afhVodId != null) return true;
         if (!TextUtils.isEmpty(
                 com.tv.live.ryb.RybUrlResolver.vodIdOf(ch))) return true;
+        // 【2026-10-21】4K影视（nbmovie）点播形态
+        if (!TextUtils.isEmpty(
+                com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch))) return true;
         return !TextUtils.isEmpty(
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId()));
     }
@@ -3824,7 +4046,10 @@ public class OttHomeActivity extends AppCompatActivity {
         final String afhVodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
         final String rbVodId =
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId());
-        final boolean vodCtx = (afhVodId != null) || !TextUtils.isEmpty(rbVodId);
+        // 【2026-10-21】4K影视（nbmovie）属点播上下文
+        final String nbmVodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch);
+        final boolean vodCtx = (afhVodId != null) || !TextUtils.isEmpty(rbVodId)
+                || !TextUtils.isEmpty(nbmVodId);
 
         java.util.List<LineOption> opts = new java.util.ArrayList<>();
 
@@ -3898,6 +4123,37 @@ public class OttHomeActivity extends AppCompatActivity {
                             () -> {
                                 com.tv.live.ryb.RybUrlResolver.setSelectedLine(rybSlug, idx);
                                 LogBridge.i(TAG, "【线路】源8 切到第" + (idx + 1) + "条 → 重播");
+                                if (playingChannel != null) playChannel(playingChannel, true);
+                                enterFullscreenImmediately();
+                            }));
+                }
+            }
+        }
+
+        // ①.4 【2026-10-21】4K影视（nbmovie）：线路 = 详情接口 play_urls 的条目
+        if (!TextUtils.isEmpty(nbmVodId)) {
+            final java.util.List<String> nbmLines =
+                    com.tv.live.nbmovie.NbMovieUrlResolver.lineNames(nbmVodId);
+            if (nbmLines.isEmpty()) {
+                Toast.makeText(this, "线路解析中，请稍后再试", Toast.LENGTH_SHORT).show();
+                // 后台预热一次，完成后重新弹面板（与源8 同构）
+                new Thread(() -> {
+                    com.tv.live.nbmovie.NbMovieUrlResolver.fetchEpisodes(nbmVodId);
+                    mainHandler.postDelayed(() -> {
+                        if (!isFinishing() && playingChannel != null) showLinePanel();
+                    }, 250);
+                }, "Nbm-LineWarm").start();
+            } else {
+                final int curLine = com.tv.live.nbmovie.NbMovieUrlResolver.getSelectedLine(nbmVodId);
+                for (int i = 0; i < nbmLines.size(); i++) {
+                    final int idx = i;
+                    boolean sel = (i == curLine);
+                    opts.add(new LineOption(
+                            CapsuleChoicePanel.Item.line(nbmLines.get(i), "",
+                                    sel ? "当前" : "可用", sel, false, true),
+                            () -> {
+                                com.tv.live.nbmovie.NbMovieUrlResolver.setSelectedLine(nbmVodId, idx);
+                                LogBridge.i(TAG, "【线路】4K影视 切到第" + (idx + 1) + "条 → 重播");
                                 if (playingChannel != null) playChannel(playingChannel, true);
                                 enterFullscreenImmediately();
                             }));
@@ -4047,6 +4303,8 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【2026-10-19】源8（renyibo）必须放在其它判定之前：其频道 id 是 ryb:<slug>、
         //   地址是 ryb://<slug>，不判定会一路落到最后的 return 1（控制栏显示「源1」）。
         if (id.startsWith("ryb:") || url.startsWith("ryb://")) return 8;
+        // 【2026-10-21】4K影视（nbmovie）挂在源2 出口：id 前缀 nbm:、地址 nbm://
+        if (id.startsWith("nbm:") || url.startsWith("nbm://")) return 2;
         if (id.startsWith("afhgrj:") || url.startsWith("afhgrj://")) return 7;
         if (id.startsWith("renyibo-vod:") || id.startsWith("renyibo:")
                 || url.startsWith("renyibo-vod://") || url.startsWith("renyibo://")) return 5;
@@ -4470,6 +4728,12 @@ public class OttHomeActivity extends AppCompatActivity {
             int ep = com.tv.live.ryb.RybUrlResolver.getCurrentEpisode(rybSlug);
             return ep < 0 ? 0 : ep;
         }
+        // 【2026-10-21】4K影视（nbmovie）：同源8，以解析器记录的真实集下标为准
+        String nbmVodId = ch == null ? null : com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch);
+        if (!TextUtils.isEmpty(nbmVodId)) {
+            int ep = com.tv.live.nbmovie.NbMovieUrlResolver.getCurrentEpisode(nbmVodId);
+            return ep < 0 ? 0 : ep;
+        }
         return mCurrentAfhgrjEpisodeIdx;
     }
 
@@ -4533,9 +4797,9 @@ public class OttHomeActivity extends AppCompatActivity {
         source.addAll(huyaLine2Channels);
         for (Channel c : source) {
             if (c == null) continue;
-            if (!TextUtils.isEmpty(
-                    com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(c.getChannelId()))) continue;
-            if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(c) != null) continue;
+            // 【2026-10-22 O1/O2】点播频道不进直播抽屉：统一走 isVodChannel 四源口径
+            //   （原逐源 continue 漏源8 → 源8 影视频道混入直播频道列表，数据错乱）
+            if (isVodChannel(c)) continue;
             // 【2026-10-17 修复「源1/源2 频道列表里没有分组频道」】
             // ⚠ 源1/源2 的 channelId 是**空串**（不是 null）。原写法 `getChannelId() != null`
             //   判断为真 → key 全是 ""，125 台全部被折叠成 1 条（实测日志「全部 共 1 台」）。
@@ -4560,7 +4824,8 @@ public class OttHomeActivity extends AppCompatActivity {
             java.util.List<Channel.EpgItem> list = epgOf(ch);
             if (list == null) return null;
             for (Channel.EpgItem it : list) {
-                if (it.isPlaying) return it.title;
+                // 【2026-10-22 O8】EPG 列表历史上出现过 null 元素（多源合并/解析兜底路径），判空防 NPE
+                if (it != null && it.isPlaying) return it.title;
             }
             return null;
         });
@@ -4583,6 +4848,97 @@ public class OttHomeActivity extends AppCompatActivity {
     }
 
     /** 节目单抽屉：复用胶囊抽屉（两行信息行 = 节目名 + 时间 + 正在播） */
+    /**
+     * 【2026-10-22 源6 咪咕·按天回看】打开咪咕回看面板（今天 + 过去 7 天）。
+     *
+     * <p>背景：咪咕剧场频道是「频道即一部剧/片」的轮播，<b>没有集数概念</b>，
+     * 只能按「日期 + 节目时段」回看（program_v3.php 的多天节目单，每条带 pid）。
+     * 控制栏在该形态下把「选集」换成「回看」（见 VodControlBar.setMiguMode）。
+     *
+     * <p>取址：{@code CarouselApi.getCarouselVideo(pid)}（单次请求、不重试，与项目红线一致）。
+     */
+    private void showMiguCatchUpPanel() {
+        final Channel ch = playingChannel;
+        if (ch == null) {
+            Toast.makeText(this, "请先选择咪咕剧场频道", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (!isMiguTheaterChannel(ch)) {
+            // 兜底：非咪咕频道误入 → 退回普通选集
+            showEpisodePanel();
+            return;
+        }
+        if (miguCatchUpPanel != null && miguCatchUpPanel.isShowing()) return;
+        FrameLayout root = findViewById(R.id.ott_root);
+        if (root == null) return;
+        closeControlPanels();
+        mainHandler.removeCallbacks(hideOttControllerRunnable);
+        final View trigger = getCurrentFocus();
+
+        MiguCatchUpPanel p = new MiguCatchUpPanel(this, root, ch, new MiguCatchUpPanel.Host() {
+            @Override
+            public void onCatchUpPick(Channel ch2, String title, String pid, long startSec, long endSec,
+                                      String dateYmd, boolean playing) {
+                if (playing) {
+                    // 该档正在播 → 直接回直播（不是"回看"）
+                    Toast.makeText(OttHomeActivity.this, "该节目正在直播", Toast.LENGTH_SHORT).show();
+                    if (miguCatchUpPanel != null) miguCatchUpPanel.dismiss();
+                    playChannel(ch);
+                    enterFullscreenImmediately();
+                    return;
+                }
+                if (TextUtils.isEmpty(pid)) {
+                    Toast.makeText(OttHomeActivity.this, "该节目暂无回看源", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Toast.makeText(OttHomeActivity.this, "正在获取回看：" + title, Toast.LENGTH_SHORT).show();
+                if (miguCatchUpPanel != null) miguCatchUpPanel.dismiss();
+                final String pidF = pid;
+                com.tv.live.util.AppExecutors.io(() -> {
+                    String url = null;
+                    try {
+                        com.tv.live.migu.source.CarouselApi.Resolution r =
+                                com.tv.live.migu.source.CarouselApi.getCarouselVideo(pidF, "回看·" + title);
+                        if (r != null && !TextUtils.isEmpty(r.url)) {
+                            url = com.tv.live.migu.source.CarouselApi
+                                    .pickResolvableCandidate(r.candidates);
+                            if (TextUtils.isEmpty(url)) url = r.url;
+                        }
+                    } catch (Throwable t) {
+                        LogBridge.w(TAG, "【咪咕回看】取地址失败: " + t.getMessage());
+                    }
+                    final String playUrl = url;
+                    mainHandler.post(() -> {
+                        if (isFinishing()) return;
+                        if (TextUtils.isEmpty(playUrl)) {
+                            Toast.makeText(OttHomeActivity.this, "该节目暂无回看源",
+                                    Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        LogBridge.i(TAG, "【咪咕回看】播放 " + title + "（" + dateYmd + "）→ " + playUrl);
+                        if (mPlayerManager != null) {
+                            mPlayerManager.playUrl(playUrl, ch.getName() + " 回看", ch);
+                        }
+                        enterFullscreenImmediately();
+                    });
+                });
+            }
+
+            @Override
+            public void onCatchUpClosed() {
+                miguCatchUpPanel = null;
+                if (vodBar != null) vodBar.setAlpha(1f);
+                restoreFocusTo(trigger);
+                scheduleControllerAutoHide();
+            }
+        });
+        miguCatchUpPanel = p;
+        lastFocusInPanel = null;
+        panelOpenedAtMs = System.currentTimeMillis();
+        p.show();
+        if (vodBar != null) vodBar.setAlpha(0.6f);
+    }
+
     private void showEpgPanel() {
         Channel ch = playingChannel;
         if (ch == null) return;
@@ -4843,7 +5199,8 @@ public class OttHomeActivity extends AppCompatActivity {
         sb.append(q);
         if (sid > 0) sb.append(" · 线路").append(sid);
         // 直播没有倍速概念，不显示 1.0×（点播才显示）
-        boolean vodCtx = isSource7Playing() || isRenyiboVodChannel(playingChannel);
+        // 【2026-10-22 O1】统一四源口径（原两源判定漏源8/源2 → 点播不显示倍速）
+        boolean vodCtx = isAnyVodPlaying();
         if (vodCtx && mPlayerManager != null) {
             sb.append(String.format(java.util.Locale.US, " · %.1f×", mPlayerManager.getPlaybackSpeed()));
         }
@@ -5186,6 +5543,28 @@ public class OttHomeActivity extends AppCompatActivity {
                 renderHistoryPanel();
             }
             LogBridge.i(TAG, "【OTT·源8·自定义】切集播放：" + item.title + " → " + item.customPlayUrl);
+            mPlayerManager.playUrl(item.customPlayUrl, ch.getName(), ch);
+            refreshEpgPanel(ch);
+            refreshNowPlayingProgram();
+            focusAfhgrjEpgRow(idx);
+            fromEpgFullscreen = true;
+            lastEpgFocusIndex = idx;
+            setFullscreen(true);
+            Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // 【2026-10-21 源2】4K影视（nbmovie）选集项：同构 ryb，「当前集下标」置位到
+        //   NbMovieUrlResolver，保证面板高亮与「正在播放 · 第N集」同步。
+        String nbmVodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch);
+        if (!TextUtils.isEmpty(nbmVodId)) {
+            int idx = indexOfAfhgrjEpisode(item);
+            if (idx >= 0) {
+                com.tv.live.nbmovie.NbMovieUrlResolver.setCurrentEpisode(nbmVodId, idx);
+                appConfig.addOttHistory(ch.getName(), nbmVodId, idx + 1);
+                renderHistoryPanel();
+            }
+            LogBridge.i(TAG, "【OTT·源2·自定义】切集播放：" + item.title + " → " + item.customPlayUrl);
             mPlayerManager.playUrl(item.customPlayUrl, ch.getName(), ch);
             refreshEpgPanel(ch);
             refreshNowPlayingProgram();
@@ -6130,7 +6509,8 @@ public class OttHomeActivity extends AppCompatActivity {
                 if (keyCode == KeyEvent.KEYCODE_BACK) {
                     // 【2026-10-17】频道列表也必须算进来：焦点已锁定在抽屉内，
                     // 不会再靠"焦点跑掉自动关闭"兜底，返回键是唯一的出口。
-                    if (capsulePanel != null || episodePanel != null || channelListPanel != null) {
+                    if (capsulePanel != null || episodePanel != null || channelListPanel != null
+                            || miguCatchUpPanel != null) {
                         closeControlPanels();
                         LogBridge.i(TAG, "【按键】返回 → 关闭抽屉");
                     } else {
@@ -6154,7 +6534,9 @@ public class OttHomeActivity extends AppCompatActivity {
                 case KeyEvent.KEYCODE_DPAD_UP:
                 case KeyEvent.KEYCODE_CHANNEL_UP:
                     // 【2026-10-17】点播全屏上键 = 上一集；直播仍为上一个频道
-                    if (isSource7Playing() || isRenyiboVodChannel(playingChannel)) {
+                    // 【2026-10-22 O1】统一四源口径：原两源判定漏源8/源2 →
+                    //   全屏按上下键变成 playRelativeChannel 切台（跳到别的影片）
+                    if (isAnyVodPlaying()) {
                         switchVodEpisode(-1);
                         return true;
                     }
@@ -6162,7 +6544,7 @@ public class OttHomeActivity extends AppCompatActivity {
                     return true;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
                 case KeyEvent.KEYCODE_CHANNEL_DOWN:
-                    if (isSource7Playing() || isRenyiboVodChannel(playingChannel)) {
+                    if (isAnyVodPlaying()) {
                         switchVodEpisode(1);
                         return true;
                     }
@@ -6219,7 +6601,8 @@ public class OttHomeActivity extends AppCompatActivity {
             return;
         }
         // 【v1.6】返回键分层（与主流 TV 端一致）：先关抽屉 → 再收控制栏 → 最后退全屏
-        if (capsulePanel != null || episodePanel != null || channelListPanel != null) {
+        if (capsulePanel != null || episodePanel != null || channelListPanel != null
+                || miguCatchUpPanel != null) {
             closeControlPanels();
             return;
         }
@@ -6267,6 +6650,17 @@ public class OttHomeActivity extends AppCompatActivity {
                     .unregisterEpgDataReadyListener(epgDataReadyListener);
         } catch (Exception ignored) {
         }
+        // 【2026-10-22 O4】控制栏信息条的 EPG 监听同样注销（原匿名 lambda 只注册不注销）
+        try {
+            EpgManager.getInstance(getApplicationContext())
+                    .unregisterEpgDataReadyListener(vodBarEpgDataReadyListener);
+        } catch (Exception ignored) {
+        }
+        // 【2026-10-22 O5】详情页仍在显示 → 强制 hide：其 EPG 监听只在 hide() 里注销，
+        //   Activity 销毁时若不走 hide，监听器连同面板一起泄漏
+        if (detailPanel != null && detailPanel.isShowing()) {
+            detailPanel.hide();
+        }
         if (appCoreManager != null) {
             appCoreManager.release();
             appCoreManager = null;
@@ -6282,6 +6676,12 @@ public class OttHomeActivity extends AppCompatActivity {
             }
             if (mPlayerManager.getOnRenyiboEpisodeListener() == renyiboEpisodeListener) {
                 mPlayerManager.setOnRenyiboEpisodeListener(null);
+            }
+            if (mPlayerManager.getOnRybEpisodeListener() == rybEpisodeListener) {
+                mPlayerManager.setOnRybEpisodeListener(null);
+            }
+            if (mPlayerManager.getOnNbMovieEpisodeListener() == nbmEpisodeListener) {
+                mPlayerManager.setOnNbMovieEpisodeListener(null);
             }
             mPlayerManager.setOnPlayerViewRecreatedListener(null);
             if (isFinishing() && !switchingToLive) {
@@ -6348,9 +6748,11 @@ public class OttHomeActivity extends AppCompatActivity {
             //     长条台标撑到整宽（占卡 60-70%），电视上看「图片太大」。
             // 【2026-10-19 源8 renyibo】竖版海报（270×382 实测），与源7/源5点播同形态 → 满铺。
             //   漏在这里会走 else 分支：FIT_CENTER + 固定 64×36dp 小块，电视上看「图片太小」。
+            // 【2026-10-21 源2 4K影视 nbmovie】同为竖版海报 → centerCrop 满铺。
             final boolean posterStyle = channel.isTogetherWatch() || channel.isHuyaSdkTogetherWatch()
                     || isAfhgrjChannel(channel) || isRenyiboVodChannel(channel)
-                    || com.tv.live.ryb.RybUrlResolver.vodIdOf(channel) != null;
+                    || com.tv.live.ryb.RybUrlResolver.vodIdOf(channel) != null
+                    || com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(channel) != null;
             if (posterStyle) {
                 holder.logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 holder.logo.setLayoutParams(new FrameLayout.LayoutParams(

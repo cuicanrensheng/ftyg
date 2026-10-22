@@ -12,6 +12,7 @@ import android.os.Looper;
 import android.text.TextUtils;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
@@ -47,12 +48,41 @@ public class WebServerManager {
     private int port;
     private ServerSocket serverSocket;
     private Handler handler = new Handler(Looper.getMainLooper());
-    private boolean isRunning = false;
+    // 【2026-10-22 P2-05】volatile：accept 线程写、请求线程/stop() 读，无可见性保证时
+    //   停服后 accept 循环可能仍在跑（旧值缓存）
+    private volatile boolean isRunning = false;
+
+    /**
+     * 【2026-10-22 I1-12】代理接口 token：每次实例化随机生成。
+     * /m3u8 与 /ts 原为无鉴权开放代理——同网段任何设备可以电视为跳板拉取任意 URL
+     * （含内网地址），并消耗设备带宽/触发其对第三方站点的请求。现加 token 校验：
+     * 播放器 URL 生成端（{@link #getAdStripProxyUrl} / {@link #rewriteSegmentUrls}）
+     * 自动拼 token，网页端无 token 一律 403。不绑 127.0.0.1 是为了保住「网页设置」
+     * 的 LAN 功能（strings.xml:34 明示 http://设备IP:10481）——token 是两者兼顾的折中。
+     */
+    private final String proxyToken = java.util.UUID.randomUUID().toString();
+
+    /** 代理接口 token 校验（/m3u8、/ts 共用） */
+    private boolean checkProxyToken(String token) {
+        return proxyToken != null && proxyToken.equals(token);
+    }
 
     private ExecutorService acceptExecutor;
     private ExecutorService requestExecutor;
 
     private static WebServerManager runningInstance;
+
+    /**
+     * 【2026-10-22 I1-05】单实例启动守卫。
+     *
+     * <p>runningInstance 在 accept 线程 bind 成功后异步赋值，仅靠它去重存在竞态窗口：
+     * 预启动实例 bind 途中，第二个实例的 getRunningInstance() 仍为 null → 也去 bind
+     * 10481 → findAvailablePort 恰好探测到端口空闲 → 漂移绑 10482 并篡夺
+     * runningInstance（实测双代理并存、端口漂移、孤儿实例）。
+     * 以静态锁 + 「已启动」标记收敛：任何入口重复 start() 直接跳过。
+     */
+    private static final Object sStartLock = new Object();
+    private static boolean sStartingOrRunning = false;
 
     private long lastSubmitTime = 0;
 
@@ -69,6 +99,18 @@ public class WebServerManager {
     private static final long M3U8_LIVE_CACHE_TTL_MS = 1200L;
     private static final String TAG_HLS_ENDLIST = "#EXT-X-ENDLIST";
     private static final long STRIP_TIMEOUT_MS = 500L;
+
+    // ========== 分片代理缓存（2026-10-21 seek 快速恢复：SEEK 中断后代理继续转发并缓存，下次命中秒回） ==========
+    /** 内存上限 32MB（电视盒子内存有限，按字节 LRU 淘汰，防止缓存膨胀） */
+    private static final int SEG_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+    /** 点播分片是静态文件，10 分钟 TTL 足够覆盖 seek 回放窗口 */
+    private static final long SEG_CACHE_TTL_MS = 10 * 60 * 1000L;
+    /** 分片条目数上限（防御性保护，配合字节上限双保险） */
+    private static final int SEG_CACHE_MAX_ENTRIES = 128;
+    /** 分片转发上游（CDN）的读取超时 */
+    private static final long SEG_FETCH_TIMEOUT_MS = 8000L;
+    /** 并发去重等待上限 */
+    private static final long SEG_DEDUP_WAIT_MS = 5000L;
 
     // 内存LRU缓存：key=原始URL, value=[剥离后内容, 时间戳]
     private final LinkedHashMap<String, Object[]> m3u8Cache = new LinkedHashMap<String, Object[]>(16, 0.75f, true) {
@@ -87,6 +129,21 @@ public class WebServerManager {
     // 【2026-10-16】广告剥离请求去重：相同URL的并发请求共享同一个处理结果，避免重复下载+剥离
     private final java.util.concurrent.ConcurrentHashMap<String, Future<String>> pendingStripRequests = new java.util.concurrent.ConcurrentHashMap<>();
 
+    // ========== 分片代理（2026-10-21 seek 快速恢复） ==========
+    // 分片内存 LRU 缓存：key=分片URL+"|"+Range头, value=[byte[], 时间戳, 字节数, 响应码]
+    private final LinkedHashMap<String, Object[]> segCache = new LinkedHashMap<String, Object[]>(32, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Object[]> eldest) {
+            return size() > SEG_CACHE_MAX_ENTRIES;
+        }
+    };
+    private long segCacheBytes = 0;
+    // 分片请求去重：相同分片并发请求共享结果。SEEK 打断播放器侧后，
+    // 代理线程继续转发完成并回填缓存 = 天然的"预取"（下次 seek 回该位置直接命中）
+    private final java.util.concurrent.ConcurrentHashMap<String, Future<SegResult>> pendingTsRequests = new java.util.concurrent.ConcurrentHashMap<>();
+    // 分片转发独立线程池：不挤占剥离线程（剥离是起播关键路径）
+    private ExecutorService segExecutor;
+
     public WebServerManager(Context context, int port) {
         this.context = context.getApplicationContext();
         this.port = port;
@@ -94,10 +151,18 @@ public class WebServerManager {
 
     public void start() {
         if (isRunning) return;
+        synchronized (sStartLock) {
+            if (sStartingOrRunning) {
+                LogBridge.i("WebServer", "已有代理实例启动中/运行中，跳过重复启动");
+                return;
+            }
+            sStartingOrRunning = true;
+        }
 
         int actualPort = findAvailablePort(port);
         if (actualPort == -1) {
             isRunning = false;
+            synchronized (sStartLock) { sStartingOrRunning = false; }
             return;
         }
         this.port = actualPort;
@@ -115,6 +180,11 @@ public class WebServerManager {
         });
         stripExecutor = Executors.newFixedThreadPool(2, r -> {
             Thread t = new Thread(r, "AdStrip-Worker");
+            t.setDaemon(true);
+            return t;
+        });
+        segExecutor = Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "AdStrip-Seg");
             t.setDaemon(true);
             return t;
         });
@@ -141,11 +211,15 @@ public class WebServerManager {
 
                 isRunning = false;
                 runningInstance = null;
+                // 【2026-10-22 I1-05】accept 循环退出（socket 关闭）同样复位守卫
+                synchronized (sStartLock) { sStartingOrRunning = false; }
 
             } catch (Exception e) {
                 e.printStackTrace();
                 isRunning = false;
                 runningInstance = null;
+                // 【2026-10-22 I1-05】bind 失败需复位守卫，否则后续启动全被拒
+                synchronized (sStartLock) { sStartingOrRunning = false; }
             }
         });
     }
@@ -158,10 +232,14 @@ public class WebServerManager {
                 if (runningInstance == this) {
                     runningInstance = null;
                 }
+                // 【2026-10-22 I1-05】显式停止后复位守卫，允许后续重新启动
+                synchronized (sStartLock) { sStartingOrRunning = false; }
             }
             handler.removeCallbacksAndMessages(null);
             if (acceptExecutor != null) acceptExecutor.shutdownNow();
             if (requestExecutor != null) requestExecutor.shutdownNow();
+            if (stripExecutor != null) stripExecutor.shutdownNow();
+            if (segExecutor != null) segExecutor.shutdownNow();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -262,6 +340,7 @@ public class WebServerManager {
                 // 广告剥离代理接口：/m3u8?url=原始m3u8地址
                 String targetUrl = "";
                 String channelName = "";
+                String token = "";
                 if (path.contains("?")) {
                     String query = path.substring(path.indexOf("?") + 1);
                     for (String pair : query.split("&")) {
@@ -269,11 +348,19 @@ public class WebServerManager {
                             targetUrl = URLDecoder.decode(pair.substring(4), "UTF-8");
                         } else if (pair.startsWith("ch=")) {
                             channelName = URLDecoder.decode(pair.substring(3), "UTF-8");
+                        } else if (pair.startsWith("token=")) {
+                            token = URLDecoder.decode(pair.substring(6), "UTF-8");
                         }
                     }
                 }
                 if (targetUrl.isEmpty()) {
                     sendResponse(socket, "400 Bad Request", "text/plain", "Missing url parameter");
+                    return;
+                }
+                // 【2026-10-22 I1-12】token 校验：无 token/错 token 一律 403（见字段声明处）
+                if (!checkProxyToken(token)) {
+                    LogBridge.w("WebServer", "代理接口 token 校验失败（/m3u8），已拒绝");
+                    sendResponse(socket, "403 Forbidden", "text/plain", "Invalid token");
                     return;
                 }
                 LogBridge.i("WebServer", "========== 广告剥离代理请求开始 ==========");
@@ -326,9 +413,13 @@ public class WebServerManager {
                             }
                             int beforeSegments = countSegmentsInM3u8(finalContent);
                             LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
+                            // 【2026-10-22 P1-05】剥离步骤改走 stripWithTimeout（500ms 超时降级
+                            //   返回原文 + 后台继续剥离存缓存），替代原先同步硬算：
+                            //   慢源大体量清单（多维评分/编辑距离）此前把起播关键路径拖过 5s，
+                            //   代理返 500 → 播放器 3s 退避重试 → 再次超时，形成重试风暴。
                             String stripped;
                             try {
-                                stripped = M3u8AdStripper.stripAds(finalContent, finalBaseUrl);
+                                stripped = stripWithTimeout(finalContent, finalBaseUrl, finalTargetUrl);
                             } catch (Exception stripEx) {
                                 LogBridge.e("WebServer", "广告剥离异常，返回原文(已绝对化): " + stripEx.getMessage());
                                 try {
@@ -339,8 +430,7 @@ public class WebServerManager {
                             }
                             int afterSegments = countSegmentsInM3u8(stripped);
                             LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个");
-                            putM3u8Cache(finalTargetUrl, stripped);
-                            return stripped;
+                            return putM3u8Cache(finalTargetUrl, stripped);
                         } finally {
                             pendingStripRequests.remove(finalTargetUrl);
                         }
@@ -359,8 +449,110 @@ public class WebServerManager {
                     LogBridge.i("WebServer", "========== 广告剥离代理请求结束，总耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms ==========");
                     sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", result);
                 } catch (Exception e) {
-                    LogBridge.e("WebServer", "广告剥离超时或异常: " + e.getMessage());
-                    sendResponse(socket, "500 Internal Server Error", "text/plain", "Strip timeout");
+                    // 【2026-10-22 P1-05】仅剩「上游下载慢」会走到这里（剥离已 500ms 降级不阻塞）；
+                    //   502 语义为上游网关超时。播放器 3s 退避重试时后台任务多已存入缓存，
+                    //   下次请求直接命中，不再形成连续超时风暴。
+                    LogBridge.e("WebServer", "广告剥离下载超时或异常: " + e.getMessage());
+                    sendResponse(socket, "502 Bad Gateway", "text/plain", "Upstream download timeout");
+                }
+                return;
+            } else if ("GET".equals(method) && "/ts".equals(purePath)) {
+                // 【2026-10-21 seek 快速恢复】点播分片代理接口：/ts?url=原始分片地址
+                // 命中缓存秒回；未命中由代理转发 CDN 并回填缓存（Range 透传，兼容 BYTERANGE 分片）。
+                String segUrl = "";
+                String token = "";
+                if (path.contains("?")) {
+                    String query = path.substring(path.indexOf("?") + 1);
+                    for (String pair : query.split("&")) {
+                        if (pair.startsWith("url=")) {
+                            segUrl = URLDecoder.decode(pair.substring(4), "UTF-8");
+                        } else if (pair.startsWith("token=")) {
+                            token = URLDecoder.decode(pair.substring(6), "UTF-8");
+                        }
+                    }
+                }
+                if (segUrl.isEmpty()) {
+                    sendResponse(socket, "400 Bad Request", "text/plain", "Missing url parameter");
+                    return;
+                }
+                // 【2026-10-22 I1-12】token 校验：与 /m3u8 同口径（见字段声明处）
+                if (!checkProxyToken(token)) {
+                    LogBridge.w("WebServer", "代理接口 token 校验失败（/ts），已拒绝");
+                    sendResponse(socket, "403 Forbidden", "text/plain", "Invalid token");
+                    return;
+                }
+                // 透传播放器的 Range 头（#EXT-X-BYTERANGE 分片场景，响应须 206 避免播放器按 200 全片做 position 对齐）
+                String rangeHeader = "";
+                for (String headerLine : headerLines) {
+                    String hl = headerLine.toLowerCase(Locale.ROOT);
+                    if (hl.startsWith("range:")) {
+                        rangeHeader = headerLine.substring(headerLine.indexOf(':') + 1).trim();
+                        break;
+                    }
+                }
+                // 透传 UA / Referer（防盗链 CDN 会校验，必须与播放器直连时一致，否则分片 403）
+                String uaHeader = "";
+                String refererHeader = "";
+                for (String headerLine : headerLines) {
+                    String hl = headerLine.toLowerCase(Locale.ROOT);
+                    if (uaHeader.isEmpty() && hl.startsWith("user-agent:")) {
+                        uaHeader = headerLine.substring(headerLine.indexOf(':') + 1).trim();
+                    } else if (refererHeader.isEmpty() && hl.startsWith("referer:")) {
+                        refererHeader = headerLine.substring(headerLine.indexOf(':') + 1).trim();
+                    }
+                }
+                String cacheKey = segUrl + "|" + rangeHeader;
+                SegResult cached = getSegmentCache(cacheKey);
+                if (cached != null) {
+                    sendBinaryResponse(socket, cached.code == 206 ? "206 Partial Content" : "200 OK", "video/mp2t", cached.data);
+                    return;
+                }
+                Future<SegResult> existing = pendingTsRequests.get(cacheKey);
+                if (existing != null && !existing.isDone()) {
+                    try {
+                        SegResult dedupResult = existing.get(SEG_DEDUP_WAIT_MS, TimeUnit.MILLISECONDS);
+                        if (dedupResult != null) {
+                            sendBinaryResponse(socket, dedupResult.code == 206 ? "206 Partial Content" : "200 OK", "video/mp2t", dedupResult.data);
+                            return;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                final String finalSegUrl = segUrl;
+                final String finalRange = rangeHeader;
+                final String finalUa = uaHeader;
+                final String finalReferer = refererHeader;
+                Callable<SegResult> segTask = new Callable<SegResult>() {
+                    @Override
+                    public SegResult call() {
+                        return downloadSegment(finalSegUrl, finalRange, finalUa, finalReferer);
+                    }
+                };
+                Future<SegResult> future = segExecutor.submit(segTask);
+                pendingTsRequests.put(cacheKey, future);
+                try {
+                    SegResult result = future.get(SEG_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    if (result == null || result.data == null || result.data.length == 0) {
+                        sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to fetch segment");
+                    } else {
+                        sendBinaryResponse(socket, result.code == 206 ? "206 Partial Content" : "200 OK", "video/mp2t", result.data);
+                    }
+                } catch (Exception e) {
+                    // 【2026-10-21 线程释放】播放器 seek/切台丢弃请求时 future.get 抛异常（或超时）
+                    //   → cancel 中断 downloadSegment 下载线程，立即释放 segExecutor 线程，
+                    //   避免极端连按下转发线程被占满、新分片请求排队导致恢复变慢。
+                    try {
+                        future.cancel(true);
+                    } catch (Throwable ignored) {
+                    }
+                    LogBridge.w("WebServer", "分片代理超时或异常: " + e.getMessage());
+                    try {
+                        sendResponse(socket, "504 Gateway Timeout", "text/plain", "Segment fetch timeout");
+                    } catch (Exception ignored) {
+                        // 对端已断开（Broken pipe）时静默，不抛给外层刷 error
+                    }
+                } finally {
+                    pendingTsRequests.remove(cacheKey);
                 }
                 return;
             } else if ("GET".equals(method) && ("/".equals(purePath) || "/index.html".equals(purePath))) {
@@ -421,8 +613,14 @@ public class WebServerManager {
             sendResponse(socket, "200 OK", contentType, responseBody);
 
         } catch (Exception e) {
-            e.printStackTrace();
-            LogBridge.e("WebServer", "请求处理异常: " + e.getMessage());
+            // 【2026-10-21 降噪】播放器 seek/切台取消请求导致对端断开（Broken pipe / Connection reset，
+            //   均为 SocketException）属预期行为，降级为 warn——与 thread interrupted 同一思路，不再刷 error。
+            if (e instanceof java.net.SocketException) {
+                LogBridge.w("WebServer", "请求处理异常（对端断开，忽略）: " + e.getMessage());
+            } else {
+                e.printStackTrace();
+                LogBridge.e("WebServer", "请求处理异常: " + e.getMessage());
+            }
             try {
                 sendResponse(socket, "500 Internal Server Error", "text/plain", "Server Error");
             } catch (Exception ignored) {
@@ -662,12 +860,185 @@ public class WebServerManager {
     }
 
     /**
-     * 存入缓存
+     * 存入缓存；点播清单（含 ENDLIST）会把分片 URL 重写为本地代理 /ts 地址（SEEK 快速恢复）。
+     * 直播（无 ENDLIST）绝不重写，保持直连（见 M3U8_LIVE_CACHE_TTL_MS 注释）。
+     *
+     * @return 实际存入缓存的内容（重写后），调用方应把它返回给播放器，保证响应与缓存一致
      */
-    private void putM3u8Cache(String url, String content) {
+    private String putM3u8Cache(String url, String content) {
         synchronized (m3u8Cache) {
-            m3u8Cache.put(url, new Object[]{content, System.currentTimeMillis()});
+            String toCache = content;
+            // 【2026-10-21 seek 快速恢复】点播清单分片 URL 重写为本地代理 /ts，
+            //   后续 seek 重拉分片走本地缓存/转发，不再每次直连 CDN 等建连。
+            //   重写幂等：已重写的内容（127.0.0.1 前缀）会原样跳过。
+            if (toCache != null && toCache.contains(TAG_HLS_ENDLIST)) {
+                toCache = rewriteSegmentUrls(toCache);
+            }
+            m3u8Cache.put(url, new Object[]{toCache, System.currentTimeMillis()});
+            return toCache;
         }
+    }
+
+    /**
+     * 【2026-10-21 seek 快速恢复】把点播 m3u8 里的分片/KEY/MAP URL 重写为本地代理 /ts 地址。
+     * 仅点播清单调用（直播直连，绝不重写）。重写后播放器请求分片走本地代理：
+     * 命中缓存秒回；未命中由代理转发 CDN 并回填缓存——SEEK 打断播放器侧后，
+     * 代理线程继续转发完成并缓存，下次 seek 回该位置直接命中，不再等 CDN 重新建连。
+     * 幂等：已以 http://127.0.0.1 开头的内容保持原样。
+     */
+    private String rewriteSegmentUrls(String m3u8Content) {
+        if (TextUtils.isEmpty(m3u8Content)) return m3u8Content;
+        String selfPrefix = "http://127.0.0.1:" + port;
+        StringBuilder sb = new StringBuilder(m3u8Content.length() + 256);
+        String[] lines = m3u8Content.split("\\r?\\n");
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                sb.append(line).append('\n');
+                continue;
+            }
+            String lower = trimmed.toLowerCase(Locale.ROOT);
+            if ((lower.startsWith("http://") || lower.startsWith("https://"))
+                    && !lower.startsWith("http://127.0.0.1")) {
+                try {
+                    String encoded = java.net.URLEncoder.encode(trimmed, "UTF-8");
+                    // 【2026-10-22 I1-12】/ts 重写同样拼 token（服务端校验，见字段声明处）
+                    sb.append(selfPrefix).append("/ts?url=").append(encoded)
+                            .append("&token=")
+                            .append(java.net.URLEncoder.encode(proxyToken, "UTF-8"))
+                            .append('\n');
+                } catch (Exception e) {
+                    sb.append(line).append('\n');
+                }
+            } else {
+                sb.append(line).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 分片代理结果：CDN 响应码 + 字节。透传真实码——带 Range 请求时 CDN 回 206 区间字节、
+     * 忽略 Range 时回 200 全片；播放器按码决定是否做 position 对齐（200+position>0 需 skip）。
+     */
+    private static final class SegResult {
+        final int code;
+        final byte[] data;
+        SegResult(int code, byte[] data) {
+            this.code = code;
+            this.data = data;
+        }
+    }
+
+    /**
+     * 读取分片缓存（key=分片URL+"|"+Range头）；TTL 过期则淘汰。
+     */
+    private SegResult getSegmentCache(String key) {
+        synchronized (segCache) {
+            Object[] entry = segCache.get(key);
+            if (entry != null) {
+                long ts = (Long) entry[1];
+                if (System.currentTimeMillis() - ts < SEG_CACHE_TTL_MS) {
+                    return new SegResult((Integer) entry[3], (byte[]) entry[0]);
+                } else {
+                    segCacheBytes -= (Long) entry[2];
+                    segCache.remove(key);
+                }
+            }
+            return null;
+        }
+    }
+
+    /**
+     * 写入分片缓存；超过字节上限按 LRU 顺序淘汰最老条目（条目数上限由 removeEldestEntry 兜底）。
+     */
+    private void putSegmentCache(String key, int code, byte[] data) {
+        synchronized (segCache) {
+            Object[] old = segCache.get(key);
+            if (old != null) {
+                segCacheBytes -= (Long) old[2];
+            }
+            segCache.put(key, new Object[]{data, System.currentTimeMillis(), (long) data.length, code});
+            segCacheBytes += data.length;
+            while (segCacheBytes > SEG_CACHE_MAX_BYTES && !segCache.isEmpty()) {
+                java.util.Iterator<java.util.Map.Entry<String, Object[]>> it = segCache.entrySet().iterator();
+                java.util.Map.Entry<String, Object[]> eldest = it.next();
+                segCacheBytes -= (Long) eldest.getValue()[2];
+                it.remove();
+            }
+        }
+    }
+
+    /**
+     * 【2026-10-21 seek 快速恢复】转发下载 CDN 分片（带 Range 透传），成功后回填缓存。
+     * 与 downloadM3u8 保持一致：不主动 disconnect，输入流关闭后连接自动回池复用。
+     */
+    private SegResult downloadSegment(String segUrl, String rangeHeader, String uaHeader, String refererHeader) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(segUrl);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(10000);
+            // 优先透传播放器请求头（防盗链校验需要与直连时一致），空则用默认 UA 兜底
+            conn.setRequestProperty("User-Agent", uaHeader != null && !uaHeader.isEmpty() ? uaHeader
+                    : "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36");
+            conn.setRequestProperty("Accept", "*/*");
+            if (refererHeader != null && !refererHeader.isEmpty()) {
+                conn.setRequestProperty("Referer", refererHeader);
+            }
+            if (rangeHeader != null && !rangeHeader.isEmpty()) {
+                conn.setRequestProperty("Range", rangeHeader);
+            }
+            int responseCode = conn.getResponseCode();
+            if (responseCode != 200 && responseCode != 206) {
+                LogBridge.w("WebServer", "分片下载失败: HTTP " + responseCode
+                        + " url=" + segUrl.substring(0, Math.min(80, segUrl.length())));
+                return null;
+            }
+            java.io.InputStream in = conn.getInputStream();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream(Math.max(1024, conn.getContentLength()));
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf, 0, buf.length)) != -1) {
+                bos.write(buf, 0, n);
+            }
+            in.close();
+            byte[] data = bos.toByteArray();
+            if (data.length == 0) return null;
+            // 回填缓存（后续 seek/重复请求命中秒回）；保留真实响应码供播放器对齐 position
+            String cacheKey = segUrl + "|" + (rangeHeader != null ? rangeHeader : "");
+            putSegmentCache(cacheKey, responseCode, data);
+            return new SegResult(responseCode, data);
+        } catch (Exception e) {
+            // 【2026-10-21 坏连接清理】异常路径必须断开：损坏/半途的连接若留回连接池，
+            //   下一次复用会直接抛 "Connection reset"（极端连按下已实测）。
+            try {
+                if (conn != null) conn.disconnect();
+            } catch (Exception ignored) {
+            }
+            LogBridge.e("WebServer", "分片下载异常: " + e.getMessage());
+            return null;
+        } finally {
+            // 与 downloadM3u8 一致：成功路径不调用 disconnect，保持连接复用；输入流已关闭，连接自动返回到连接池
+        }
+    }
+
+    /**
+     * 二进制响应（分片代理用，支持自定义状态码：200 / 206）
+     */
+    private void sendBinaryResponse(Socket socket, String status, String contentType, byte[] body) throws Exception {
+        String header = "HTTP/1.1 " + status + "\r\n" +
+                "Content-Type: " + contentType + "\r\n" +
+                "Content-Length: " + body.length + "\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+        OutputStream out = socket.getOutputStream();
+        out.write(header.getBytes("UTF-8"));
+        out.write(body);
+        out.flush();
+        socket.close();
     }
 
     /**
@@ -730,8 +1101,7 @@ public class WebServerManager {
                         }
                     }
                     putM3u8Cache(url, stripped);
-                    LogBridge.i("WebServer", "[预加载] 完成，存入缓存");
-                } catch (Exception e) {
+                    LogBridge.i("WebServer", "[预加载] 完成，存入缓存");                } catch (Exception e) {
                     LogBridge.e("WebServer", "[预加载] 失败: " + e.getMessage());
                 } finally {
                     preloadRunning.set(false);
@@ -786,9 +1156,9 @@ public class WebServerManager {
                             stripped = finalContent;
                         }
                     }
-                    putM3u8Cache(finalUrl, stripped);
+                    String cachedContent = putM3u8Cache(finalUrl, stripped);
                     LogBridge.i("WebServer", "[预剥离] 完成，存入缓存");
-                    return stripped;
+                    return cachedContent;
                 } finally {
                     pendingStripRequests.remove(finalUrl);
                 }
@@ -815,8 +1185,7 @@ public class WebServerManager {
         });
         try {
             String result = future.get(STRIP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            putM3u8Cache(cacheKey, result);
-            return result;
+            return putM3u8Cache(cacheKey, result);
         } catch (Exception e) {
             LogBridge.w("WebServer", "[超时降级] 剥离超过" + STRIP_TIMEOUT_MS + "ms，返回原文，后台继续剥离");
             // 后台继续剥离并存缓存
@@ -887,6 +1256,8 @@ public class WebServerManager {
             if (channelName != null && !channelName.isEmpty()) {
                 url += "&ch=" + java.net.URLEncoder.encode(channelName, "UTF-8");
             }
+            // 【2026-10-22 I1-12】播放器侧自动拼 token（服务端 /m3u8 校验，见字段声明处）
+            url += "&token=" + java.net.URLEncoder.encode(proxyToken, "UTF-8");
             return url;
         } catch (Exception e) {
             return originalUrl;

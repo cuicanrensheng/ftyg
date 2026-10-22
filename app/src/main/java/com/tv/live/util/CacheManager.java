@@ -358,6 +358,8 @@ public class CacheManager {
 
         long deletedStep1 = 0L;
         for (FileEntry e : all) {
+            // 【2026-10-22 I1-03】业务磁盘缓存永不误删（各源 M3uDiskCache / 永久兜底 / 源7/源8 自建缓存）
+            if (isBusinessDiskFile(e.file.getName())) continue;
             boolean shouldDelete = false;
             if (isLogOrCrashFile(e.file)) shouldDelete = true;
             long age = System.currentTimeMillis() - e.file.lastModified();
@@ -384,6 +386,8 @@ public class CacheManager {
             long freed = 0L;
             for (FileEntry e : all) {
                 if (freed >= toFree) break;
+                // 【2026-10-22 I1-03】业务磁盘缓存不参与 LRU 淘汰
+                if (isBusinessDiskFile(e.file.getName())) continue;
                 long age = System.currentTimeMillis() - e.file.lastModified();
                 if (age < MIN_AGE_MS) continue;
                 if (isLogOrCrashFile(e.file) || age > MIN_AGE_MS) {
@@ -445,6 +449,29 @@ public class CacheManager {
         if (dir == null) return;
         if (!dir.exists() || !dir.isDirectory()) return;
         list.add(dir);
+    }
+
+    /**
+     * 【2026-10-22 I1-03】filesDir 根下的业务磁盘文件豁免名单。
+     *
+     * <p>背景：启动清理原按「age>7 天即删」扫 filesDir 全树（{@link #walkRecursive} 只跳过
+     * tv_cache 目录），把两类业务文件误删：
+     * <ul>
+     *   <li>{@code live_source_fallback.m3u}——源全失败时的「永久兜底」，删了等于兜底失效；</li>
+     *   <li>各源磁盘缓存（{@code renyibo_vod_v2.m3u} / {@code nbm_source_v2.m3u} /
+     *       {@code chanxiang_source.m3u} 等）——有自己的 TTL 生命周期，被清后每次启动
+     *       都重新全量抓取，表现为「分组缓存反复重抓」。</li>
+     * </ul>
+     * M3uDiskCache 实例构造时自动注册文件名（见 {@code M3uDiskCache#isBusinessDiskCacheName}），
+     * 新增源无需改这里；其余为各 resolver 自建磁盘缓存，按前缀豁免。
+     */
+    private static boolean isBusinessDiskFile(String fileName) {
+        if (fileName == null) return false;
+        if (M3uDiskCache.isBusinessDiskCacheName(fileName)) return true;
+        if (fileName.startsWith("live_source")) return true;
+        if (fileName.startsWith("afhgrj_")) return true;
+        if (fileName.startsWith("ryb8_") || fileName.startsWith("ryb_")) return true;
+        return false;
     }
 
     private static boolean isLogOrCrashFile(File f) {
@@ -680,10 +707,8 @@ public class CacheManager {
                 }
             }
 
-            if (BuildCheckAtLeastQ()) {
-                File pub = new File(extFiles, Environment_SUBDIR_DOWNLOADS());
-                cleanUpdateApksInDir(pub);
-            }
+            // 【2026-10-22 I1-08】删除 Q+ 分支的重复清理：pub 与上方 downloads 同为
+            //   Environment_SUBDIR_DOWNLOADS() 目录，上方循环已按同名规则清过一轮
         }
 
         int  jsSaved = 0;
@@ -808,31 +833,6 @@ public class CacheManager {
     private static String Environment_SUBDIR_DOWNLOADS() {
 
         return android.os.Environment.DIRECTORY_DOWNLOADS;
-    }
-
-    private static boolean BuildCheckAtLeastQ() {
-        try {
-            int Q = 29;
-            return android.os.Build.VERSION.SDK_INT >= Q;
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
-    private static void cleanUpdateApksInDir(File dir) {
-        if (dir == null || !dir.isDirectory()) return;
-        File[] fs = dir.listFiles();
-        if (fs == null) return;
-        long now = System.currentTimeMillis();
-        for (File f : fs) {
-            if (!f.isFile()) continue;
-            String n = f.getName().toLowerCase(Locale.ROOT);
-            if ((n.startsWith("tv_live_update") && n.endsWith(".apk"))
-                    || (n.endsWith(".apk") && now - f.lastModified() > 3L * 24 * 60 * 60 * 1000)) {
-
-                f.delete();
-            }
-        }
     }
 
     private static long sizeOf(File f) {

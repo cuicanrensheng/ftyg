@@ -335,7 +335,8 @@ public final class LogBridge {
                 msg = msg.substring(0, 500) + "...[已截断]";
             }
             // 【2026-10-13 日志脱敏】分工明确：
-            //   fMsg    → 脱敏后正文，进 9527 的 logs / logEntries（可被局域网任意设备 GET /api/logs 拉取）
+            //   fMsg    → 脱敏后正文，进 9527 的 logs / logEntries（【2026-10-22 I1-02】GET /api/logs
+            //            已加鉴权：回环来源豁免，非回环须 ?token= 有效 token；WS 须 subscribe 过才收广播）
             //   fMsgRaw → 原文，仅用于 logcat echo 与 ExceptionReporter 上报（都走授权通道）
             final String fTag = tag, fType = type;
             final String fMsgRaw = msg;
@@ -643,6 +644,9 @@ public final class LogBridge {
         private final OkHttpClient httpClient;
         private final Gson gson;
         private final CopyOnWriteArrayList<WebSocket> webSockets;
+        /** 【2026-10-22 I1-02】已订阅（subscribe 消息 token 校验通过）的 WS 连接：
+         *  只有它们才收日志广播 / 待发日志 / 可调 get_logs·clear_logs，未订阅连接零推送 */
+        private final CopyOnWriteArrayList<WebSocket> subscribedSockets;
         private final List<Map<String, Object>> pendingLogs;
         private volatile boolean isRunning;
         private Thread serverThread;
@@ -665,6 +669,7 @@ public final class LogBridge {
                     .build();
             this.gson = new GsonBuilder().serializeNulls().create();
             this.webSockets = new CopyOnWriteArrayList<>();
+            this.subscribedSockets = new CopyOnWriteArrayList<>();
             this.pendingLogs = new ArrayList<>();
             this.isRunning = false;
             this.port = DEFAULT_PORT;
@@ -819,6 +824,7 @@ public final class LogBridge {
                 } catch (Exception ignored) {}
             }
             webSockets.clear();
+            subscribedSockets.clear();
             try {
                 if (serverSocket != null && !serverSocket.isClosed()) {
                     serverSocket.close();
@@ -837,6 +843,11 @@ public final class LogBridge {
             serverSocket.setReuseAddress(true);
             LogBridge.i(TAG, "HTTP Server listening on port " + port);
 
+            // 【2026-10-22 I1-11】连续 accept 失败计数：退避 100ms→500ms→1s 封顶。
+            //   accept 持续异常（fd 耗尽/socket 异常态）时，无退避的空转会瞬间刷爆
+            //   2000 条环形缓冲，把真正排障的日志冲掉。
+            int acceptFailStreak = 0;
+
             while (isRunning) {
                 try {
                     java.net.Socket clientSocket = serverSocket.accept();
@@ -845,9 +856,20 @@ public final class LogBridge {
                     } else {
                         clientSocket.close();
                     }
+                    acceptFailStreak = 0;   // 成功即复位
                 } catch (IOException e) {
                     if (isRunning) {
-                        LogBridge.e(TAG, "Error accepting client", e);
+                        acceptFailStreak++;
+                        long backoffMs = acceptFailStreak <= 1 ? 100L
+                                : (acceptFailStreak == 2 ? 500L : 1000L);
+                        LogBridge.e(TAG, "Error accepting client（连续第 " + acceptFailStreak
+                                + " 次，退避 " + backoffMs + "ms）", e);
+                        try {
+                            Thread.sleep(backoffMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
                 }
             }
@@ -1207,8 +1229,32 @@ public final class LogBridge {
         private void handleHttpRequest(java.net.Socket clientSocket, String request, java.io.OutputStream out) throws Exception {
             String path = extractPath(request);
 
+            // 【2026-10-22 I1-02】敏感端点鉴权（服务绑定 0.0.0.0，局域网可达）：
+            //   /api/token            仅回环可获取（adb forward 排障链路零影响；PC 工具走 forward）
+            //   /api/info·logs·bootlog·cache·cache/clean·perf  回环豁免，非回环须 ?token= 有效 token
+            //   / 与 /health          保持公开（探活与引导页）
+            if ("/api/token".equals(path)) {
+                if (!isLoopback(clientSocket)) {
+                    sendSensitiveDenied(out);
+                    clientSocket.close();
+                    return;
+                }
+            } else if ("/api/info".equals(path) || "/api/logs".equals(path) || "/api/bootlog".equals(path)
+                    || "/api/cache".equals(path) || "/api/perf".equals(path)
+                    || "/logs".equals(path) || "/ui".equals(path)
+                    || (path != null && path.startsWith("/api/cache/clean"))) {
+                if (!isSensitiveAllowed(clientSocket, request)) {
+                    sendSensitiveDenied(out);
+                    clientSocket.close();
+                    return;
+                }
+            }
+
             if ("/".equals(path) || "/index.html".equals(path)) {
                 sendHttpResponse(out, "HTTP/1.0 200 OK", "text/html; charset=utf-8", getIndexHtml());
+            } else if ("/logs".equals(path) || "/ui".equals(path)) {
+                // 【2026-10-22 新增】图形化日志页（鉴权口径同 /api/logs，已在上面统一校验）
+                sendHttpResponse(out, "HTTP/1.0 200 OK", "text/html; charset=utf-8", getLogsHtml());
             } else if ("/api/info".equals(path)) {
                 Map<String, Object> info = getServerInfo();
                 sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(info));
@@ -1288,6 +1334,15 @@ public final class LogBridge {
 
             try {
                 if ("/api/remote/key".equals(path)) {
+                    // 【2026-10-22 I1-02】遥控动作同属敏感端点：回环豁免，非回环须有效 token
+                    // （body.token 或 query token=，与 /api/app/restart|stop 同口径）
+                    String tokenValue = bj.get("token") != null ? String.valueOf(bj.get("token"))
+                            : queryParam(request, "token", null);
+                    if (!isLoopback(clientSocket) && !checkToken(tokenValue)) {
+                        sendSensitiveDenied(out);
+                        clientSocket.close();
+                        return;
+                    }
                     String action = bj.get("action") != null ? String.valueOf(bj.get("action"))
                             : queryParam(request, "action");
                     boolean ok = action != null && RemoteKeyHandler.dispatchRemoteAction(action);
@@ -1321,6 +1376,49 @@ public final class LogBridge {
 
         private boolean checkToken(String token) {
             return this.token != null && this.token.equals(token);
+        }
+
+        /**
+         * 【2026-10-22 I1-02】回环来源判定：adb forward 排障链路（PC 127.0.0.1:9527 →
+         * 设备 9527）必须豁免，否则 release 无 logcat 时排障通道被自己锁死。
+         * 双保险：isLoopbackAddress() + hostAddress 文本（部分 ROM 回环映射异常）。
+         */
+        private boolean isLoopback(java.net.Socket s) {
+            if (s == null) return false;
+            try {
+                java.net.InetAddress addr = s.getInetAddress();
+                if (addr == null) return false;
+                if (addr.isLoopbackAddress()) return true;
+                String h = addr.getHostAddress();
+                return h != null && (h.startsWith("127.") || "::1".equals(h) || "0:0:0:0:0:0:0:1".equals(h));
+            } catch (Throwable t) {
+                return false;
+            }
+        }
+
+        /**
+         * 【2026-10-22 I1-02】敏感端点准入：回环来源直接放行；非回环（局域网）须带有效 token
+         * （GET /api/token 获取，拼在 URL query 上：/api/logs?token=xxx）。
+         */
+        private boolean isSensitiveAllowed(java.net.Socket s, String request) {
+            if (isLoopback(s)) return true;
+            return checkToken(queryParam(request, "token", null));
+        }
+
+        /** 【2026-10-22 I1-02】敏感端点拒绝响应（非回环且 token 无效/缺失） */
+        private void sendSensitiveDenied(java.io.OutputStream out) throws IOException {
+            LogBridge.w(TAG, "[安全] 非回环来源访问敏感端点被拒（token 无效或缺失；回环来源豁免）");
+            sendHttpResponse(out, "HTTP/1.0 403 Forbidden", "application/json",
+                    gson.toJson(simpleMsg(false,
+                            "token 无效或缺失：回环来源（adb forward）豁免；局域网访问请先 GET /api/token 获取并以 ?token= 附带")));
+        }
+
+        /** 【2026-10-22 I1-02】WebSocket 错误消息便捷构造 */
+        private Map<String, Object> wsError(String message) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("type", "error");
+            m.put("message", message);
+            return m;
         }
 
         private Map<String, Object> simpleMsg(boolean ok, String message) {
@@ -1603,6 +1701,8 @@ public final class LogBridge {
                 WebSocket oldest = webSockets.get(0);
                 oldest.close(1000, "Too many connections");
                 webSockets.remove(0);
+                // 【2026-10-22 I1-02】同步移出订阅名单
+                subscribedSockets.remove(oldest);
             }
 
             String acceptKey = computeWebSocketAccept(key);
@@ -1627,9 +1727,10 @@ public final class LogBridge {
                         @Override
                         public void onOpen(WebSocket webSocket, Response response) {
                             webSockets.add(webSocket);
-                            sendInitMessage(webSocket);
-                            sendPendingLogs(webSocket);
-                            LogBridge.d(TAG, "WebSocket client opened, total clients: " + webSockets.size());
+                            // 【2026-10-22 I1-02】不再主动推送 init/pendingLogs：连接后须先发
+                            // subscribe 消息带 token 校验，通过后才补发（见 handleIncomingMessage）。
+                            // 原实现 onOpen 即向所有连接推设备信息+全量待发日志，等于 WS 无门。
+                            LogBridge.d(TAG, "WebSocket client opened (未订阅，等待 token 校验), total clients: " + webSockets.size());
                         }
 
                         @Override
@@ -1645,12 +1746,15 @@ public final class LogBridge {
                         @Override
                         public void onClosed(WebSocket webSocket, int code, String reason) {
                             webSockets.remove(webSocket);
+                            // 【2026-10-22 I1-02】同步移出订阅名单，防泄漏
+                            subscribedSockets.remove(webSocket);
                             LogBridge.d(TAG, "WebSocket client closed, total clients: " + webSockets.size());
                         }
 
                         @Override
                         public void onFailure(WebSocket webSocket, Throwable t, Response response) {
                             webSockets.remove(webSocket);
+                            subscribedSockets.remove(webSocket);
                             LogBridge.e(TAG, "WebSocket failure", t);
                         }
                     });
@@ -1702,11 +1806,16 @@ public final class LogBridge {
                 } else if ("subscribe".equals(type)) {
                     String tokenValue = (String) message.get("token");
                     if (token != null && token.equals(tokenValue)) {
+                        // 【2026-10-22 I1-02】订阅成功才纳入广播名单，并补发 init + 待发日志
+                        // （原 onOpen 的主动推送后移到此，保证 PC 工具体验不变：连上→subscribe→收到数据）
+                        subscribedSockets.add(webSocket);
                         Map<String, Object> ack = new HashMap<>();
                         ack.put("type", "subscribed");
                         ack.put("success", true);
                         ack.put("device", getServerInfo());
                         webSocket.send(gson.toJson(ack));
+                        sendInitMessage(webSocket);
+                        sendPendingLogs(webSocket);
                     } else {
                         Map<String, Object> ack = new HashMap<>();
                         ack.put("type", "error");
@@ -1714,18 +1823,28 @@ public final class LogBridge {
                         webSocket.send(gson.toJson(ack));
                     }
                 } else if ("clear_logs".equals(type)) {
-                    LogCollector.getInstance().clear();
-                    Map<String, Object> ack = new HashMap<>();
-                    ack.put("type", "logs_cleared");
-                    ack.put("timestamp", System.currentTimeMillis());
-                    webSocket.send(gson.toJson(ack));
+                    // 【2026-10-22 I1-02】仅已订阅连接可清日志
+                    if (!subscribedSockets.contains(webSocket)) {
+                        webSocket.send(gson.toJson(wsError("未订阅：请先发送 subscribe 消息并携带有效 token")));
+                    } else {
+                        LogCollector.getInstance().clear();
+                        Map<String, Object> ack = new HashMap<>();
+                        ack.put("type", "logs_cleared");
+                        ack.put("timestamp", System.currentTimeMillis());
+                        webSocket.send(gson.toJson(ack));
+                    }
                 } else if ("get_logs".equals(type)) {
-                    String allLogs = LogCollector.getInstance().getAllLogs();
-                    Map<String, Object> result = new HashMap<>();
-                    result.put("type", "logs_response");
-                    result.put("logs", allLogs);
-                    result.put("timestamp", System.currentTimeMillis());
-                    webSocket.send(gson.toJson(result));
+                    // 【2026-10-22 I1-02】仅已订阅连接可拉全量日志
+                    if (!subscribedSockets.contains(webSocket)) {
+                        webSocket.send(gson.toJson(wsError("未订阅：请先发送 subscribe 消息并携带有效 token")));
+                    } else {
+                        String allLogs = LogCollector.getInstance().getAllLogs();
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("type", "logs_response");
+                        result.put("logs", allLogs);
+                        result.put("timestamp", System.currentTimeMillis());
+                        webSocket.send(gson.toJson(result));
+                    }
                 }
             } catch (Exception e) {
                 LogBridge.e(TAG, "Error handling incoming message", e);
@@ -1749,7 +1868,8 @@ public final class LogBridge {
                 String json = gson.toJson(logMap);
 
                 boolean allSucceeded = true;
-                for (WebSocket ws : webSockets) {
+                // 【2026-10-22 I1-02】仅向已订阅（token 校验通过）的连接广播日志
+                for (WebSocket ws : subscribedSockets) {
                     try {
                         if (!ws.send(json)) {
                             allSucceeded = false;
@@ -1778,7 +1898,8 @@ public final class LogBridge {
                 msg.put("type", "logs_cleared");
                 msg.put("timestamp", System.currentTimeMillis());
                 String json = gson.toJson(msg);
-                for (WebSocket ws : webSockets) {
+                // 【2026-10-22 I1-02】仅向已订阅连接广播（未订阅连接零推送）
+                for (WebSocket ws : subscribedSockets) {
                     try {
                         ws.send(json);
                     } catch (Exception ignored) {}
@@ -1848,6 +1969,11 @@ public final class LogBridge {
                     "    <div class=\"container\">\n" +
                     "        <h1>📺 TV Live Log Server</h1>\n" +
                     "        <p class=\"status\">● Running</p>\n" +
+                    "        <div class=\"info\" style=\"background:#eef6e9;\">\n" +
+                    "            <h3>日志查看器</h3>\n" +
+                    "            <p><a href=\"/logs\" style=\"font-size:18px;font-weight:bold;color:#1e7be0;\">▶ 打开图形化日志页（/logs）</a></p>\n" +
+                    "            <p style=\"color:#666;font-size:12px;\">支持关键字/Tag 过滤、级别筛选、2s 自动刷新、启动日志（bootlog）</p>\n" +
+                    "        </div>\n" +
                     "        <div class=\"info\">\n" +
                     "            <h3>Device Info</h3>\n" +
                     "            <p><strong>Device:</strong> " + deviceName + "</p>\n" +
@@ -1868,6 +1994,199 @@ public final class LogBridge {
                     "    </div>\n" +
                     "</body>\n" +
                     "</html>";
+        }
+
+        /**
+         * 【2026-10-22 新增】图形化日志页 /logs。
+         *
+         * <p>背景：此前 9527 只有 /api/logs 的裸 JSON，浏览器里看日志要靠插件格式化，
+         * 或者 adb forward 后拉文件解析；移动端/电视上更是没法看。本页为纯前端渲染
+         * （无外部依赖、可离线），支持关键字与 Tag 过滤、级别筛选、2s 自动刷新、暂停、
+         * 清空缓冲、切到启动日志（boot_logs.txt）。
+         *
+         * <p>鉴权口径与 /api/logs 对齐：回环来源（adb forward）直接放行，局域网须带 ?token=；
+         * 页面自身注入 token 供其后续请求使用，因此局域网打开本页后无需再手工带参。
+         */
+        private String getLogsHtml() {
+            String page = """
+            <!DOCTYPE html>
+            <html lang="zh-CN">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width,initial-scale=1">
+              <title>TV Live 日志</title>
+              <style>
+                :root{--bg:#16181d;--panel:#1e2128;--line:#2b2f38;--fg:#e6e8ee;--dim:#8b93a3;
+                      --acc:#3aa0ff;--gold:#ffd166;--err:#ff5c6c;--warn:#ffb020;}
+                *{box-sizing:border-box}
+                body{margin:0;background:var(--bg);color:var(--fg);
+                     font:13px/1.5 -apple-system,"Segoe UI",Roboto,"Microsoft YaHei",sans-serif}
+                header{position:sticky;top:0;z-index:5;background:rgba(22,24,29,.96);
+                       border-bottom:1px solid var(--line);padding:10px 14px}
+                h1{font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+                h1 small{font-weight:400;color:var(--dim);font-size:12px}
+                .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+                input[type=text]{flex:1 1 260px;min-width:180px;background:var(--panel);
+                     border:1px solid var(--line);color:var(--fg);border-radius:6px;
+                     padding:6px 9px;outline:none}
+                input[type=text]:focus{border-color:var(--acc)}
+                select,button{background:var(--panel);border:1px solid var(--line);
+                     color:var(--fg);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
+                button:hover{border-color:var(--acc)}
+                button.on{border-color:var(--acc);color:var(--acc)}
+                label.chk{display:flex;align-items:center;gap:5px;color:var(--dim);
+                     cursor:pointer;user-select:none}
+                #stat{color:var(--dim);font-size:12px;margin-left:auto;white-space:nowrap}
+                #stat b{color:var(--fg);font-weight:600}
+                main{padding:6px 0 40px}
+                .row{display:grid;grid-template-columns:68px 148px 1fr;gap:10px;
+                     padding:3px 14px;border-bottom:1px solid rgba(255,255,255,.045);
+                     align-items:start}
+                .row:hover{background:rgba(58,160,255,.07)}
+                .row .t{color:var(--dim);font-variant-numeric:tabular-nums}
+                .row .g{color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+                .row .m{white-space:pre-wrap;word-break:break-word}
+                .row.error .m,.row.crash .m{color:var(--err)}
+                .row.warn .m{color:var(--warn)}
+                .row.playback .m{color:var(--gold)}
+                .row.debug .m{color:var(--dim)}
+                .row .m em{background:rgba(255,209,102,.28);font-style:normal;border-radius:2px}
+                #bootWrap{padding:12px 14px}
+                #bootBox{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+                     padding:12px;white-space:pre-wrap;word-break:break-word;
+                     max-height:74vh;overflow:auto;margin:0}
+                .empty{color:var(--dim);text-align:center;padding:40px}
+              </style>
+            </head>
+            <body>
+            <header>
+              <h1>TV Live 日志 <small id="dev"></small></h1>
+              <div class="tools">
+                <input type="text" id="q" placeholder="搜索：关键字 / Tag（空格分隔 = 同时满足，如 咪咕 缓冲）">
+                <select id="lvl">
+                  <option value="all">全部级别</option>
+                  <option value="error">error / crash</option>
+                  <option value="warn">warn</option>
+                  <option value="playback">playback</option>
+                  <option value="info">info</option>
+                  <option value="debug">debug</option>
+                  <option value="network">network</option>
+                </select>
+                <label class="chk"><input type="checkbox" id="auto" checked>自动刷新</label>
+                <button id="boot">启动日志</button>
+                <button id="clear">清空</button>
+                <span id="stat">加载中…</span>
+              </div>
+            </header>
+            <main id="list"></main>
+            <div id="bootWrap" hidden><pre id="bootBox"></pre></div>
+            <script>
+            var TOKEN = "__TOKEN__";
+            var API = function (p) {
+              return TOKEN ? (p + (p.indexOf("?") >= 0 ? "&" : "?") + "token=" + TOKEN) : p;
+            };
+            var LOGS = [], timer = null, bootMode = false;
+            function el(id) { return document.getElementById(id); }
+            function esc(s) {
+              return String(s == null ? "" : s).replace(/[&<>]/g, function (c) {
+                return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+              });
+            }
+            function terms() {
+              var raw = el("q").value.toLowerCase().split(" "), out = [];
+              for (var i = 0; i < raw.length; i++) { if (raw[i]) out.push(raw[i]); }
+              return out;
+            }
+            function mark(s, qs) {
+              var text = String(s == null ? "" : s);
+              if (!qs.length) return esc(text);
+              var lower = text.toLowerCase(), out = "", i = 0;
+              while (i < text.length) {
+                var hit = 0;
+                for (var k = 0; k < qs.length; k++) {
+                  if (lower.substr(i, qs[k].length) === qs[k]) { hit = qs[k].length; break; }
+                }
+                if (hit) { out += "<em>" + esc(text.substr(i, hit)) + "</em>"; i += hit; }
+                else { out += esc(text.charAt(i)); i++; }
+              }
+              return out;
+            }
+            function render() {
+              if (bootMode) return;
+              var qs = terms(), lvl = el("lvl").value;
+              var html = "", shown = 0, errs = 0;
+              for (var i = 0; i < LOGS.length; i++) {
+                var L = LOGS[i], ty = (L.type || "info").toLowerCase();
+                if (ty === "error" || ty === "crash") errs++;
+                if (lvl !== "all") {
+                  if (lvl === "error") { if (ty !== "error" && ty !== "crash") continue; }
+                  else if (ty !== lvl) continue;
+                }
+                if (qs.length) {
+                  var hay = ((L.time || "") + " " + (L.tag || "") + " " + (L.message || "")
+                             + " " + ty).toLowerCase(), ok = true;
+                  for (var k = 0; k < qs.length; k++) {
+                    if (hay.indexOf(qs[k]) < 0) { ok = false; break; }
+                  }
+                  if (!ok) continue;
+                }
+                shown++;
+                html += '<div class="row ' + ty + '"><span class="t">' + esc(L.time)
+                      + '</span><span class="g" title="' + esc(L.tag) + '">' + esc(L.tag)
+                      + '</span><span class="m">' + mark(L.message, qs) + '</span></div>';
+              }
+              var top = window.scrollY;
+              el("list").innerHTML = html || '<div class="empty">没有匹配的日志</div>';
+              var s = "共 <b>" + LOGS.length + "</b> 条 · 显示 <b>" + shown + "</b>";
+              if (errs) s += ' · <b style="color:#ff5c6c">错误 ' + errs + '</b>';
+              el("stat").innerHTML = s;
+              window.scrollTo(0, top);
+            }
+            function load() {
+              fetch(API("/api/logs")).then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+              }).then(function (d) {
+                LOGS = d.logs || [];
+                if (LOGS.length) {
+                  el("dev").textContent = "v" + (LOGS[0].appVersion || "?") + " · "
+                      + (LOGS[0].deviceName || "") + " · 端口 9527";
+                }
+                render();
+              }).catch(function (e) {
+                el("stat").innerHTML = '<b style="color:#ff5c6c">' + esc(e.message) + '</b>';
+              });
+            }
+            function loadBoot() {
+              fetch(API("/api/bootlog")).then(function (r) { return r.json(); }).then(function (d) {
+                el("bootBox").textContent = d.exists ? d.content : "（无 boot_logs.txt）";
+              }).catch(function (e) { el("bootBox").textContent = "读取失败：" + e.message; });
+            }
+            function stopAuto() { if (timer) { clearInterval(timer); timer = null; } }
+            function startAuto() { stopAuto(); timer = setInterval(load, 2000); }
+            el("auto").onchange = function () { this.checked ? startAuto() : stopAuto(); };
+            el("boot").onclick = function () {
+              bootMode = !bootMode;
+              this.classList.toggle("on", bootMode);
+              el("bootWrap").hidden = !bootMode;
+              el("list").style.display = bootMode ? "none" : "";
+              if (bootMode) { el("auto").checked = false; stopAuto(); loadBoot(); }
+              else { el("auto").checked = true; startAuto(); load(); }
+            };
+            el("clear").onclick = function () {
+              if (!confirm("清空当前日志环形缓冲？（不影响 bootlog）")) return;
+              fetch(API("/api/logs?clear=true")).then(function () {
+                LOGS = []; render();
+              }).catch(function (e) { alert("清空失败：" + e.message); });
+            };
+            el("q").oninput = render;
+            el("lvl").onchange = render;
+            load(); startAuto();
+            </script>
+            </body>
+            </html>
+            """;
+            return token == null ? page : page.replace("__TOKEN__", token);
         }
 
         private void sendHttpResponse(java.io.OutputStream out, String status, String contentType, String body) throws IOException {

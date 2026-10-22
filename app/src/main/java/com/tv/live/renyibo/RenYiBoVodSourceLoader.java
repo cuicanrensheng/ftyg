@@ -41,8 +41,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>每个分组内填充<b>已抓到的真实明文条目</b>（首页推荐 vlist，含 vod_id /
  *       vod_name / vod_pic / remarks），保证列表可见、可点；</li>
  *   <li>真实加密请求已写成 {@link #fetchCategoryPage} 与 {@link #resolveVodPlayUrl}
- *       的<b>双闸门关闭</b>路径（{@link #canSendRealRequest()}），待授权真机锁定线格式后
- *       打开总开关即可启用。</li>
+ *       的双闸门路径（{@link #canSendRealRequest()}）。【2026-10-12 授权实测】两个闸门
+ *       均已置 true 并打通播放；【2026-10-22 S1-07】注释同步为现行开启态。</li>
  * </ol>
  *
  * <p><b>协议串</b>：M3U 行地址写作 {@code renyibo-vod://<typeId>:<vodId>}。
@@ -63,21 +63,15 @@ public final class RenYiBoVodSourceLoader {
     // ------------------------------------------------------------------
 
     /**
-     * 真实加密请求的总闸：<b>默认 false（离线）</b>。
-     *
-     * <p><b>红线</b>（用户铁律：禁止未经授权的对第三方请求）：即使把本开关置
-     * {@code true}，还须满足第二个守卫 {@link #REQUEST_FORMAT_LOCKED} 才会真正发包。
-     * 两个守卫同时为 true 前，任何路径都<b>不会发起网络请求</b>，只走内置明文/返回 null。
-     *
-     * <p>开启入口（设置面板或调试触发）本期<b>不接 UI</b>。【2026-10-12 授权实测】
-     * 用户已授权对源站发起真实加密请求以锁定线格式，故置 true。
+     * 真实加密请求的总闸：【2026-10-12 授权实测】用户已授权对源站发起真实加密请求
+     * 以锁定线格式，故置 {@code true}（与 {@link #REQUEST_FORMAT_LOCKED} 同时为 true
+     * 时才真正发包，见 {@link #canSendRealRequest()}）。
      */
     private static volatile boolean sRealEnabled = true;
 
     /**
      * 真实请求的线格式（IV 放置 / dm_list 分类字段 / vod_detail|play 参数形状）
-     * 是否已通过授权真机核对并锁定。默认 false ⇒ 即便 {@link #sRealEnabled} 为 true
-     * 也不发送任何请求（防止对未确证字段做猜测性请求，见 {@link VodRequest}）。
+     * 是否已通过授权真机核对并锁定。【2026-10-12 授权实测】已锁定，置 {@code true}。
      */
     private static final boolean REQUEST_FORMAT_LOCKED = true;
 
@@ -138,7 +132,9 @@ public final class RenYiBoVodSourceLoader {
     private static volatile int sLastRealCount = 0;
 
     private static final M3uDiskCache sVodCache = new M3uDiskCache(
-            TAG, "源5点播分组", "renyibo_vod.m3u", VOD_CACHE_TTL_MS, VOD_FAIL_COOLDOWN_MS,
+            // 【2026-10-21】缓存名带 v2：新增科幻/灾难两分组，旧缓存（8 分类）在 12h
+            // TTL 内会持续生效，改名冷落旧文件，升级后首次加载即重抓 10 分类。
+            TAG, "源5点播分组", "renyibo_vod_v2.m3u", VOD_CACHE_TTL_MS, VOD_FAIL_COOLDOWN_MS,
             new M3uDiskCache.Fetcher() {
                 @Override
                 public String fetch() {
@@ -790,6 +786,40 @@ public final class RenYiBoVodSourceLoader {
 
     /** vodId 级单飞锁：起播取流 / EPG 面板并发时同一部片只抓一次 video_detail。 */
     private static final Map<String, Object> sVodEpisodeLocks = new ConcurrentHashMap<>();
+
+    // ------------------------------------------------------------------
+    // 【2026-10-22 L1-03】EPG 选集预取闸门（与源8 RybUrlResolver 同构）
+    // ------------------------------------------------------------------
+
+    /** 抓取中占位：同一部片同时只允许一个 EPG 预取任务（占位成功返回 true；已在抓取中返回 false）。 */
+    private static final Map<String, Object> sFetching = new ConcurrentHashMap<>();
+
+    public static boolean beginFetch(String vodId) {
+        if (vodId == null || vodId.isEmpty()) return false;
+        return sFetching.putIfAbsent(vodId, new Object()) == null;
+    }
+
+    /** 释放预取占位。 */
+    public static void endFetch(String vodId) {
+        if (vodId != null && !vodId.isEmpty()) sFetching.remove(vodId);
+    }
+
+    /**
+     * 用户「正在查看」的影片 vodId（打开详情页的那一部）。
+     *
+     * <p>EPG 预取闸门放行条件之一：用户在详情页读简介/挑线路时选集已抓好，
+     * 按下播放即刻有列表；仍然只有用户主动打开的那一部会联网（非批量预取）。
+     */
+    private static volatile String sForegroundVodId;
+
+    public static void setForegroundVodId(String vodId) {
+        sForegroundVodId = (vodId == null || vodId.isEmpty()) ? null : vodId;
+    }
+
+    /** 是否是「用户正在查看」的那部片（EPG 预取闸门放行条件之一） */
+    public static boolean isForeground(String vodId) {
+        return vodId != null && !vodId.isEmpty() && vodId.equals(sForegroundVodId);
+    }
 
     /** 读选集缓存：命中返回列表；未命中返回 {@code null}（由 EpgManager 决定是否异步抓取）。 */
     public static List<Channel.EpgItem> getVodEpisodes(String vodId) {

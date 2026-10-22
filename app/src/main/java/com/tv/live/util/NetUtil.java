@@ -7,9 +7,6 @@ import com.tv.live.util.LogBridge;
 import com.tv.live.util.HuyaStreamPlayer.HuyaHttpThrottle;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -43,11 +40,11 @@ public class NetUtil {
         "cloud.tv.live.com"
     };
 
-    private static final String HEADER_REQUEST_SIGNATURE = "X-Request-Signature";
-    private static final String HEADER_REQUEST_TIMESTAMP = "X-Request-Timestamp";
-    private static final String HEADER_REQUEST_NONCE = "X-Request-Nonce";
-    private static final String HEADER_APP_VERSION = "X-App-Version";
-    private static final String HEADER_DEVICE_ID = "X-Device-Id";
+    // 【2026-10-22 I1-06】删除 X-Request-Signature/X-Request-Timestamp/X-Request-Nonce/
+    //   X-Device-Id/X-App-Version 一整套「完整性头」：签名是对 method\nurl\nts\nnonce 的
+    //   裸 SHA-256，无共享密钥 → 同网段任何人可重放/伪造，"防误不防攻"，头存在本身反而
+    //   易误导维护者高估防护；且每次请求白跑一次 SecureRandom。第三方服务器没有我们的
+    //   共享密钥，不可能校验这些头。如需真鉴权，应在密钥经 secstore 下沉后改 HMAC-SHA256。
 
     public static void init(Context context) {
         sAppContext = context.getApplicationContext();
@@ -148,10 +145,7 @@ public class NetUtil {
 
             Request.Builder requestBuilder = originalRequest.newBuilder()
                     .header("Accept-Encoding", "identity");
-
-            if (url.startsWith("https://")) {
-                addIntegrityHeaders(requestBuilder, originalRequest);
-            }
+            // 【2026-10-22 I1-06】完整性头已整体删除（见类顶部说明）：不再 addIntegrityHeaders
 
             Response response;
             try {
@@ -187,95 +181,6 @@ public class NetUtil {
 
             return response;
         }
-    }
-
-    private void addIntegrityHeaders(Request.Builder builder, Request originalRequest) {
-
-        String timestamp = String.valueOf(System.currentTimeMillis());
-
-        String nonce = generateNonce();
-
-        String deviceId = getAnonymousDeviceId();
-
-        String signature = calculateRequestSignature(
-                originalRequest.method(),
-                originalRequest.url().toString(),
-                timestamp,
-                nonce
-        );
-
-        builder.header(HEADER_REQUEST_TIMESTAMP, timestamp)
-               .header(HEADER_REQUEST_NONCE, nonce)
-               .header(HEADER_REQUEST_SIGNATURE, signature)
-               .header(HEADER_DEVICE_ID, deviceId)
-               .header(HEADER_APP_VERSION, getAppVersion());
-    }
-
-    private String generateNonce() {
-        SecureRandom random = new SecureRandom();
-        byte[] nonceBytes = new byte[8];
-        random.nextBytes(nonceBytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : nonceBytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
-    private String calculateRequestSignature(String method, String url, String timestamp, String nonce) {
-        try {
-
-            String signData = method + "\n" + url + "\n" + timestamp + "\n" + nonce;
-
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(signData.getBytes(StandardCharsets.UTF_8));
-
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hash) {
-                hexString.append(String.format("%02x", b));
-            }
-
-            return hexString.toString();
-        } catch (Exception e) {
-            LogBridge.e(TAG, "计算请求签名失败: " + e.getMessage());
-            return "";
-        }
-    }
-
-    private String getAnonymousDeviceId() {
-        try {
-            if (sAppContext != null) {
-                String androidId = android.provider.Settings.Secure.getString(
-                        sAppContext.getContentResolver(),
-                        android.provider.Settings.Secure.ANDROID_ID);
-                if (androidId != null) {
-
-                    MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                    byte[] hash = digest.digest(androidId.getBytes(StandardCharsets.UTF_8));
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < 8; i++) {
-                        sb.append(String.format("%02x", hash[i]));
-                    }
-                    return sb.toString();
-                }
-            }
-        } catch (Exception e) {
-            LogBridge.w(TAG, "获取设备ID失败: " + e.getMessage());
-        }
-        return "unknown";
-    }
-
-    private String getAppVersion() {
-        try {
-            if (sAppContext != null) {
-                return sAppContext.getPackageManager()
-                        .getPackageInfo(sAppContext.getPackageName(), 0)
-                        .versionName;
-            }
-        } catch (Exception e) {
-
-        }
-        return "1.0.0";
     }
 
     private boolean isSensitiveDomain(String host) {

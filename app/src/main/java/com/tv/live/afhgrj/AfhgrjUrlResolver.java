@@ -81,51 +81,9 @@ public final class AfhgrjUrlResolver {
     /** vodId → 最近一次探活通过的 sid（同片后续集数优先复用它，省去重复探活） */
     private static final Map<String, Integer> sWorkingSid = new ConcurrentHashMap<>();
 
-    /** 线路探活超时（只做建连+取状态码，故给得短；失败即换下一条 sid） */
-    private static final int PROBE_CONNECT_TIMEOUT_MS = 2500;
-    private static final int PROBE_READ_TIMEOUT_MS = 2500;
-
-    // ------------------------------------------------------------------
-    // 【2026-10-12 线路测速择优】把「只判 200」的探活升级为「下载取样 + 计时」
-    //   背景（2026-10-10 实测）：源7 的线路只判 HTTP 2xx 会选中「能连上但极慢」的死慢线。
-    //   当场抓到：v.fengbao11.com 返回 200 但只有 ~137 KB/s，播放表现为「播 2 秒卡 8 秒」；
-    //   而同片的 play.ly166.com 高达 ~315 KB/s。旧逻辑根本不会去试后者。
-    // ------------------------------------------------------------------
-
-    /** 测速取样字节数（约 128KB）：足以区分 100KB/s 与 300KB/s，又不至于拖慢起播 */
-    private static final int SPEED_PROBE_BYTES = 128 * 1024;
-    /** 测速最长观测时间；到点就用已读到的字节数折算速率（死慢线不至于卡住起播） */
-    private static final long SPEED_PROBE_MAX_MS = 3000L;
-    /** 「够快」门槛（KB/s）：达到即采用该线路，不再继续比别人。实测 ly166=315、慢线=137，取中间值 */
-    private static final int SPEED_ACCEPT_KBPS = 250;
-    /** 有效测速的最少采样字节（分片 EOF 提前结束时可放宽到 8KB） */
-    private static final int MIN_SPEED_PROBE_BYTES = 32 * 1024;
-    /** 有效测速的最短观测时间（ms）：太短说明首包被缓冲，折算值不可信 */
-    private static final long MIN_SPEED_PROBE_MS = 60L;
-
-    /**
-     * 优先主机白名单（按优先级从高到低）。命中即直接采用，跳过测速。
-     *
-     * <p>2026-10-10 实测 10 个 CDN：{@code play.ly166.com:65} = 315 KB/s 断层第一，
-     * 且是抽样 6 部片里 5 部都有的<b>唯一跨片通用 CDN</b>。这是「白名单兜底」：
-     * 站点换域名后白名单会失效，届时由上面的测速逻辑自动接管。
-     */
-    private static final String[] PREFERRED_HOSTS = {
-            // 【2026-10-13 水印规避】原白名单 host "play.ly166.com" 已移除：
-            //   实测该 CDN 的正片分片内**烧录**了「249331.com 注册即送888！主营：棋牌 电子
-            //   真人 捕鱼 体育 电竞」横幅水印（压制在视频帧内，m3u8 层无法剥离），
-            //   故不再作为首选，改由 WATERMARK_HOST_MARKERS 统一降级为「兜底」。
-            //
-            // 【2026-10-13 线路体检·抽帧核验】把实测「干净且可达」的源7 CDN 提为优选，
-            //   让默认线路直接落在这类干净线上（命中后仍会过一次测速做可达性校验，
-            //   线路挂掉/被封时自动继续比别的线，不会因白名单而强选死线）。
-            //   样本：《吞噬星空》第01集三线路同帧对比（同一秒画面）——
-            //     sid=1 p.bvvvvvvvvv1f.com → 干净；sid=2 vod.feifei-kan.com → 干净；
-            //     sid=3 play.ly166.com:65 → 顶部博彩横幅（已降级）。
-            //   ⚠ 站点换域名后白名单会失效 → 自动退回测速选线，但「水印黑名单」始终生效。
-            "p.bvvvvvvvvv1f.com",
-            "vod.feifei-kan.com",
-    };
+    // 【2026-10-22 P2-09】2026-10-16 取消测速择优后，原测速常量/方法、PREFERRED_HOSTS 白名单
+    //   与 isPreferredHost 均已无调用方，整段删除（历史实测结论见 git 历史与开发记录）。
+    //   当前选线口径：单线路直接采用 → 沿用上次生效 sid → 跳过烧录水印 CDN → 采用第一条干净线路。
 
     /**
      * 【2026-10-13 水印规避】已知带「博彩烧录水印」的 CDN 主机特征（host 子串匹配，小写）。
@@ -142,16 +100,11 @@ public final class AfhgrjUrlResolver {
      */
     private static final String[] WATERMARK_HOST_MARKERS = { "ly166.com" };
 
-    /**
-     * 线路测速结果短期缓存：{@code vodId + "-" + sid} → [kbps, 时间戳]。
-     * 避免同一部片每次切集都重新测速（一部 48 集的剧会白白多测 48 次）。
-     */
-    private static final Map<String, long[]> sSidSpeed = new ConcurrentHashMap<>();
-    private static final long SID_SPEED_TTL_MS = 10L * 60L * 1000L;
-
     // ------------------------------------------------------------------
     // 方案1：最近落地 m3u8 缓存（减少源7起播的串行联网）
     // ------------------------------------------------------------------
+
+    /**
 
     /** 落地缓存「免检」信任期：10 分钟内直接复用，0 次网络（起播最快路径） */
     private static final long RESOLVED_TRUST_MS = 10L * 60L * 1000L;
@@ -288,10 +241,6 @@ public final class AfhgrjUrlResolver {
         String prefix = "v" + SCHEME + vodId;
         sResolvedCache.keySet().removeIf(k -> k.startsWith(prefix));
         sResolvedCacheTs.keySet().removeIf(k -> k.startsWith(prefix));
-        // 线路测速结果一并作废：既然播放已经失败，之前测出的速率不再可信，
-        // 下次解析重新取样（否则会一直沿用一条已恶化线路的旧速率）。
-        String speedPrefix = vodId + "-";
-        sSidSpeed.keySet().removeIf(k -> k.startsWith(speedPrefix));
         // 【2026-10-16】播放失败时清除上次生效线路，让下次解析尝试下一条线路（只有源失效才自动切换）
         sWorkingSid.remove(vodId);
         LogBridge.i(TAG, "源7(影视) 已失效落地缓存 vodId=" + vodId);
@@ -732,11 +681,9 @@ public final class AfhgrjUrlResolver {
             if (nid.isEmpty()) nid = "1";
         }
 
-        // 【2026-10-10 线路兜底 + 2026-10-12 测速择优】逐条 sid 试：优先上次生效的 sid，
-        // 其次地址里带的 sid，最后按 sid 升序补全。对每条拿到的 m3u8：
-        //   ① 主机命中 PREFERRED_HOSTS → 直接采用（实测最快的 CDN，省掉测速）；
-        //   ② 否则测速：达到 SPEED_ACCEPT_KBPS 立即采用；都不达标则用测得最快的那条；
-        //   ③ 全部不可达 → 退回第一个解析出的地址（等价旧行为，不因探测误判而彻底播不了）。
+        // 【2026-10-16 取消测速择优】逐条 sid 试：优先上次生效的 sid，其次地址里带的 sid，
+        // 最后按 sid 升序补全。对每条拿到的 m3u8：沿用上次生效 sid → 跳过烧录水印 CDN
+        // （记录为兜底）→ 采用第一条干净线路；全部带水印/不可达 → 回退兜底候选。
         final int requestedSid = parseIntSafe(sid);
         final List<Integer> candidates = candidateSids(vodId, requestedSid);
         // 只有一条播放源时测速没有意义（没有可换的目标），直接采用省一次取样
@@ -803,54 +750,6 @@ public final class AfhgrjUrlResolver {
             LogBridge.i(TAG, "源7(影视) 直接采用第一条干净线路 sid=" + cand
                     + "（已取消测速）host=" + hostOf(m3u8));
             break;
-
-            // 【2026-10-16】测速机制已禁用，以下代码保留但不会执行
-            /*
-
-            // ① 白名单命中：固定主线路，禁止自动切换到其他线路
-            if (isPreferredHost(m3u8)) {
-                int kbps = cachedSpeedKbps(vodId, cand);
-                if (kbps < 0) {
-                    kbps = measureKbps(m3u8);
-                    if (kbps > 0) putSpeedKbps(vodId, cand, kbps);
-                }
-                if (kbps > 0) {
-                    bestM3u8 = m3u8;
-                    bestSid = cand;
-                    bestKbps = kbps;
-                    LogBridge.i(TAG, "源7(影视) 固定主线路（白名单 host=" + hostOf(m3u8)
-                            + "）sid=" + cand + " 实测 " + kbps + " KB/s");
-                    break;
-                }
-                LogBridge.w(TAG, "源7(影视) 主线路不可达 sid=" + cand
-                        + " host=" + hostOf(m3u8));
-                // 【2026-10-14 固定线路】主线路不可达时，不再自动切换到其他线路
-                // 直接返回 null，让上层重试/重拉
-                continue;
-            }
-
-            // ② 测速：先查短期缓存，未命中才真正取样
-            int kbps = cachedSpeedKbps(vodId, cand);
-            if (kbps < 0) {
-                kbps = measureKbps(m3u8);
-                if (kbps > 0) putSpeedKbps(vodId, cand, kbps);
-                LogBridge.i(TAG, "源7(影视) 线路测速 sid=" + cand + "（" + hostOf(m3u8)
-                        + "）= " + kbps + " KB/s");
-            } else {
-                LogBridge.i(TAG, "源7(影视) 线路测速命中缓存 sid=" + cand + " = " + kbps + " KB/s");
-            }
-            if (kbps <= 0) {
-                LogBridge.w(TAG, "源7(影视) 线路不可达 sid=" + cand + " → "
-                        + m3u8.substring(0, Math.min(110, m3u8.length())));
-                continue;
-            }
-            if (kbps > bestKbps) {
-                bestKbps = kbps;
-                bestM3u8 = m3u8;
-                bestSid = cand;
-            }
-            if (kbps >= SPEED_ACCEPT_KBPS) break;
-            */
         }
 
         // 【2026-10-13 水印规避】没有任何干净线路可用 → 回退到带水印线路（保证仍有画面）
@@ -926,6 +825,40 @@ public final class AfhgrjUrlResolver {
             lock = (prev != null) ? prev : created;
         }
         return lock;
+    }
+
+    // ------------------------------------------------------------------
+    // 【2026-10-22 L1-03】EPG 集数预取闸门（与源8 RybUrlResolver 同构）
+    // ------------------------------------------------------------------
+
+    /** 抓取中占位：同一部片同时只允许一个 EPG 预取任务（占位成功返回 true；已在抓取中返回 false）。 */
+    private static final Map<String, Object> sFetching = new ConcurrentHashMap<>();
+
+    public static boolean beginFetch(String vodId) {
+        if (TextUtils.isEmpty(vodId)) return false;
+        return sFetching.putIfAbsent(vodId, new Object()) == null;
+    }
+
+    /** 释放预取占位。 */
+    public static void endFetch(String vodId) {
+        if (!TextUtils.isEmpty(vodId)) sFetching.remove(vodId);
+    }
+
+    /**
+     * 用户「正在查看」的影片 vodId（打开详情页的那一部）。
+     *
+     * <p>EPG 预取闸门放行条件之一：用户在详情页读简介/挑线路时集数已抓好，
+     * 按下播放即刻有列表；仍然只有用户主动打开的那一部会联网（非批量预取）。
+     */
+    private static volatile String sForegroundVodId;
+
+    public static void setForegroundVodId(String vodId) {
+        sForegroundVodId = TextUtils.isEmpty(vodId) ? null : vodId;
+    }
+
+    /** 是否是「用户正在查看」的那部片（EPG 预取闸门放行条件之一） */
+    public static boolean isForeground(String vodId) {
+        return !TextUtils.isEmpty(vodId) && vodId.equals(sForegroundVodId);
     }
 
     /**
@@ -1189,131 +1122,6 @@ public final class AfhgrjUrlResolver {
         return arr;
     }
 
-    /**
-     * 线路测速：**抓真实媒体分片**抽样计时，返回折算速率（KB/s）。拿不到分片 → 0。
-     *
-     * <p>取代旧的 {@code probePlayable}（只判 2xx）。旧逻辑的致命缺陷已实测确认：
-     * {@code v.fengbao11.com} 返回 200 但只有 ~137 KB/s，会被判为"可用"并优先选中，
-     * 播放表现为「播 2 秒卡 8 秒」；而真正快的同片线路（{@code play.ly166.com} ~315 KB/s）
-     * 根本不会被尝试。
-     *
-     * <p>⚠️ 必须测「分片」而不是「m3u8 播放列表」：播放列表只有几百字节到几 KB，
-     * 取样循环会立刻 EOF，折算出来的只是「几 KB ÷ 首包耗时」，与视频带宽无关，
-     * 还可能给出离谱的巨大值把慢线误判成最快。
-     *
-     * <p>链路：m3u8 → 若是 master（含 {@code EXT-X-STREAM-INF}）先取第一个变体的播放列表 →
-     * 取第一个分片 URI → 下载最多 {@link #SPEED_PROBE_BYTES} 字节并计时。
-     */
-    private static int measureKbps(String m3u8Url) {
-        try {
-            String playlist = fetchTextShort(m3u8Url);
-            if (TextUtils.isEmpty(playlist)) return 0;
-            String segUrl;
-            if (playlist.contains("EXT-X-STREAM-INF")) {
-                // master 播放列表：第一个非注释行是「变体播放列表」，再下一层才是分片
-                String variantUrl = firstUri(playlist, m3u8Url);
-                if (variantUrl == null) return 0;
-                String variant = fetchTextShort(variantUrl);
-                if (TextUtils.isEmpty(variant)) return 0;
-                segUrl = firstUri(variant, variantUrl);
-            } else {
-                segUrl = firstUri(playlist, m3u8Url);
-            }
-            if (segUrl == null) return 0;
-            return measureDownloadKbps(segUrl);
-        } catch (Throwable t) {
-            LogBridge.w(TAG, "线路测速异常 " + t.getClass().getSimpleName() + ": " + t.getMessage());
-            return 0;
-        }
-    }
-
-    /** 短超时取文本（探活用）。避免 NetUtil 全局 10s/15s 超时把一条死线拖住整个解析。 */
-    private static String fetchTextShort(String url) {
-        java.net.HttpURLConnection conn = null;
-        java.io.InputStream in = null;
-        try {
-            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            conn.setConnectTimeout(PROBE_CONNECT_TIMEOUT_MS);
-            conn.setReadTimeout(PROBE_READ_TIMEOUT_MS);
-            conn.setInstanceFollowRedirects(true);
-            conn.setRequestProperty("User-Agent", UA);
-            conn.setRequestProperty("Referer", BASE + "/");
-            int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) return null;
-            in = conn.getInputStream();
-            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int r;
-            while ((r = in.read(buf)) > 0) {
-                bos.write(buf, 0, r);
-                if (bos.size() > 512 * 1024) break;   // 播放列表不可能这么大，防御
-            }
-            return new String(bos.toByteArray(), "UTF-8");
-        } catch (Throwable t) {
-            return null;
-        } finally {
-            if (in != null) { try { in.close(); } catch (Throwable ignored) {} }
-            if (conn != null) { try { conn.disconnect(); } catch (Throwable ignored) {} }
-        }
-    }
-
-    /** 播放列表里第一个非注释行（相对地址按 base 解析为绝对地址）；没有返回 null */
-    private static String firstUri(String playlist, String base) {
-        if (playlist == null) return null;
-        for (String raw : playlist.split("\r?\n")) {
-            String l = raw.trim();
-            if (l.isEmpty() || l.startsWith("#")) continue;
-            if (l.startsWith("http://") || l.startsWith("https://")) return l;
-            try {
-                return java.net.URI.create(base).resolve(l).toString();
-            } catch (Throwable t) {
-                return l;
-            }
-        }
-        return null;
-    }
-
-    /** 下载最多 {@link #SPEED_PROBE_BYTES} 字节并计时，返回 KB/s；采样不足/过快均判为 0 */
-    private static int measureDownloadKbps(String url) {
-        java.net.HttpURLConnection conn = null;
-        java.io.InputStream in = null;
-        try {
-            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            conn.setConnectTimeout(PROBE_CONNECT_TIMEOUT_MS);
-            conn.setReadTimeout(PROBE_READ_TIMEOUT_MS);
-            conn.setInstanceFollowRedirects(true);
-            conn.setRequestProperty("User-Agent", UA);
-            conn.setRequestProperty("Referer", BASE + "/");
-            int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) return 0;
-            in = conn.getInputStream();
-            byte[] buf = new byte[16 * 1024];
-            long start = android.os.SystemClock.elapsedRealtime();
-            long total = 0;
-            boolean eof = false;
-            while (total < SPEED_PROBE_BYTES) {
-                if (android.os.SystemClock.elapsedRealtime() - start > SPEED_PROBE_MAX_MS) break;
-                int r = in.read(buf, 0, (int) Math.min(buf.length, SPEED_PROBE_BYTES - total));
-                if (r <= 0) { eof = true; break; }
-                total += r;
-            }
-            long dt = android.os.SystemClock.elapsedRealtime() - start;
-            if (total <= 0 || dt <= 0) return 0;
-            if (total < MIN_SPEED_PROBE_BYTES && (!eof || total < 8 * 1024)) {
-                // 既不是「分片本身比取样量小」的 EOF，也没在观测窗口内读够 → 吞吐太低
-                return 0;
-            }
-            if (dt < MIN_SPEED_PROBE_MS) return 0;   // 观测过短，折算值不可信
-            return (int) (total * 1000L / 1024L / dt);
-        } catch (Throwable t) {
-            LogBridge.w(TAG, "分片测速异常 " + t.getClass().getSimpleName() + ": " + t.getMessage());
-            return 0;
-        } finally {
-            if (in != null) { try { in.close(); } catch (Throwable ignored) {} }
-            if (conn != null) { try { conn.disconnect(); } catch (Throwable ignored) {} }
-        }
-    }
-
     /** m3u8 主机名；解析失败返回空串 */
     private static String hostOf(String url) {
         if (TextUtils.isEmpty(url)) return "";
@@ -1323,16 +1131,6 @@ public final class AfhgrjUrlResolver {
         } catch (Throwable t) {
             return "";
         }
-    }
-
-    /** m3u8 是否落在 {@link #PREFERRED_HOSTS} 白名单里 */
-    private static boolean isPreferredHost(String url) {
-        String h = hostOf(url);
-        if (h.isEmpty()) return false;
-        for (String p : PREFERRED_HOSTS) {
-            if (h.equals(p) || h.endsWith("." + p)) return true;
-        }
-        return false;
     }
 
     /**
@@ -1348,30 +1146,6 @@ public final class AfhgrjUrlResolver {
             if (h.contains(m)) return true;
         }
         return false;
-    }
-
-    /** 读线路测速缓存；未命中或已过期返回 -1（0 是合法的"测过且不可达"） */
-    private static int cachedSpeedKbps(String vodId, int sid) {
-        String k = vodId + "-" + sid;
-        long[] v = sSidSpeed.get(k);
-        if (v == null) return -1;
-        if (System.currentTimeMillis() - v[1] > SID_SPEED_TTL_MS) {
-            sSidSpeed.remove(k);
-            return -1;
-        }
-        return (int) v[0];
-    }
-
-    /** 写线路测速缓存（同时清理过期项，防止 Map 无界增长） */
-    private static void putSpeedKbps(String vodId, int sid, int kbps) {
-        long now = System.currentTimeMillis();
-        if (sSidSpeed.size() > 64) {
-            // 先删过期项；若全是新鲜项（removeIf 什么都没删）则整体清空 —— 保证内存有界，
-            // 代价只是下次重新测速，不影响正确性。
-            sSidSpeed.entrySet().removeIf(e -> now - e.getValue()[1] > SID_SPEED_TTL_MS);
-            if (sSidSpeed.size() > 128) sSidSpeed.clear();
-        }
-        sSidSpeed.put(vodId + "-" + sid, new long[]{kbps, now});
     }
 
     /** 从播放页 HTML 的 {@code player_aaaa} JSON 中取 {@code url} 字段，并还原 {@code \/} */

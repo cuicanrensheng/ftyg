@@ -58,6 +58,10 @@ public final class SecurityCore {
             sLoaded = true;
             LogBridge.i(TAG, "libtvlive_security.so 加载成功");
             LogBridge.i(TAG, "SECURITY_INIT: Native SO loaded OK");
+            // 【2026-10-22 I1-07】把当前证书 SHA-256 绑给 native：
+            //   之后 AES 工作密钥与 secstore 常量都由「签名哈希 + 内置片段」派生，
+            //   签名不匹配时解出的是乱码（而不是靠可被 patch 的 killProcess 拦）。
+            tryBindSignature();
         } catch (Throwable t) {
             sLoaded = false;
             LogBridge.w(TAG, "libtvlive_security.so 加载失败: " + t.getMessage());
@@ -67,6 +71,63 @@ public final class SecurityCore {
 
     public static boolean isLoaded() {
         return sLoaded;
+    }
+
+    // ===== 【2026-10-22 I1-07】签名 → native 绑定（密钥派生用） =====
+    // SecurityCore.init() 是无参静态方法，拿不到 Context；Application 会在最早时机
+    // 调 setAppContext()，之后任何一次 init()/取常量都会尝试绑定，绑定成功后不再重复。
+    private static volatile Context sCtx = null;
+    private static volatile boolean sSigBound = false;
+
+    public static void setAppContext(Context ctx) {
+        if (ctx != null && sCtx == null) {
+            try { sCtx = ctx.getApplicationContext(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** 把当前证书 SHA-256 绑定给 native；未加载/无 context/已绑定都是无操作。 */
+    private static void tryBindSignature() {
+        if (sSigBound || !sLoaded) return;
+        Context c = sCtx;
+        if (c == null) return;
+        try {
+            byte[] sha = currentSignatureSha256(c);
+            if (sha == null || sha.length != 32) return;
+            nativeBindSignature(sha);
+            sSigBound = true;
+            // 只打印布尔结果，不打印哈希本身（哈希是公开的证书摘要，但没必要进日志）
+            // 探针：绑定后再取一个常量，看它是否还是合法形态（http 开头）。
+            // 只为排障：不打印内容本身，避免常量再次进日志。
+            String probe = null;
+            try { probe = secureString(C_LIVE_1); } catch (Throwable ignored) {}
+            boolean okForm = probe != null && probe.startsWith("http");
+            LogBridge.i(TAG, "签名哈希已绑定 native，校验结果=" + (nativeSignatureOk() ? "匹配" : "不匹配")
+                    + "，常量污染=" + (nativePoisoned() == 1 ? "开启" : "关闭")
+                    + "，常量形态=" + (okForm ? "正常" : "异常"));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 取当前 APK 签名证书的 SHA-256（32 字节）；失败返回 null。 */
+    private static byte[] currentSignatureSha256(Context appCtx) {
+        try {
+            PackageManager pm = appCtx.getPackageManager();
+            PackageInfo pi;
+            Signature[] sigs;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pi = pm.getPackageInfo(appCtx.getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+                sigs = (pi.signingInfo != null && pi.signingInfo.hasMultipleSigners())
+                        ? pi.signingInfo.getApkContentsSigners()
+                        : (pi.signingInfo != null ? pi.signingInfo.getSigningCertificateHistory() : null);
+            } else {
+                pi = pm.getPackageInfo(appCtx.getPackageName(), PackageManager.GET_SIGNATURES);
+                sigs = pi.signatures;
+            }
+            if (sigs == null || sigs.length == 0) return null;
+            return MessageDigest.getInstance("SHA-256").digest(sigs[0].toByteArray());
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     public static void antiDebug() {
@@ -150,6 +211,19 @@ public final class SecurityCore {
             return null;
         }
         try { return nativeAesGcmDecrypt(key, iv, ctAndTag, aad); } catch (Throwable t) { return null; }
+    }
+
+    /**
+     * X25519 (RFC 7748) 标量乘：out = X25519(scalar, uPoint)，两者均须 32 字节。
+     * scalar 在 native 内钳制（k[0]&amp;=248; k[31]&amp;=127; k[31]|=64）。
+     * 不可用或参数非法返回 null。
+     */
+    public static byte[] x25519(byte[] scalar, byte[] uPoint) {
+        if (!sLoaded || scalar == null || scalar.length != 32
+                || uPoint == null || uPoint.length != 32) {
+            return null;
+        }
+        try { return nativeX25519(scalar, uPoint); } catch (Throwable t) { return null; }
     }
 
     /**
@@ -256,6 +330,7 @@ public final class SecurityCore {
     public static final int C_VODP_ACE     = 24;   // 175.24.181.180:5000 /api/jiexi（Ace）
     public static final int C_VODP_YKTX    = 25;   // 118.107.11.4 /jx（官方④ YKTX）
     public static final int C_VODP_DMM     = 26;   // 49.233.180.127:7788/dmm.php（动漫专线 ZY-anime_）
+    public static final int C_BUGLY_APP_ID = 27;   // 腾讯 Bugly App ID（I1-07 卫生项：dex 不再有明文）
 
     /**
      * 取加密常量明文。SO 不可用时返回 null（调用方按「该源不可用」降级）。
@@ -266,6 +341,7 @@ public final class SecurityCore {
             try { init(); } catch (Throwable ignored) {}
         }
         if (!sLoaded) return null;
+        tryBindSignature();
         try { return nativeConst(id); } catch (Throwable t) { return null; }
     }
 
@@ -314,12 +390,19 @@ public final class SecurityCore {
     private static native byte[] nativeHkdfSha256(byte[] ikm, byte[] salt, byte[] info, int outLen);
     private static native byte[] nativeAesGcmEncrypt(byte[] key, byte[] iv, byte[] plain, byte[] aad);
     private static native byte[] nativeAesGcmDecrypt(byte[] key, byte[] iv, byte[] ctAndTag, byte[] aad);
+    // 【2026-10-21】X25519 (RFC 7748) 标量乘，供 NbMovie 密钥交换；
+    // scalar 内部按 RFC 钳制，uPoint 高位屏蔽，与 Go curve25519.X25519 对齐。
+    private static native byte[] nativeX25519(byte[] scalar, byte[] uPoint);
     private static native int  nativeSelfCheck();
     private static native int  nativeTextLen();
     private static native int  nativeLastSelfCheck();
 
     // 【2026-10-13 SO 内建】敏感常量仓库（cpp/secstore.cpp）与正向加密
     private static native String nativeConst(int id);
+    // 【2026-10-22 I1-07】签名哈希绑定 / 判定：期望值只在 .so 里，dex 不再有明文
+    private static native void nativeBindSignature(byte[] sigSha256);
+    private static native boolean nativeSignatureOk();
+    private static native int nativePoisoned();
     private static native byte[] nativeEncrypt(byte[] plain);
 
     public static class SecurityGuard {
@@ -1371,25 +1454,57 @@ public final class SecurityCore {
         }
     }
 
+    /**
+     * 【2026-10-21 P0 修复（I1-01）】哈希口径：APK 内全部 classes*.dex（classes.dex、
+     * classes2.dex…按数字序）依次喂入同一个 SHA-256。原实现只哈希 classes.dex，
+     * multiDex 的 classes2+ 被篡改检测不到；构建侧（app/build.gradle 注入任务）
+     * 必须用同一口径计算期望值。
+     */
     public static byte[] computeDexHash(android.content.Context ctx) {
         try {
             String apkPath = ctx.getPackageManager()
                     .getApplicationInfo(ctx.getPackageName(), 0).sourceDir;
-            java.util.zip.ZipFile zf = new java.util.zip.ZipFile(apkPath);
-            java.util.zip.ZipEntry entry = zf.getEntry("classes.dex");
-            if (entry == null) { zf.close(); return null; }
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            java.io.InputStream is = zf.getInputStream(entry);
-            byte[] buf = new byte[64 * 1024];
-            int n;
-            while ((n = is.read(buf)) > 0) {
-                md.update(buf, 0, n);
+            try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(apkPath)) {
+                java.util.List<java.util.zip.ZipEntry> dexEntries = new java.util.ArrayList<>();
+                java.util.Enumeration<? extends java.util.zip.ZipEntry> en = zf.entries();
+                while (en.hasMoreElements()) {
+                    java.util.zip.ZipEntry e = en.nextElement();
+                    if (e != null && !e.isDirectory()
+                            && e.getName().matches("classes(\\d+)?\\.dex")) {
+                        dexEntries.add(e);
+                    }
+                }
+                if (dexEntries.isEmpty()) return null;
+                dexEntries.sort((a, b) -> {
+                    int ia = dexIndexOf(a.getName());
+                    int ib = dexIndexOf(b.getName());
+                    if (ia != ib) return Integer.compare(ia, ib);
+                    return a.getName().compareTo(b.getName());
+                });
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] buf = new byte[64 * 1024];
+                for (java.util.zip.ZipEntry e : dexEntries) {
+                    try (java.io.InputStream is = zf.getInputStream(e)) {
+                        int n;
+                        while ((n = is.read(buf)) > 0) {
+                            md.update(buf, 0, n);
+                        }
+                    }
+                }
+                return md.digest();
             }
-            is.close();
-            zf.close();
-            return md.digest();
         } catch (Throwable t) {
             return null;
+        }
+    }
+
+    /** classes.dex → 0；classes2.dex → 2；无法解析时排到最后 */
+    private static int dexIndexOf(String name) {
+        try {
+            String num = name.substring("classes".length(), name.length() - ".dex".length());
+            return num.isEmpty() ? 0 : Integer.parseInt(num);
+        } catch (Exception e) {
+            return Integer.MAX_VALUE;
         }
     }
 }
@@ -1775,9 +1890,22 @@ public final class SecurityCore {
     private static final String TAG = "SecChk";
     private static final String EXPECTED_PKG = "com.tv.live";
 
-    private static final String EXPECTED_DEX_B64 = "REPLACE_WITH_DEX_SHA256_BASE64";
+    // 【2026-10-22 I1-07】期望签名不再以 Base64 明文留在 dex 里（原来 strings 一下就能拿到，
+    //   拿到后重签自己的证书也能过校验）。现在只存在于 libtvlive_security.so，
+    //   Java 侧仅通过 nativeSignatureOk() 取判定结果。
 
-    private static final String EXPECTED_SIG_BASE64 = "xQdedEk3xbKAsqg0WqDdH0qmjiYAkARaVVtrTVXdQAQ=";
+    // 【2026-10-21 P0 修复（I1-01）】DEX 期望哈希改由构建流水线注入 assets/dexhash.png
+    //   （assembleRelease 后处理：计算 APK 内 classes*.dex 的 SHA-256 → Base64，
+    //   原地改写资源条目 → apksigner 重签名）。原硬编码常量 EXPECTED_DEX_B64 长期为
+    //   占位符 "REPLACE_WITH_DEX_SHA256_BASE64"，verifyDexIntegrity 命中即 return true，
+    //   校验完全空转；且该值若写死在 dex 里会随 dex 变化而失效（先有蛋还是先有鸡），
+    //   放 assets 可由打包后处理注入，篡改则被签名校验（verifySignature）覆盖。
+    //   ⚠️ 扩展名用 .png 而非 .txt：本工程 AGP 版本的 packagingOptions.resources 无
+    //   noCompress 入口，而 .png 默认 STORED 进包，注入任务才能等长原地改写（压缩流
+    //   改写会改变长度、破坏 zip 结构）。文件内容是 44 字节 ASCII，不是真图片。
+    private static final String DEX_HASH_ASSET = "dexhash.png";
+
+    private static volatile String sExpectedDexB64;
 
     private SecurityCheck() {}
 
@@ -1836,6 +1964,11 @@ public final class SecurityCore {
             } catch (Throwable t) {
                 LogBridge.w(TAG, "篡改上报失败: " + t.getMessage());
             }
+            // 【2026-10-21 P0 修复（I1-01）】与签名校验口径对齐：dex 不匹配即阻断。
+            //   误报风险评估：classes.dex 位于已签名 APK 内，安装后不可变；
+            //   能被改写的包必然签名也已失效（先被 verifySignature 拦下）。
+            //   期望值未注入（占位符/资源缺失）时 verifyDexIntegrity 返回 true，不会误伤。
+            toastAndExit(ctx, "应用完整性校验失败，APK 被修改");
             allPassed = false;
         }
 
@@ -1871,11 +2004,25 @@ public final class SecurityCore {
             }
 
             byte[] shaBytes = MessageDigest.getInstance("SHA-256").digest(certBytes);
-            String currentB64 = Base64.encodeToString(shaBytes, Base64.NO_WRAP);
-            LogBridge.i(TAG, "当前签名 SHA256=" + currentB64);
 
-            if (!EXPECTED_SIG_BASE64.equals(currentB64)) {
-                LogBridge.e(TAG, "❌ 签名校验失败! expected=" + EXPECTED_SIG_BASE64 + " current=" + currentB64);
+            // 【2026-10-22 I1-07】顺手补一次绑定（幂等）：绑定成功后 AES 工作密钥与
+            //   secstore 常量都由「签名哈希 + 内置片段」派生，改包会解出乱码。
+            try {
+                if (shaBytes.length == 32) {
+                    nativeBindSignature(shaBytes);
+                    sSigBound = true;
+                }
+            } catch (Throwable ignored) {}
+
+            // 【2026-10-22 I1-07】只打印前 12 个字符：完整哈希会把「期望值」原样写进 9527 日志
+            //   （实测 release 日志里出现过完整 Base64），等于把比对基准重新公开，抵消了
+            //   "期望值只存在于 .so" 的改造。前缀足够区分包是否被换签名。
+            String sigB64 = Base64.encodeToString(shaBytes, Base64.NO_WRAP);
+            LogBridge.i(TAG, "当前签名 SHA256=" + sigB64.substring(0, Math.min(12, sigB64.length())) + "…");
+
+            boolean ok = nativeSignatureOk();
+            if (!ok) {
+                LogBridge.e(TAG, "❌ 签名校验失败：与 .so 内置期望不一致（加密常量已失效）");
                 toastAndExit(appCtx, "签名校验失败，APK 被修改");
                 return false;
             }
@@ -1887,27 +2034,50 @@ public final class SecurityCore {
         }
     }
 
+    /**
+     * 【2026-10-21 P0 修复（I1-01）】期望 DEX 哈希从 assets/dexhash.png 读取（构建流水线注入）。
+     * Base64(SHA-256) 恒为 44 字符且以 '=' 结尾；占位符/缺失/格式异常一律视为「未配置」，
+     * 返回 true 不阻断（本地包、未走注入流水线的包不受影响），但打醒目告警。
+     */
+    private static String expectedDexB64(Context ctx) {
+        if (sExpectedDexB64 != null) return sExpectedDexB64;
+        String v = null;
+        try (java.io.InputStream is = ctx.getAssets().open(DEX_HASH_ASSET);
+             java.io.BufferedReader r = new java.io.BufferedReader(
+                     new java.io.InputStreamReader(is, "UTF-8"))) {
+            String line = r.readLine();
+            if (line != null) v = line.trim();
+        } catch (Exception ignored) {
+            // 资源不存在：未配置
+        }
+        sExpectedDexB64 = v;
+        return v;
+    }
+
     private static boolean verifyDexIntegrity(Context appCtx) {
 
-        if ("REPLACE_WITH_DEX_SHA256_BASE64".equals(EXPECTED_DEX_B64)) {
+        String expected = expectedDexB64(appCtx);
+        if (expected == null || expected.isEmpty() || !expected.endsWith("=")) {
+            // 【2026-10-21 P0 修复（I1-01）】原逻辑：常量占位符命中即 return true，且
+            //   校验体内还嵌了一层重复的占位符判断（死分支）。现改为读注入的期望值，
+            //   未配置时不阻断但告警（i 级，release 9527 通道可见）。
+            LogBridge.w(TAG, "⚠️ DEX 完整性校验未配置（assets/" + DEX_HASH_ASSET
+                    + " 未注入真实值），当前包不做 dex 校验");
             return true;
         }
         try {
             byte[] hash = IntegrityCheck.computeDexHash(appCtx);
-            if (hash == null) return true;
-            String currentB64 = Base64.encodeToString(hash, Base64.NO_WRAP);
-            LogBridge.i(TAG, "EXPECTED_DEX_SHA256=" + currentB64);
-            if (!"REPLACE_WITH_DEX_SHA256_BASE64".equals(EXPECTED_DEX_B64)) {
-
-                if (!EXPECTED_DEX_B64.equals(currentB64)) {
-                    LogBridge.e(TAG, "dex hash 不匹配！expected=" + EXPECTED_DEX_B64 + " current=" + currentB64);
-                    return false;
-                }
-                LogBridge.i(TAG, "✅ dex 完整性校验通过");
-            } else {
-
-                LogBridge.d(TAG, "dex hash (人工对比) = " + currentB64);
+            if (hash == null) {
+                // APK 结构异常取不到 dex：不阻断（可用性优先），但留下痕迹
+                LogBridge.w(TAG, "dex hash 计算失败（APK 内无 classes*.dex?），跳过校验");
+                return true;
             }
+            String currentB64 = Base64.encodeToString(hash, Base64.NO_WRAP);
+            if (!expected.equals(currentB64)) {
+                LogBridge.e(TAG, "❌ dex hash 不匹配！expected=" + expected + " current=" + currentB64);
+                return false;
+            }
+            LogBridge.i(TAG, "✅ dex 完整性校验通过（classes*.dex SHA-256 匹配）");
             return true;
         } catch (Exception e) {
             LogBridge.e(TAG, "verify dex error", e);

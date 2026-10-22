@@ -42,10 +42,6 @@ public final class ChanxiangM3u8DataSource implements DataSource {
     @Nullable private DataSpec dataSpec;
 
     public ChanxiangM3u8DataSource(DataSource upstream) {
-        this(upstream, false);
-    }
-
-    public ChanxiangM3u8DataSource(DataSource upstream, boolean stripAds) {
         this.upstream = upstream;
     }
 
@@ -143,20 +139,14 @@ public final class ChanxiangM3u8DataSource implements DataSource {
     /** 工厂：包装任意上游 DataSource.Factory，仅对 m3u8 做归一化。 */
     public static final class Factory implements DataSource.Factory {
         private final DataSource.Factory upstreamFactory;
-        private final boolean stripAds;
 
         public Factory(DataSource.Factory upstreamFactory) {
-            this(upstreamFactory, false);
-        }
-
-        public Factory(DataSource.Factory upstreamFactory, boolean stripAds) {
             this.upstreamFactory = upstreamFactory;
-            this.stripAds = stripAds;
         }
 
         @Override
         public DataSource createDataSource() {
-            return new ChanxiangM3u8DataSource(upstreamFactory.createDataSource(), stripAds);
+            return new ChanxiangM3u8DataSource(upstreamFactory.createDataSource());
         }
     }
 }

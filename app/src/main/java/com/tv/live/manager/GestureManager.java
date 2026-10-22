@@ -16,6 +16,15 @@ public class GestureManager {
 
     private boolean isLongPressTriggered = false;
 
+    /**
+     * 【2026-10-22 L1-15】具名 Runnable 字段：原 onLongOk 用
+     * {@code removeCallbacksAndMessages(null)} 清场，会把同 handler 上 onPrev/onNext 挂的
+     * 「isGestureLocked 复位」一并清掉 → 手势锁水不释放，之后上下滑永久失效。
+     * 改为对具名 Runnable 精确 remove/post，两条复位互不干扰。
+     */
+    private final Runnable mUnlockGestureRunnable = () -> isGestureLocked = false;
+    private final Runnable mClearLongPressRunnable = () -> isLongPressTriggered = false;
+
     public GestureManager(MainActivity activity) {
         this.activity = activity;
     }
@@ -36,8 +45,9 @@ public class GestureManager {
                     return;
                 }
                 isLongPressTriggered = true;
-                mainHandler.removeCallbacksAndMessages(null);
-                mainHandler.postDelayed(() -> isLongPressTriggered = false, DEBOUNCE_DELAY_MS);
+                // 【2026-10-22 L1-15】只清自己的长按复位（勿再 removeCallbacksAndMessages(null)）
+                mainHandler.removeCallbacks(mClearLongPressRunnable);
+                mainHandler.postDelayed(mClearLongPressRunnable, DEBOUNCE_DELAY_MS);
 
                 activity.openSettings();
             }
@@ -62,7 +72,9 @@ public class GestureManager {
                     } else {
                         activity.playPrev();
                     }
-                    mainHandler.postDelayed(() -> isGestureLocked = false, DEBOUNCE_DELAY_MS);
+                    // 【2026-10-22 L1-15】具名 Runnable：重复触发时先摘旧复位再挂新的
+                    mainHandler.removeCallbacks(mUnlockGestureRunnable);
+                    mainHandler.postDelayed(mUnlockGestureRunnable, DEBOUNCE_DELAY_MS);
                 }
             }
 
@@ -78,7 +90,9 @@ public class GestureManager {
                     } else {
                         activity.playNext();
                     }
-                    mainHandler.postDelayed(() -> isGestureLocked = false, DEBOUNCE_DELAY_MS);
+                    // 【2026-10-22 L1-15】具名 Runnable：同上
+                    mainHandler.removeCallbacks(mUnlockGestureRunnable);
+                    mainHandler.postDelayed(mUnlockGestureRunnable, DEBOUNCE_DELAY_MS);
                 }
             }
         });

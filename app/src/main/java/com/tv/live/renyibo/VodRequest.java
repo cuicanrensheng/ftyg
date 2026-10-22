@@ -13,23 +13,13 @@ import org.json.JSONObject;
  * <p><b>⛔ 本类不联网</b>，只生成 JSON 明文。加密与发送由
  * {@link RenYiBoVodSourceLoader} 在「默认关闭开关 + 格式锁定守卫」后方可执行。
  *
- * <p><b>⚠️ 未确证项（D5）</b>：已确证 dm_list 首页/分页用 {@code group_key}；
- * 分类列表（typeId）与 {@code vod_detail}/{@code play} 的参数字段名
- * <b>没有真实抓包样例</b>。下列类别方法按最可能结构给出骨架，标注
- * {@code formatUnlocked()} 为 {@code false}，即<b>不会真正发送</b>，待授权一次
- * 真机请求后锁定字段再启用。
+ * <p><b>⚠️ 历史未确证项（D5）</b>：分类列表（typeId）与 {@code vod_detail}/{@code play}
+ * 的参数字段名曾无真实抓包样例。【2026-10-12 授权实测】已完成真机核对并锁定字段，
+ * 原 {@code formatUnlocked()} 死闸门（无任何检查点）已于 2026-10-22 删除，见 S1-07。
  */
 public final class VodRequest {
 
     private VodRequest() {}
-
-    /** 请求明文是否已锁定（授权真机核对后置 true）。置 false 则任何请求都不得发送。 */
-    private static volatile boolean FORMAT_UNLOCKED = false;
-
-    /** 仅供调试/迁移时输出；默认 false，保持红线。 */
-    public static boolean formatUnlocked() {
-        return FORMAT_UNLOCKED;
-    }
 
     /** 首页推荐 / 分类分页（dm_list）。已确证：首页用 group_key 拉取分页。 */
     public static String dmList(String groupKey, int page) {

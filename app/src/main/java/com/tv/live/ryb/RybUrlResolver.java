@@ -58,7 +58,8 @@ public final class RybUrlResolver {
      * 320 个频道就是 320 次请求/次刷新，属于对站点的批量请求，不做。
      * 折中：抓到一次就<b>落盘</b>，之后 EPG 直接从磁盘读 → 第二次起零请求。
      */
-    private static final String DISK_FILE = "ryb8_episodes.json";
+    /** 【2026-10-22 S1-03】磁盘缓存带版本号：条目结构/口径变更时改名冷落旧缓存 */
+    private static final String DISK_FILE = "ryb8_episodes_v2.json";
     /** 磁盘条目有效期 24h（CDN 直链可能轮换，过期后重抓一次） */
     private static final long DISK_TTL_MS = 24L * 60L * 60L * 1000L;
     /** 解析结果（m3u8）缓存：10 分钟 */
@@ -332,9 +333,25 @@ public final class RybUrlResolver {
     }
 
     /** 异步写盘（限流：30 秒内只写一次，避免频繁 IO）。 */
+    /** 【2026-10-22 S1-06】写盘时间窗：注释自 2026-10-16 起承诺「30 秒内只写一次」但实际未实现，本次补齐 */
+    private static final long SAVE_MIN_INTERVAL_MS = 30_000L;
+    /** 上次写盘发起时间（时间窗判定用） */
+    private static volatile long sLastSaveAtMs = 0L;
+    /** 写盘进行中标记：进行中的调用直接合并（在写的那次会序列化当时的最新内存状态） */
+    private static volatile boolean sSaving = false;
+
     private static void saveDiskAsync() {
         Context ctx = sAppCtx;
         if (ctx == null) return;
+        // 【2026-10-22 S1-06】30s 时间窗 + 在写合并：窗口内的重复调用跳过（数据仍在内存缓存，
+        //   下次解析成功即补落盘）；写盘进行中的调用同理合并，避免多线程抢同一文件。
+        long now = System.currentTimeMillis();
+        if (sSaving || now - sLastSaveAtMs < SAVE_MIN_INTERVAL_MS) {
+            LogBridge.d(TAG, "集数落盘合并/跳过（30s 窗口内或写盘进行中）");
+            return;
+        }
+        sSaving = true;
+        sLastSaveAtMs = now;
         new Thread(() -> {
             synchronized (sDiskLock) {
                 try {
@@ -371,6 +388,9 @@ public final class RybUrlResolver {
                     LogBridge.i(TAG, "集数磁盘缓存已写入 " + sInfoCache.size() + " 部");
                 } catch (Throwable t) {
                     LogBridge.w(TAG, "集数磁盘缓存写入失败 " + t.getMessage());
+                } finally {
+                    // 【2026-10-22 S1-06】无论成败都释放在写标记，否则一次异常后永久合并跳过
+                    sSaving = false;
                 }
             }
         }, "Ryb-EpsSave").start();
@@ -494,9 +514,9 @@ public final class RybUrlResolver {
     public static void setSelectedLine(String slug, int idx) {
         if (TextUtils.isEmpty(slug) || idx < 0) return;
         sSelectedLine.put(slug, idx);
-        // 线路变了，已解析地址不再适用
+        // 线路变了，已解析地址不再适用（精确匹配 slug+"@"，防 abc/abcd 误删他片）
         for (String key : new ArrayList<>(sUrlCache.keySet())) {
-            if (key.startsWith(slug)) sUrlCache.remove(key);
+            if (key.startsWith(slug + "@")) sUrlCache.remove(key);
         }
         LogBridge.i(TAG, "线路切换 slug=" + slug + " → 第" + (idx + 1) + "条");
     }
@@ -607,12 +627,74 @@ public final class RybUrlResolver {
         return url;
     }
 
+    /**
+     * 【2026-10-22 源8·失效自动换线】当前线路播放彻底失败后调用：
+     * 从当前线路轮转遍历该片所有线路，逐条 resolve 探活，返回第一个可用的
+     * <b>待解析地址</b>（保持当前集；集数超出新线路范围时由 {@link #resolve} 夹取末集）。
+     *
+     * <p>与手动切线路（{@link #setSelectedLine}）的区别：手动切只改选区不探活；
+     * 本方法在后台逐条试解析，成功才切换并返回，避免盲跳到另一条死线。
+     * 调用方（TVPlayerManager.autoRetry 兜底链）已在入口作废本片缓存，
+     * 这里的 {@link #info(String)} 必然联网重抓最新线路表。
+     *
+     * @param rybUrl 当前播放的 {@code ryb://<slug>} 或 {@code ryb://<slug>@<src>-<ep>}
+     * @return 可播的 {@code ryb://<slug>@<新线路>-<当前集>}；无可换线路/全部失败返回 null
+     */
+    public static String tryNextLineAuto(String rybUrl) {
+        if (TextUtils.isEmpty(rybUrl)) return null;
+        String slug = slugOf(rybUrl);
+        if (TextUtils.isEmpty(slug)) return null;
+
+        // 当前线路/当前集：优先取 URL 显式携带值（EPG 切集时带 @src-ep），否则回落选区/记忆集
+        int cur = getSelectedLine(slug);
+        int ep = getCurrentEpisode(slug);
+        if (ep < 0) ep = 0;
+        String rest = rybUrl.substring(SCHEME.length());
+        int at = rest.indexOf('@');
+        if (at >= 0) {
+            String[] p = rest.substring(at + 1).split("-");
+            if (p.length >= 2) {
+                try {
+                    int src = Integer.parseInt(p[0].trim()) - 1;
+                    int epv = Integer.parseInt(p[1].trim()) - 1;
+                    if (src >= 0) cur = src;
+                    if (epv >= 0) ep = epv;
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+
+        Info info = info(slug);
+        if (info == null || info.lineCount() <= 1) {
+            LogBridge.w(TAG, "失效换线：无其他线路可换 slug=" + slug
+                    + (info == null ? "（详情获取失败）" : "（仅 " + info.lineCount() + " 条）"));
+            return null;
+        }
+        int size = info.lineCount();
+        for (int step = 1; step < size; step++) {
+            int idx = (cur + step) % size;
+            String raw = SCHEME + slug + "@" + (idx + 1) + "-" + (ep + 1);
+            LogBridge.i(TAG, "失效换线：试第" + (idx + 1) + "条线路 slug=" + slug + " → " + raw);
+            String url = resolve(raw);
+            if (!TextUtils.isEmpty(url)) {
+                // 直接写选区（不清缓存：刚解析出的新 key 要保留，供同片后续集复用）
+                sSelectedLine.put(slug, idx);
+                LogBridge.i(TAG, "失效换线成功 slug=" + slug + " 第" + (cur + 1)
+                        + "条 → 第" + (idx + 1) + "条");
+                return raw;
+            }
+            LogBridge.w(TAG, "失效换线：第" + (idx + 1) + "条线路不可用 slug=" + slug);
+        }
+        LogBridge.w(TAG, "失效换线失败：所有线路均不可用 slug=" + slug);
+        return null;
+    }
+
     /** 播放失败时作废本片的地址缓存 */
     public static void invalidateByUrl(String rybUrl) {
         String slug = slugOf(rybUrl);
         if (TextUtils.isEmpty(slug)) return;
         for (String key : new ArrayList<>(sUrlCache.keySet())) {
-            if (key.startsWith(slug)) sUrlCache.remove(key);
+            if (key.startsWith(slug + "@")) sUrlCache.remove(key);
         }
         sInfoCache.remove(slug);
         LogBridge.i(TAG, "已作废缓存 slug=" + slug);

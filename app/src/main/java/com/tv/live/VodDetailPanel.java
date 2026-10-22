@@ -19,6 +19,7 @@ import com.tv.live.afhgrj.AfhgrjUrlResolver;
 import com.tv.live.util.ChannelLogoLoader;
 import com.tv.live.util.LogBridge;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 /**
@@ -97,6 +98,11 @@ public class VodDetailPanel {
     private EpgManager.OnEpgDataReadyListener epgListener;
 
     private boolean showing;
+    /** 【2026-10-22 O3】hide 后正在淡出、尚未移除的面板（供快速重开时摘除） */
+    private FrameLayout fadingPanel;
+    /** 【2026-10-22 O3】「当前生效实例」唯一事实源：宿主每次 openVodDetail 都 new 面板，
+     *  实例级 epoch 管不到跨实例回调；WeakReference 防持有已销毁 Activity 的实例。 */
+    private static WeakReference<VodDetailPanel> sCurrent;
 
     public VodDetailPanel(Activity ctx, FrameLayout root, Channel channel,
                           int currentEpisodeIdx, Host host) {
@@ -125,6 +131,11 @@ public class VodDetailPanel {
     public void show(boolean animate) {
         if (root == null || channel == null) return;
         if (showing) return;
+        // 【2026-10-22 O3】hide 后 120ms 淡出未结束时快速重开：先摘掉淡出中的旧面板
+        // （cancel + 立即移除，消除双面板叠层与焦点互抢），再把 sCurrent 指向本实例，
+        // 旧实例的 withEndAction 因 sCurrent 已不指向它而不再回调 onDetailClose。
+        dismissFadingOutPanel();
+        sCurrent = new WeakReference<>(this);
         build();
         root.addView(panel, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -174,11 +185,38 @@ public class VodDetailPanel {
         unregisterEpgListener();
         final FrameLayout p = panel;
         panel = null;
+        fadingPanel = p;
         p.animate().alpha(0f).setDuration(120).withEndAction(() -> {
+            fadingPanel = null;
+            // removeView 无条件执行（防旧面板残留叠层）；仅当本实例仍是「当前生效实例」时
+            // 才回调宿主关闭 —— hide 后 120ms 内又 show 了新面板时 sCurrent 已指向新实例，
+            // 宿主并未真正回到列表，此时回调 onDetailClose 会清空宿主引用并抢焦点。
             if (root != null && p.getParent() == root) root.removeView(p);
-            if (host != null) host.onDetailClose();
+            if (sCurrent != null && sCurrent.get() == VodDetailPanel.this) {
+                sCurrent = null;
+                if (host != null) host.onDetailClose();
+            }
         }).start();
         LogBridge.i(TAG, "详情页关闭：" + channel.getName());
+    }
+
+    /**
+     * 【2026-10-22 O3】摘除仍在淡出动画中的上一个详情页面板（若有）。
+     * 先切断 sCurrent 指向再 cancel：cancel 会同步触发旧 withEndAction，届时
+     * sCurrent 已不指向旧实例 → 不回调 onDetailClose，仅完成 removeView。
+     */
+    private void dismissFadingOutPanel() {
+        VodDetailPanel prev = (sCurrent != null) ? sCurrent.get() : null;
+        if (prev == null || prev == this) return;
+        sCurrent = null;
+        FrameLayout fading = prev.fadingPanel;
+        if (fading != null) {
+            fading.animate().cancel();
+            if (prev.root != null && fading.getParent() == prev.root) prev.root.removeView(fading);
+            prev.fadingPanel = null;
+        }
+        prev.showing = false;
+        LogBridge.i(TAG, "详情页快速重开：摘除淡出中的旧面板");
     }
 
     /** 注销 EPG 就绪监听（详情页关闭 / 已拿到集数时） */

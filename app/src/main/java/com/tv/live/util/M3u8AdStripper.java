@@ -1729,18 +1729,23 @@ public class M3u8AdStripper {
         "/pubmatic/", "/openx/", "/rubicon/", "/criteo/",
         "/taboola/", "/outbrain/", "/zedo/", "/exosrv/",
         // 赌博/博彩广告（澳门新葡京等）
+        // 【2026-10-22 P2-06】删裸 "macau"：合法域名/路径含 macau 即被判广告（误杀），
+        //   保留 macau888/xinpujing 等强特征词
         "801801", "xinpujing", "pujing", "macau888",
-        "aomen", "duchang", "bocai", "macau", "casino",
+        "aomen", "duchang", "bocai", "casino",
         "bet365", "bet9", "ag88", "ky88", "gd88",
         "澳门", "新葡京", "博彩", "赌博", "赌场",
         // 常见广告域名关键词
-        ".ads.", ".ad.", "-ads.", "-ad.",
+        // 【2026-10-22 P2-06】删 ".ad." / "-ad."：合法 URL 含 available/-ad. 等子串即误杀；
+        //   路径形态 "/ad/"（上方标准广告路径）已覆盖路径广告，域名形态由 DnsAdBlocker 域名黑名单覆盖
+        ".ads.", "-ads.",
         "adservice", "adsdk", "adsdk", "adconfig",
         "adcolony", "chartboost", "unityads", "vungle",
         "applovin", "ironsrc", "mopub", "admob",
         // SCTE-35 广告标记相关
+        // 【2026-10-22 P2-06】删 "avail"：HLS 规范里 #EXT-X-... 的可用性描述/合法文件名大量含 avail
         "cue-out", "cue-in", "scte35", "scte-35",
-        "ad-marker", "admarker", "avail"
+        "ad-marker", "admarker"
     };
 
     // SCTE-35 标准广告标记（HLS 中用于标识广告段）

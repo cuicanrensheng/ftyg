@@ -120,6 +120,61 @@ public class ChannelPanelController {
     private OnChannelChangeListener channelChangeListener;
     private OnPanelStateListener panelStateListener;
 
+    /**
+     * 【2026-10-22 L1-10】EPG 就绪监听提为字段（原为构造函数里的匿名类，只注册不注销）：
+     * release() 成对 unregister，避免面板销毁后回调仍持 panelLayout/各 Manager 引用。
+     * 注册仍在构造函数（与字段声明分离，保证先赋值后注册）。
+     */
+    private final com.tv.live.EpgManager.OnHuyaEpgReadyListener huyaEpgReadyListener =
+            new com.tv.live.EpgManager.OnHuyaEpgReadyListener() {
+                @Override
+                public void onHuyaEpgReady(com.tv.live.Channel readyChannel) {
+                    if (readyChannel == null) return;
+                    if (panelLayout == null) return;
+                    if (channelSourceList == null || currentPlayIndex < 0
+                            || currentPlayIndex >= channelSourceList.size()) return;
+                    com.tv.live.Channel nowPlaying = channelSourceList.get(currentPlayIndex);
+                    if (nowPlaying == null) return;
+
+                    boolean sameChannel = (readyChannel.getHuyaRoomId() > 0
+                            && readyChannel.getHuyaRoomId() == nowPlaying.getHuyaRoomId())
+                            || (readyChannel.getChannelId() != null
+                            && readyChannel.getChannelId().equals(nowPlaying.getChannelId()))
+                            || (readyChannel.getName() != null
+                            && readyChannel.getName().equals(nowPlaying.getName()));
+                    if (!sameChannel) return;
+                    panelLayout.post(() -> {
+                        try {
+                            if (epgManagerWrapper != null) {
+                                epgManagerWrapper.refresh(nowPlaying, channelSourceList, currentDateOffset());
+                                LogBridge.d("ChannelPanel", "🟢【虎牙EPG刷新】解析完成，已刷新右侧面板："
+                                        + (nowPlaying.getName() == null ? "" : nowPlaying.getName().substring(0, Math.min(20, nowPlaying.getName().length()))));
+                            }
+                        } catch (Exception ignored) {}
+                    });
+                }
+            };
+
+    /** 【2026-10-22 L1-10】直播源 EPG 全量就绪监听（字段化理由同上） */
+    private final com.tv.live.EpgManager.OnEpgDataReadyListener epgDataReadyListener =
+            new com.tv.live.EpgManager.OnEpgDataReadyListener() {
+                @Override
+                public void onEpgDataReady() {
+                    if (panelLayout == null) return;
+                    panelLayout.post(() -> {
+                        try {
+                            if (!rightPanelOpen) return;   // 面板没开不用刷
+                            LogBridge.d("ChannelPanel", "🟢【EPG数据就绪】直播源节目单解析完成，刷新右侧面板");
+                            syncEpgList();
+                            Channel curr = getPlayingChannelForLocate();
+                            if (curr != null && epgManagerWrapper != null) {
+                                epgManagerWrapper.refresh(curr, channelSourceList, currentDateOffset());
+                            }
+                        } catch (Exception ignored) {}
+                    });
+                }
+            };
+
     public interface OnChannelChangeListener {
         void onChannelChanged(Channel channel, int index);
     }
@@ -169,60 +224,16 @@ public class ChannelPanelController {
         initClickListeners();
         initFocusHistory();
 
+        // 【2026-10-22 L1-10】注册字段化监听（字段声明处有成对注销说明）；release() 成对注销
         try {
-            com.tv.live.EpgManager.getInstance().registerHuyaEpgReadyListener(
-                    new com.tv.live.EpgManager.OnHuyaEpgReadyListener() {
-                @Override
-                public void onHuyaEpgReady(com.tv.live.Channel readyChannel) {
-                    if (readyChannel == null) return;
-                    if (panelLayout == null) return;
-                    if (channelSourceList == null || currentPlayIndex < 0
-                            || currentPlayIndex >= channelSourceList.size()) return;
-                    com.tv.live.Channel nowPlaying = channelSourceList.get(currentPlayIndex);
-                    if (nowPlaying == null) return;
-
-                    boolean sameChannel = (readyChannel.getHuyaRoomId() > 0
-                            && readyChannel.getHuyaRoomId() == nowPlaying.getHuyaRoomId())
-                            || (readyChannel.getChannelId() != null
-                            && readyChannel.getChannelId().equals(nowPlaying.getChannelId()))
-                            || (readyChannel.getName() != null
-                            && readyChannel.getName().equals(nowPlaying.getName()));
-                    if (!sameChannel) return;
-                    panelLayout.post(() -> {
-                        try {
-                            if (epgManagerWrapper != null) {
-                                epgManagerWrapper.refresh(nowPlaying, channelSourceList, currentDateOffset());
-                                LogBridge.d("ChannelPanel", "🟢【虎牙EPG刷新】解析完成，已刷新右侧面板："
-                                        + (nowPlaying.getName() == null ? "" : nowPlaying.getName().substring(0, Math.min(20, nowPlaying.getName().length()))));
-                            }
-                        } catch (Exception ignored) {}
-                    });
-                }
-            });
+            com.tv.live.EpgManager.getInstance().registerHuyaEpgReadyListener(huyaEpgReadyListener);
         } catch (Exception ignored) {}
 
         // 【2026-10-05】直播源 EPG 全量数据就绪（磁盘缓存先行/网络更新解析完成）：
         // 右侧面板若已打开，立即刷新节目单。原问题：解析完成只刷信息栏，
         // 开着面板的用户看到的一直是空白，必须关掉重开面板才有数据。
         try {
-            com.tv.live.EpgManager.getInstance().registerEpgDataReadyListener(
-                    new com.tv.live.EpgManager.OnEpgDataReadyListener() {
-                @Override
-                public void onEpgDataReady() {
-                    if (panelLayout == null) return;
-                    panelLayout.post(() -> {
-                        try {
-                            if (!rightPanelOpen) return;   // 面板没开不用刷
-                            LogBridge.d("ChannelPanel", "🟢【EPG数据就绪】直播源节目单解析完成，刷新右侧面板");
-                            syncEpgList();
-                            Channel curr = getPlayingChannelForLocate();
-                            if (curr != null && epgManagerWrapper != null) {
-                                epgManagerWrapper.refresh(curr, channelSourceList, currentDateOffset());
-                            }
-                        } catch (Exception ignored) {}
-                    });
-                }
-            });
+            com.tv.live.EpgManager.getInstance().registerEpgDataReadyListener(epgDataReadyListener);
         } catch (Exception ignored) {}
     }
 
@@ -311,6 +322,14 @@ public class ChannelPanelController {
         // 避免焦点进入 EPG 时被 reapply() 按旧位置纠偏拉回去。
         if (epgManagerWrapper != null) {
             epgManagerWrapper.setOnPlayingProgramFocusListener(position -> {
+                // 【2026-10-22 L1-08】守卫：EPG 刷新完成前用户可能已按 LEFT 离开面板，
+                //   此时焦点在播放器/别处，不能再把焦点抢回右侧 EPG（此前表现为
+                //   「用户已离开右侧，焦点仍被抢回节目单」）
+                if (focusHistory != null
+                        && focusHistory.currentZone() == PanelFocusHistory.ZONE_NONE) {
+                    LogBridge.d("ChannelPanel", "「今天」定位取消：焦点已离开面板，避免抢夺");
+                    return;
+                }
                 if (focusHistory != null
                         && focusHistory.focusZoneAt(PanelFocusHistory.ZONE_RIGHT_EPG, position)) {
                     return;
@@ -1520,9 +1539,12 @@ public class ChannelPanelController {
     public void setCurrentDateIndex(int index) {
         this.currentSelectedDateIndex = index;
         panelManager.setCurrentDateIndex(index);
-        if (!channelSourceList.isEmpty()
-                && currentPlayIndex >= 0 && currentPlayIndex < channelSourceList.size()) {
-            Channel curr = channelSourceList.get(currentPlayIndex);
+        // 【2026-10-22 L1-04】原前置条件要求 currentPlayIndex 在 channelSourceList 内，
+        //   第2路/VOD 播放时 currentPlayIndex == -1（currentPlayingChannel 单独保存），
+        //   整体跳过 → 切日期 EPG 不刷新、「中途切日期作废」场景失效。
+        //   改为按实际在播频道取；refresh 内部对 dateIndex != 0 会作废定位待办。
+        Channel curr = getPlayingChannelForLocate();
+        if (curr != null) {
             epgManagerWrapper.refresh(curr, channelSourceList, currentDateOffset());
         }
     }
@@ -1735,8 +1757,17 @@ public class ChannelPanelController {
         return isReverse;
     }
 
+    /**
+     * 【2026-10-22 L1-09】清除面板焦点历史（原为空实现，MainActivity.onResume 调用无效）。
+     *
+     * <p>仅在面板处于<b>关闭</b>状态时清理：MainActivity.onResume 在面板仍开着时也会触发
+     * （如从设置界面返回），无条件清 7 区历史会把用户面板内的停留位置丢掉。
+     * 面板关闭时清理后，下次打开按 focusLastLeft/focusLastRight 的默认分支重新定位。
+     */
     public void clearPanelFocus() {
-
+        if (focusHistory == null) return;
+        if (isPanelOpen()) return;
+        focusHistory.resetAll();
     }
 
     public void setOnChannelChangeListener(OnChannelChangeListener listener) {
@@ -1749,6 +1780,15 @@ public class ChannelPanelController {
 
     public void release() {
         LogBridge.d("ChannelPanelController", "release: 级联清理所有组件引用");
+
+        // 【2026-10-22 L1-10】与构造函数注册成对注销（字段化监听，见字段声明处）：
+        //   面板销毁后 EpgManager 回调若仍持 panelLayout/各 Manager 引用即泄漏
+        try {
+            com.tv.live.EpgManager.getInstance().unregisterHuyaEpgReadyListener(huyaEpgReadyListener);
+        } catch (Exception ignored) {}
+        try {
+            com.tv.live.EpgManager.getInstance().unregisterEpgDataReadyListener(epgDataReadyListener);
+        } catch (Exception ignored) {}
 
         // 【2026-10-21】先摘掉面板焦点监听，避免销毁后仍持有已回收的视图
         if (focusHistory != null) {

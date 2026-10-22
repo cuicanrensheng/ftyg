@@ -697,13 +697,32 @@ public class EpgManager {
                 return episodes;
             }
             final String vid = afhgrjVodId;
+            // ⚠️ 只对**当前正在播放**或**用户正在查看**的频道联网预取。
+            //   网格/信息条会对每个频道调 getEpg，若不加这道闸，全部频道会各自发一次
+            //   详情页请求——既慢又是对站点的批量请求（源8/源2 同款事故复现风险）。
+            //   单飞：同一部片同时只允许一个预取任务，避免并发重复抓取与面板反复重绘。
+            final Channel cur = com.tv.live.TVPlayerManager.getInstance(context)
+                    .getCurrentChannel();
+            String curVodId = cur == null ? null
+                    : com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(cur);
+            if (!vid.equals(curVodId)
+                    && !com.tv.live.afhgrj.AfhgrjUrlResolver.isForeground(vid)) {
+                return new ArrayList<>();
+            }
+            if (!com.tv.live.afhgrj.AfhgrjUrlResolver.beginFetch(vid)) {
+                return new ArrayList<>();
+            }
             AppExecutors.io(() -> {
-                List<Channel.EpgItem> l =
-                        com.tv.live.afhgrj.AfhgrjUrlResolver.fetchEpisodes(vid);
-                if (l != null && !l.isEmpty()) {
-                    LogBridge.i("EpgManager", "【EPG·源7】集数列表就绪 vodId=" + vid
-                            + " 共 " + l.size() + " 集");
-                    notifyEpgDataReady();
+                try {
+                    List<Channel.EpgItem> l =
+                            com.tv.live.afhgrj.AfhgrjUrlResolver.fetchEpisodes(vid);
+                    if (l != null && !l.isEmpty()) {
+                        LogBridge.i("EpgManager", "【EPG·源7】集数列表就绪 vodId=" + vid
+                                + " 共 " + l.size() + " 集");
+                        notifyEpgDataReady();
+                    }
+                } finally {
+                    com.tv.live.afhgrj.AfhgrjUrlResolver.endFetch(vid);
                 }
             });
             return new ArrayList<>();
@@ -754,6 +773,47 @@ public class EpgManager {
             return new ArrayList<>();
         }
 
+        // 【2026-10-21】内置源2 追加的 4K影视（nbmovie）：频道即一部影片，EPG 面板改为「集数列表」，
+        //   集数来自 NM 加密帧通道的详情接口（play_urls → episodes），纯 HTTP。
+        //   只读内存缓存；未命中后台抓一次，完成后通知面板重渲染（与源8 完全同构）。
+        com.tv.live.nbmovie.NbMovieUrlResolver.attach(context);
+        String nbmVodId = com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(channel);
+        if (!TextUtils.isEmpty(nbmVodId)) {
+            List<Channel.EpgItem> episodes =
+                    com.tv.live.nbmovie.NbMovieUrlResolver.getEpisodes(nbmVodId);
+            if (episodes != null && !episodes.isEmpty()) {
+                return episodes;
+            }
+            // ⚠️ 只对**当前正在播放**的频道联网预取（网格/信息条会对每个频道调 getEpg，
+            //   不加闸会对站点形成批量请求）。同时放行「用户正在查看」的那一部。
+            final Channel cur = com.tv.live.TVPlayerManager.getInstance(context)
+                    .getCurrentChannel();
+            String curVodId = cur == null ? null
+                    : com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(cur);
+            if (!nbmVodId.equals(curVodId)
+                    && !com.tv.live.nbmovie.NbMovieUrlResolver.isForeground(nbmVodId)) {
+                return new ArrayList<>();
+            }
+            // 单飞：同一部片同时只允许一个预取任务
+            if (!com.tv.live.nbmovie.NbMovieUrlResolver.beginFetch(nbmVodId)) {
+                return new ArrayList<>();
+            }
+            final String vid = nbmVodId;
+            AppExecutors.io(() -> {
+                try {
+                    List<Channel.EpgItem> l = com.tv.live.nbmovie.NbMovieUrlResolver.fetchEpisodes(vid);
+                    if (l != null && !l.isEmpty()) {
+                        LogBridge.i("EpgManager", "【EPG·4K影视】集数列表就绪 vodId=" + vid
+                                + " 共 " + l.size() + " 集");
+                        notifyEpgDataReady();
+                    }
+                } finally {
+                    com.tv.live.nbmovie.NbMovieUrlResolver.endFetch(vid);
+                }
+            });
+            return new ArrayList<>();
+        }
+
 
         // 【2026-10-12】内置源5（aiqiyi）VOD 频道：EPG 面板改为「选集列表」（参照源7 模式）。
         //   只依赖 channelId 前缀 renyibo-vod: 判定，源1~7 其它频道行为零变化。
@@ -768,13 +828,31 @@ public class EpgManager {
                 return episodes;
             }
             final String vid = renyiboVodId;
+            // ⚠️ 只对**当前正在播放**或**用户正在查看**的频道联网预取（同源7/源8 闸门）。
+            //   单飞：同一部片同时只允许一个预取任务。
+            final Channel cur = com.tv.live.TVPlayerManager.getInstance(context)
+                    .getCurrentChannel();
+            String curVodId = cur == null ? null
+                    : com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(
+                            cur.getChannelId());
+            if (!vid.equals(curVodId)
+                    && !com.tv.live.renyibo.RenYiBoVodSourceLoader.isForeground(vid)) {
+                return new ArrayList<>();
+            }
+            if (!com.tv.live.renyibo.RenYiBoVodSourceLoader.beginFetch(vid)) {
+                return new ArrayList<>();
+            }
             AppExecutors.io(() -> {
-                List<Channel.EpgItem> l =
-                        com.tv.live.renyibo.RenYiBoVodSourceLoader.fetchVodEpisodes(vid);
-                if (l != null && !l.isEmpty()) {
-                    LogBridge.i("EpgManager", "【EPG·源5】选集列表就绪 vodId=" + vid
-                            + " 共 " + l.size() + " 项");
-                    notifyEpgDataReady();
+                try {
+                    List<Channel.EpgItem> l =
+                            com.tv.live.renyibo.RenYiBoVodSourceLoader.fetchVodEpisodes(vid);
+                    if (l != null && !l.isEmpty()) {
+                        LogBridge.i("EpgManager", "【EPG·源5】选集列表就绪 vodId=" + vid
+                                + " 共 " + l.size() + " 项");
+                        notifyEpgDataReady();
+                    }
+                } finally {
+                    com.tv.live.renyibo.RenYiBoVodSourceLoader.endFetch(vid);
                 }
             });
             return new ArrayList<>();
@@ -793,6 +871,33 @@ public class EpgManager {
         }
 
         return getEpg(channel.getName());
+    }
+
+    /**
+     * 【2026-10-22 L1-06】EpgItem 防御性拷贝。
+     *
+     * <p>{@link #getEpg} / {@code getOrFetchMiguDayEpg} 返回的列表与内部缓存
+     * （channelEpgMap / 咪咕按天缓存）共享 EpgItem 对象引用，而 EPG 加载链路会原地改写
+     * {@code time}（"12:00-13:00" → "12:00"）与 {@code isPlaying}。此前仅
+     * {@code new ArrayList<>(temp)} 复制列表引用，二次 refresh 时 time 已被截断，
+     * endTime 推算全部错乱（节目单数据损坏）。落地到面板数据前必须逐项拷贝。
+     */
+    private static List<Channel.EpgItem> copyEpgItems(List<Channel.EpgItem> src) {
+        if (src == null || src.isEmpty()) return new ArrayList<>();
+        List<Channel.EpgItem> out = new ArrayList<>(src.size());
+        for (Channel.EpgItem it : src) {
+            if (it == null) continue;
+            Channel.EpgItem c = new Channel.EpgItem(
+                    it.dayName, it.time, it.title, it.isPlaying, it.dateYMD);
+            c.fromMiguCarousel = it.fromMiguCarousel;
+            c.miguProgramId = it.miguProgramId;
+            c.miguTvId = it.miguTvId;
+            c.startTs = it.startTs;
+            c.endTs = it.endTs;
+            c.customPlayUrl = it.customPlayUrl;
+            out.add(c);
+        }
+        return out;
     }
 
     /**
@@ -1255,6 +1360,8 @@ public class EpgManager {
         private int selectedPosition = 0;
         private int playingIndex = -1;
         private int selectDayIndex = 0;
+        /** 【2026-10-22 L1-05】refresh 代次校验：过期 IO 任务落地前丢弃，防快速切日期/频道时旧结果覆盖新结果 */
+        private int refreshToken = 0;
 
         private BroadcastReceiver reminderReceiver;
 
@@ -1340,8 +1447,16 @@ public class EpgManager {
             if (dateIndex != 0) {
                 pendingFocusPlaying = false;
             }
-            epgEndTimeMap.clear();
+            // 【2026-10-22 L1-05】入口不再清 epgEndTimeMap：主线程 clear 与 IO 线程 put 交叉，
+            // 且清空到落地之间旧 adapter 重绘会出 "12:00-null"（getView 无判空）。
+            // 改为仅由最新代次任务在落地块内整体替换（clear+putAll）。
+            final int myToken = ++refreshToken;
             AppExecutors.io(() -> {
+                // 【2026-10-22 L1-05】IO 任务内全部改局部计算，仅过检后的落地块才写字段：
+                // epgEndTimeMap 局部灌算（整体替换防半成品被读到），playingIndex 数组包裹
+                // （旧代次在 IO 线程覆写 playingIndex 会污染新任务的定位结果）。
+                final Map<Channel.EpgItem, String> myEndMap = new HashMap<>();
+                final int[] myPlayingIndex = {-1};
                 List<Channel.EpgItem> originEpgList;
                 try {
                     // 【2026-10-08】内置咪咕源 + 非今天日期：按天取多天节目单（program_v3，
@@ -1351,10 +1466,15 @@ public class EpgManager {
                     if (miguTvId > 0 && dateIndex != 0) {
                         List<Channel.EpgItem> dayList =
                                 EpgManager.getInstance().getOrFetchMiguDayEpg(miguTvId, dateIndex);
-                        originEpgList = (dayList == null) ? new ArrayList<>() : new ArrayList<>(dayList);
+                        // 【2026-10-22 L1-06】防御性拷贝：下方会原地改写 time/isPlaying，
+                        //   不能污染咪咕按天缓存的共享对象
+                        originEpgList = copyEpgItems(dayList);
                     } else {
                         List<Channel.EpgItem> temp = EpgManager.getInstance().getEpg(currentChannel);
-                        originEpgList = temp == null ? new ArrayList<>() : new ArrayList<>(temp);
+                        // 【2026-10-22 L1-06】防御性拷贝：new ArrayList<>(temp) 只复制列表
+                        //   引用，EpgItem 对象仍与 channelEpgMap 缓存共享，原地截断 time
+                        //   会污染缓存，二次 refresh 数据损坏
+                        originEpgList = copyEpgItems(temp);
                     }
                 } catch (Exception e) {
                     originEpgList = new ArrayList<>();
@@ -1410,54 +1530,54 @@ public class EpgManager {
                                     && (curr.time != null) && (curr.time.contains("直播中") || curr.time.contains(" - "));
                             if (!isHuyaHistoryEpg && !TextUtils.isEmpty(curr.time) && curr.time.contains("-"))
                                 curr.time = curr.time.split("-")[0].trim();
-                            if (TextUtils.isEmpty(epgEndTimeMap.get(curr))) {
+                            if (TextUtils.isEmpty(myEndMap.get(curr))) {
                                 if (isHuyaHistoryEpg && curr.time.contains(" - ")) {
                                     String[] parts = curr.time.split(" - ");
                                     String startPart = parts[0].trim();
                                     String endPart = parts.length > 1 ? parts[1].trim() : "23:59";
                                     if (!endPart.contains(":") || endPart.equals("直播中")) endPart = "23:59";
-                                    epgEndTimeMap.put(curr, endPart);
+                                    myEndMap.put(curr, endPart);
                                     curr.time = startPart;
                                 } else if (i + 1 < data.size()) {
                                     Channel.EpgItem next = data.get(i + 1);
                                     String nextTime = next.time;
                                     if (nextTime != null && nextTime.contains(" - ")) nextTime = nextTime.split(" - ")[0].trim();
                                     if (nextTime != null && nextTime.contains("-")) nextTime = nextTime.split("-")[0].trim();
-                                    epgEndTimeMap.put(curr, nextTime);
+                                    myEndMap.put(curr, nextTime);
                                 } else {
-                                    epgEndTimeMap.put(curr, addOneHour(curr.time));
+                                    myEndMap.put(curr, addOneHour(curr.time));
                                 }
                             }
                             curr.isPlaying = false;
-                            String currEnd = epgEndTimeMap.get(curr);
+                            String currEnd = myEndMap.get(curr);
                             if (isHuyaHistoryEpg && curr.isPlaying) {
-                                playingIndex = i;
+                                myPlayingIndex[0] = i;
                             } else if (isTimeBetween(now, curr.time, currEnd)) {
                                 curr.isPlaying = true;
                                 playing = curr;
-                                playingIndex = i;
+                                myPlayingIndex[0] = i;
                             }
                         }
                     } else {
-                        playingIndex = -1;
+                        myPlayingIndex[0] = -1;
                         for (int i = 0; i < data.size(); i++) {
                             Channel.EpgItem curr = data.get(i);
                             boolean isHuyaHistoryEpg = (currentChannel.isTogetherWatch() || currentChannel.getHuyaRoomId() > 0)
                                     && (curr.time != null) && (curr.time.contains("直播中") || curr.time.contains(" - "));
                             if (!isHuyaHistoryEpg && !TextUtils.isEmpty(curr.time) && curr.time.contains("-"))
                                 curr.time = curr.time.split("-")[0].trim();
-                            if (TextUtils.isEmpty(epgEndTimeMap.get(curr))) {
+                            if (TextUtils.isEmpty(myEndMap.get(curr))) {
                                 if (isHuyaHistoryEpg && curr.time.contains(" - ")) {
                                     String[] parts = curr.time.split(" - ");
                                     String startPart = parts[0].trim();
                                     String endPart = parts.length > 1 ? parts[1].trim() : "23:59";
                                     if (!endPart.contains(":") || endPart.equals("直播中")) endPart = "23:59";
-                                    epgEndTimeMap.put(curr, endPart);
+                                    myEndMap.put(curr, endPart);
                                     curr.time = startPart;
                                 } else if (i + 1 < data.size())
-                                    epgEndTimeMap.put(curr, data.get(i + 1).time.split("-")[0].trim());
+                                    myEndMap.put(curr, data.get(i + 1).time.split("-")[0].trim());
                                 else
-                                    epgEndTimeMap.put(curr, addOneHour(curr.time));
+                                    myEndMap.put(curr, addOneHour(curr.time));
                             }
                             curr.isPlaying = false;
                         }
@@ -1470,7 +1590,7 @@ public class EpgManager {
                 if (curPlaying != null) {
                     int cp = data.indexOf(curPlaying);
                     if (cp >= 0) {
-                        playingIndex = cp;
+                        myPlayingIndex[0] = cp;
                         LogBridge.i("EpgManager", "【EPG】自动定位当前播放项 [" + cp + "] "
                                 + curPlaying.title);
                     }
@@ -1478,6 +1598,14 @@ public class EpgManager {
                 final List<Channel.EpgItem> finalData = data;
                 final Channel finalChannel = currentChannel;
                 ((MainActivity) context).runOnUiThread(() -> {
+                    // 【2026-10-22 L1-05】过期代次丢弃：期间又有新 refresh 发起时，
+                    // 旧 IO 任务的结果不得覆盖新任务（快速切日期/频道 EPG 错乱的根因）
+                    if (myToken != refreshToken) return;
+                    // 过检后统一落字段：epgEndTimeMap 整体替换（先清后灌，
+                    // adapter 只会读到完整的新代次，不会读到半成品）
+                    epgEndTimeMap.clear();
+                    epgEndTimeMap.putAll(myEndMap);
+                    playingIndex = myPlayingIndex[0];
                     if (adapter == null) {
                         adapter = new EpgAdapter(context, finalChannel, finalData, selectDayIndex);
                         lvEpg.setAdapter(adapter);
@@ -1930,7 +2058,11 @@ public class EpgManager {
                 holder.tv_title.setTypeface(null, (focused || isSelected)
                         ? Typeface.BOLD : Typeface.NORMAL);
 
-                String key = currentChannel.getName() + "_" + position;
+                // 【2026-10-22 L1-12】预约态 key 改用节目唯一标识（开始时间+标题）：
+                //   原 name_position 在节目单顺序变化（跨天刷新/增删节目/列表重排）后错位——
+                //   A 节目的「已预约」会跟着 position 串到 B 节目上。时间+标题同值为同一节目。
+                String key = (item.time == null ? "" : item.time) + "|"
+                        + (item.title == null ? "" : item.title);
                 boolean isPast = false;
                 if (dayIndex < 0) {
                     // 【2026-10-08】过去日期（咪咕多天 EPG）：全天节目均已播完 → 全部可回看
@@ -2085,23 +2217,9 @@ public class EpgManager {
                 if (adapter != null) adapter.notifyDataSetChanged();
             });
 
-            lvDate.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override
-                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                    selectedPosition = position;
-                    LogBridge.d("DateList", "onItemSelected pos:" + position);
-                    if (adapter != null) adapter.notifyDataSetChanged();
-                }
-                @Override
-                public void onNothingSelected(AdapterView<?> parent) {
-                }
-            });
-
-            lvDate.setOnItemClickListener((parent, view, position, id) -> {
-                selectedPosition = position;
-                LogBridge.d("DateList", "onItemClick pos:" + position);
-                if (adapter != null) adapter.notifyDataSetChanged();
-            });
+            // 【2026-10-22 P2-09】原构造函数里设置的 lvDate 两组监听器会被随后
+            // initDate()→buildDateList() 重设的版本覆盖（永不生效，死代码），已删除；
+            // 生效的监听器统一在 buildDateList 内设置（含 OnDateSelectedListener 回调）。
         }
 
         public void initDate() {

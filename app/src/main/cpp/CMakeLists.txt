@@ -39,7 +39,14 @@ add_library(tvlive_security SHARED
         selfcheck.cpp
         # 2026-10-13：敏感常量仓库（源地址/端点），编译期加密后落 .rodata，
         # 取代原先「Base64 密文常量 + 外部生成脚本」的做法。
-        secstore.cpp)
+        secstore.cpp
+        # 2026-10-21：X25519 (RFC 7748) 纯 C 实现，供 NbMovie 密钥交换；
+        # 另经 SecurityCore.nativeX25519 向 Java 开放原语。
+        x25519.cpp
+        # 2026-10-21：4K影视（NbMovie）加密协议完整下沉：密钥对生成/签名、
+        # ECDH 共享密钥、nonce||ct||tag 加解密。会话状态由 SO 持有，
+        # Java 侧（com.tv.live.nbmovie.NbMovieCrypto）只做薄桥接。
+        nbmovie.cpp)
 
 # log 库 + 动态加载（selfcheck 需要 dl_iterate_phdr / dladdr 定位自身 .text）
 find_library(log-lib log)

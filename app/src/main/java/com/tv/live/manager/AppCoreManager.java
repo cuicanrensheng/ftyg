@@ -53,6 +53,24 @@ public class AppCoreManager {
     private List<Channel> channelSourceList = new ArrayList<>();
     private final Object channelListLock = new Object();
 
+    /** 【2026-10-22 切源跨实例同步】本实例 channelSourceList 对应的直播源地址。
+     *  用于判断切源后本实例数据是否已过期（见 adoptSharedResultIfNewer）。 */
+    private volatile String loadedSourceUrl;
+
+    /** 【2026-10-22 切源跨实例同步】最近一次成功加载的直播源结果（静态共享）。
+     *
+     *  <p>问题现场：{@code channelSourceList} 是<b>实例</b>字段，而「加载在飞 / 同源去重」
+     *  标记是<b>静态</b>共享 → 用户切源时由 A 实例（如 MainActivity）执行加载，B 实例
+     *  （OTT 首页）收到广播后判定「已有加载在飞」只登记 pending；A 加载结束后 B 的重载
+     *  又被「与刚完成的加载同源，折叠为一次」挡掉 —— B 自己又不是空列表（还是上一个源的
+     *  频道），旧实现只在「空列表」时才补缓存回调 → B 永远拿不到新源列表。
+     *  用户实测：切到源6(咪咕) 后 OTT 首页仍显示源5 的频道，重启应用才生效。
+     *
+     *  <p>修复：加载成功的实例把结果写进这两个静态字段，其他实例在被去重/折叠挡下时
+     *  调用 {@link #adoptSharedResultIfNewer()} 主动同步（纯内存复制，不额外请求第三方）。 */
+    private static volatile List<Channel> sLastLoadedChannels;
+    private static volatile String sLastLoadedChannelsUrl;
+
     private boolean hasPlayedWithCache = false;
     private Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private boolean isLoading = false;
@@ -168,6 +186,8 @@ public class AppCoreManager {
             // 【修复】本实例尚无数据（如 Activity 重建产生的新 AppCoreManager 实例被全局闸门挡住）：
             // 不能直接 return 导致本实例 UI 永远空白。纯本地读磁盘缓存补一份数据回调本实例 listener。
             supplyCacheToListenerIfEmpty();
+            // 【2026-10-22 切源跨实例同步】若是切源且别的实例已加载完新源，直接吸收其结果
+            if (forced) adoptSharedResultIfNewer();
             return;
         }
 
@@ -178,6 +198,9 @@ public class AppCoreManager {
             if (cur != null && cur.equals(sLastLoadedSourceUrl)
                     && now - sLastLoadDoneAtMs < LOAD_DEDUPE_WINDOW_MS) {
                 log("【直播源】切源刷新与刚完成的加载同源，折叠为一次，跳过重复刷新");
+                // 【2026-10-22 切源跨实例同步】折叠只表示"不必再发网络请求"，
+                // 但本实例若有可能是别的实例加载的 → 必须把共享结果同步过来，否则 UI 停在旧源。
+                adoptSharedResultIfNewer();
                 return;
             }
         } else if (now - lastLiveSourceLoadAtMs < LOAD_DEDUPE_WINDOW_MS) {
@@ -186,6 +209,8 @@ public class AppCoreManager {
             // 自己 channelSourceList 为空，被挡后没有数据填充 UI（表现为退出再进 OTT 只剩播放器、
             // 分组与频道全空）。此处同样纯本地读缓存补回调，不请求第三方。
             supplyCacheToListenerIfEmpty();
+            // 【2026-10-22 切源跨实例同步】非空但属于旧源时也要同步共享结果
+            adoptSharedResultIfNewer();
             return;
         }
 
@@ -237,12 +262,44 @@ public class AppCoreManager {
                 if (cached == null || cached.isEmpty()) return;
                 channelSourceList.clear();
                 channelSourceList.addAll(cached);
+                // ⚠ 不要在这里把 loadedSourceUrl 标成当前 LIVE_URL：切源瞬间磁盘里可能还是
+                //   上一个源的缓存，标错会让 adoptSharedResultIfNewer() 误判"已是最新"而跳过同步。
                 dataLoadListener.onLiveSourceLoaded(cached, true);
                 log("【直播源】被全局去重窗口拦截，已从磁盘缓存补回调本实例，频道数：" + cached.size());
             } catch (Throwable t) {
                 log("【直播源】补缓存回调异常：" + t.getMessage());
             }
         }
+    }
+
+    /**
+     * 【2026-10-22 切源跨实例同步】本实例被「加载在飞 / 同源折叠」挡下时，主动吸收
+     * 静态共享位里别的实例刚加载成功的直播源结果。
+     *
+     * <p>典型时序（用户实测）：OTT 首页切源6 →
+     * ① 本实例收到广播时 MainActivity 的实例正好在加载 → 登记 pending 返回；
+     * ② 对方加载完成（共享位 = 源6，342 台）；
+     * ③ pending 触发的重载被判「同源，折叠」返回。
+     * 旧实现在 ①③ 只做 {@code supplyCacheToListenerIfEmpty()}（本实例非空 → 直接 return），
+     * 结果 UI 一直停在旧源频道上，必须重启应用。此处补上共享结果同步。
+     */
+    private void adoptSharedResultIfNewer() {
+        List<Channel> shared = sLastLoadedChannels;
+        if (shared == null || shared.isEmpty()) return;
+        final String sharedUrl = sLastLoadedChannelsUrl;
+        final List<Channel> copy;
+        synchronized (channelListLock) {
+            // 已有数据且就是当前共享源 → 无需同步
+            if (!channelSourceList.isEmpty() && TextUtils.equals(sharedUrl, loadedSourceUrl)) return;
+            channelSourceList.clear();
+            channelSourceList.addAll(shared);
+            copy = new ArrayList<>(shared);
+        }
+        loadedSourceUrl = sharedUrl;
+        if (dataLoadListener != null) {
+            dataLoadListener.onLiveSourceLoaded(copy, false);
+        }
+        log("【直播源】已从共享加载结果同步本实例：源=" + sharedUrl + "，频道数=" + copy.size());
     }
 
     private void finishLiveSourceLoad(long gen) {
@@ -371,6 +428,14 @@ public class AppCoreManager {
                     }
                 }
                 timeoutHandler.removeCallbacksAndMessages(null);
+
+                // 【2026-10-22 切源跨实例同步】把本次成功结果发布到静态共享位，
+                // 供其他 AppCoreManager 实例（被去重/折叠挡下的那一侧）同步使用。
+                if (!safeChannels.isEmpty()) {
+                    loadedSourceUrl = UrlConfig.LIVE_URL;
+                    sLastLoadedChannelsUrl = UrlConfig.LIVE_URL;
+                    sLastLoadedChannels = new ArrayList<>(safeChannels);
+                }
 
                 boolean firstTime = isLoading;
                 isLoading = false;
@@ -976,8 +1041,13 @@ public class AppCoreManager {
     public void setOnDataLoadListener(OnDataLoadListener listener) { this.dataLoadListener = listener; }
     public void setOnRefreshListener(OnRefreshListener listener) { this.refreshListener = listener; }
 
+    /**
+     * 【2026-10-22 I1-04】d 级日志在 release 下被 proguard 剥离（logcat 与 9527 内存通道
+     * 双不可见），本类承载直播源加载/切源/闸门等关键链路，统一升为 i 级保证 release 可观测。
+     * 调用方均为源加载/刷新级低频场景（非逐帧/逐频道），i 级全量收集无压力。
+     */
     private void log(String msg) {
-        LogBridge.d("AppCoreManager", msg);
+        LogBridge.i("AppCoreManager", msg);
     }
 
     public void release() {

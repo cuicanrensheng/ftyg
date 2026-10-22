@@ -12,15 +12,18 @@ import androidx.media3.exoplayer.upstream.ParsingLoadable;
 import com.tv.live.util.LogBridge;
 
 /**
- * 自定义 HLS 播放列表解析器工厂
+ * HLS 播放列表解析器工厂（带加载链路日志）
  *
- * 实现 Media3 1.7.1 的 HlsPlaylistParserFactory 接口，
- * 在创建解析器时记录日志，配合 MediaSourceEventListener 完成加载链路监控。
+ * <p>实现 Media3 1.7.1 的 HlsPlaylistParserFactory 接口，在创建解析器时记录日志，
+ * 配合 MediaSourceEventListener 完成加载链路监控。
+ *
+ * <p>⚠️ 本类<b>不含任何广告感知逻辑</b>（广告剥离由 M3u8AdStripper / 本地代理完成）：
+ * 2026-10-22 由 AdAwareHlsPlaylistParserFactory 改名——原名名不副实，见审计 P2-09。
  */
 @OptIn(markerClass = UnstableApi.class)
-public final class AdAwareHlsPlaylistParserFactory implements HlsPlaylistParserFactory {
+public final class LoggingHlsPlaylistParserFactory implements HlsPlaylistParserFactory {
 
-    private static final String TAG = "AdAwareHlsParser";
+    private static final String TAG = "HlsParserLog";
 
     @Override
     public ParsingLoadable.Parser<HlsPlaylist> createPlaylistParser() {

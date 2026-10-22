@@ -54,8 +54,6 @@ public class VodControlBar extends LinearLayout {
 
         String barSpeedLabel();
 
-        String barAspectLabel();
-
         /** 当前源自己的清晰度标签（"自动" / "1080P"），用于「清晰度」胶囊上的实时值 */
         String barQualityLabel();
 
@@ -74,6 +72,12 @@ public class VodControlBar extends LinearLayout {
         void barShowLine();
 
         void barShowEpisodes();
+
+        /**
+         * 【2026-10-22 源6 咪咕】咪咕剧场频道没有「集数」，只有「按天回看」：
+         * Migu 模式下「选集」胶囊改叫「回看」，点击走这里打开 8 天回看面板。
+         */
+        void barShowCatchUp();
 
         /** 直播：频道列表抽屉 */
         void barShowChannelList();
@@ -96,7 +100,7 @@ public class VodControlBar extends LinearLayout {
     private Host host;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private TextView tvTitle, tvChips, tvPos, tvDur, btnPlay, btnSpeed, btnAspect;
+    private TextView tvTitle, tvChips, tvPos, tvDur, btnPlay, btnSpeed;
     private TextView btnPrev, btnNext, btnQuality, btnLine, btnEpisodes, btnChannelList, btnEpg, btnFav, btnSettings;
     /** 最近获得焦点的按钮：弹层关闭后把焦点还给它（而不是回「播放/暂停」） */
     private TextView lastFocusedButton;
@@ -105,6 +109,13 @@ public class VodControlBar extends LinearLayout {
     private boolean capsuleGroupStarted;
     /** true=点播（显示上/下集、进度条、倍速）；false=直播（只保留播放/暂停、清晰度、比例） */
     private boolean vodMode = true;
+
+    /**
+     * 【2026-10-22 源6 咪咕】Migu 点播形态：没有集数，只有按天回看。
+     * true → 「选集」胶囊文案改为「回看」、点击走 {@link Host#barShowCatchUp()}，
+     * 并隐藏「上一集/下一集」（咪咕换不了集，点了只会提示「已经是第一集了」）。
+     */
+    private boolean miguMode = false;
 
     private boolean refreshing;
     private long seekTargetMs = -1;
@@ -223,7 +234,12 @@ public class VodControlBar extends LinearLayout {
         btnSpeed = addCapsule("倍速", v -> host.barShowSpeed(), false);
         btnQuality = addCapsule("清晰度", v -> host.barShowQuality(), false);
         btnLine = addCapsule("线路", v -> host.barShowLine(), false);
-        btnEpisodes = addCapsule("选集", v -> host.barShowEpisodes(), false);
+        btnEpisodes = addCapsule("选集", v -> {
+            // 【2026-10-22 源6 咪咕】咪咕没有集数 → 该胶囊在 Migu 模式下叫「回看」，
+            //   点击打开 8 天回看面板（setMiguMode 负责改文案）。
+            if (miguMode) host.barShowCatchUp();
+            else host.barShowEpisodes();
+        }, false);
         btnChannelList = addCapsule("频道列表", v -> host.barShowChannelList(), false);
         btnEpg = addCapsule("节目单", v -> host.barShowEpg(), false);
         btnFav = addCapsule("收藏", v -> {
@@ -361,8 +377,28 @@ public class VodControlBar extends LinearLayout {
         // 【2026-10-17 用户口径】直播不需要「暂停/播放」：直播流暂停没有意义，
         // 点播才需要。直播形态下整颗胶囊隐藏，空出的位置由「上一频道」当默认焦点。
         if (btnPlay != null) btnPlay.setVisibility(vod ? View.VISIBLE : View.GONE);
+        applyMiguAdjustments();
         keepFocusVisible();
-        LogBridge.i(TAG, "控制栏形态=" + (vod ? "点播" : "直播"));
+        LogBridge.i(TAG, "控制栏形态=" + (vod ? "点播" : "直播") + (miguMode ? "（咪咕·回看）" : ""));
+    }
+
+    /**
+     * 【2026-10-22 源6 咪咕】只对咪咕生效的控制栏分支（宿主在 setVodMode 之后调用）：
+     * 咪咕剧场没有集数概念 → 隐藏「上一集/下一集」，「选集」胶囊改成「回看」。
+     */
+    public void setMiguMode(boolean migu) {
+        this.miguMode = migu;
+        applyMiguAdjustments();
+        keepFocusVisible();
+        LogBridge.i(TAG, "控制栏咪咕分支=" + migu);
+    }
+
+    /** 应用咪咕形态差异（幂等；非咪咕时恢复成标准点播/直播形态） */
+    private void applyMiguAdjustments() {
+        if (btnEpisodes != null) btnEpisodes.setText(miguMode ? "回看" : "选集");
+        int v = miguMode ? View.GONE : View.VISIBLE;
+        if (btnPrev != null) btnPrev.setVisibility(v);
+        if (btnNext != null) btnNext.setVisibility(v);
     }
 
     /**
@@ -524,7 +560,6 @@ public class VodControlBar extends LinearLayout {
             tvChips.setText(host.barChips());
             if (btnSpeed != null) btnSpeed.setText("倍速 " + host.barSpeedLabel());
             if (btnQuality != null) btnQuality.setText("清晰度 " + host.barQualityLabel());
-            if (btnAspect != null) btnAspect.setText("比例 " + host.barAspectLabel());
             if (btnFav != null) btnFav.setText(host.barIsFavorite() ? "已收藏" : "收藏");
         } catch (Throwable ignored) {
         }

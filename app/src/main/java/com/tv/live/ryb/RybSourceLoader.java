@@ -37,7 +37,9 @@ public final class RybSourceLoader {
     private static final String TAG = "RybSourceLoader";
 
     private static final String BASE = "https://www.renyibo.com";
-    private static final String CACHE_FILE = "ryb8_source.m3u";
+    /** 【2026-10-22 S1-03】缓存文件名带版本号：源8 过滤/去重规则变更时改名冷落旧缓存，
+     *  避免旧缓存持续生效导致新规则不显示（同 nbmovie/renyibo_vod 的版本化约定）。 */
+    private static final String CACHE_FILE = "ryb8_source_v2.m3u";
     private static final long CACHE_TTL_MS = 12L * 60L * 60L * 1000L;
     private static final long FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
 

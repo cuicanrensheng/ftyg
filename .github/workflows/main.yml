@@ -132,7 +132,19 @@ jobs:
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
           
-          NEW_VERSION_CODE=${{ github.run_number }}
+          # 【2026-10-22 修复】原实现 NEW_VERSION_CODE=${{ github.run_number }}，用「工作流运行序号」
+          # 当版本号。问题是本地迭代出来的版本号（如 232）会大于运行序号（如 215），
+          # CI 一跑就把仓库版本**改小**，产出的包在已装高版本号的设备上属于降级安装
+          # （INSTALL_FAILED_VERSION_DOWNGRADE），等于发不出去。
+          # 改为「取文件里的 versionCode + 1」，保证单调递增，且在本地领先时不会回退。
+          CURRENT_VERSION_CODE=$(grep -oP 'versionCode\s+\K[0-9]+' app/build.gradle | head -1)
+          RUN_NO=${{ github.run_number }}
+          if [ -z "$CURRENT_VERSION_CODE" ]; then CURRENT_VERSION_CODE=0; fi
+          if [ "$RUN_NO" -gt "$CURRENT_VERSION_CODE" ]; then
+            NEW_VERSION_CODE=$((RUN_NO + 1))
+          else
+            NEW_VERSION_CODE=$((CURRENT_VERSION_CODE + 1))
+          fi
           BASE_VERSION_NAME="2.0"
           NEW_VERSION_NAME="${BASE_VERSION_NAME}.${NEW_VERSION_CODE}"
           

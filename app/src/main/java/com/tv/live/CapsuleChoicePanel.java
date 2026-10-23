@@ -414,6 +414,7 @@ public class CapsuleChoicePanel extends LinearLayout {
             fill = 0xFF222222;
             titleColor = 0xFF6A6A6A;
         } else if (focused) {
+            // 【2026-10-23 回退】曾改为 OTT 蓝 #FF1E7BE0，用户要求改回原金色口径。
             fill = 0xFFFFD166;
             titleColor = 0xFF111111;
         } else if (item.selected) {
@@ -457,6 +458,7 @@ public class CapsuleChoicePanel extends LinearLayout {
             fill = 0xFF222222;
             textColor = 0xFF6A6A6A;
         } else if (focused) {
+            // 【2026-10-23 回退】曾改为 OTT 蓝 #FF1E7BE0，用户要求改回原金色口径。
             fill = 0xFFFFD166;
             textColor = 0xFF111111;
         } else if (item.selected) {

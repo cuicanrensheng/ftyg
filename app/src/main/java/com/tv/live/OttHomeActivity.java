@@ -510,6 +510,7 @@ public class OttHomeActivity extends AppCompatActivity {
         rightPanel = findViewById(R.id.ott_right_panel);
         btnMenu = findViewById(R.id.btn_ott_menu);
         btnFullscreen = findViewById(R.id.btn_ott_fullscreen);
+        setupFocusLogging();
         // 【2026-09-29 OTT真全屏】全屏时需要清零边距的两个容器
         ottOuter = findViewById(R.id.ll_ott_outer);
         ottContentRow = findViewById(R.id.ott_content_row);
@@ -1044,9 +1045,14 @@ public class OttHomeActivity extends AppCompatActivity {
                 new android.graphics.drawable.GradientDrawable();
         g.setCornerRadius(dp(18));
         if (focused) {
-            g.setColor(0xFFFFD166);
+            // 【2026-10-23 统一蓝色系】原为亮金 #FFD166 —— 2026-10-21 那次"统一金色"改完
+            // 用户反馈太丑，回退只覆盖了 res/drawable 下的 4 个文件 + OttHomeActivity 的焦点黄字，
+            // 漏了这个"Java 程序化画背景"的一级导航焦点态（在 res 里 grep 不到，所以漏了）。
+            // 现改为与 ott_menu_btn_bg（直播模式/菜单按钮）焦点态完全一致的口径：
+            //   实心 #FF1E7BE0 + 2dp 白描边 + 白字。
+            g.setColor(0xFF1E7BE0);
             g.setStroke(dp(2), 0xFFFFFFFF);
-            tv.setTextColor(0xFF111111);
+            tv.setTextColor(0xFFFFFFFF);
         } else if (selected) {
             g.setColor(0x332F81F7);
             g.setStroke(dp(1), 0x883AA0FF);
@@ -1067,21 +1073,135 @@ public class OttHomeActivity extends AppCompatActivity {
         bindTopNavFocusDown();
     }
 
-    /** 焦点链：一级导航按「下」→ 二级分组当前项（我的页则是列表第一行） */
+    /**
+     * 【2026-10-23 焦点排障】全局焦点变化日志。
+     *
+     * <p>背景：排查「顶栏按钮按『下』会不会丢焦点 / 落点是否随源而异」时，
+     * 只能靠截图人肉判断（uiautomator dump 在这类设备上返回空）。
+     * 这里挂 {@code OnGlobalFocusChangeListener}，把每次焦点转移（含动态生成的
+     * 分组 Tab、网格条目、集数行）都打到 9527，之后用
+     * {@code curl http://127.0.0.1:19527/api/logs} 直接拉。
+     *
+     * <p>输出格式（tag = {@code OTT·焦点}）：
+     * <pre>【焦点】直播模式 → 分组Tab[全部]   (section=直播, 源=8, group=全部)</pre>
+     * 视图无法识别时回落成类名 + 坐标。
+     */
+    private void setupFocusLogging() {
+        final View root = findViewById(android.R.id.content);
+        if (root == null) return;
+        root.getViewTreeObserver().addOnGlobalFocusChangeListener(
+                new android.view.ViewTreeObserver.OnGlobalFocusChangeListener() {
+                    @Override
+                    public void onGlobalFocusChanged(android.view.View oldV,
+                                                     final android.view.View newV) {
+                        if (newV == null) {
+                            LogBridge.w(TAG, "【焦点】焦点丢失 → null（当前焦点被清除）");
+                            return;
+                        }
+                        LogBridge.i(TAG, "【焦点】" + describeFocusView(oldV) + " → " + describeFocusView(newV)
+                                + "   (section=" + sectionName(topSection)
+                                + ", 源=" + currentSourceLabel()
+                                + ", group=" + (currentGroup == null ? "null" : currentGroup) + ")");
+                    }
+                });
+    }
+
+    /** 把视图描述成人能看懂的名字：优先 resource-id 名，其次文本，最后类名+坐标 */
+    private String describeFocusView(android.view.View v) {
+        if (v == null) return "(无)";
+        String idName = "?";
+        try {
+            idName = getResources().getResourceEntryName(v.getId());
+        } catch (Throwable ignored) {
+        }
+        CharSequence t = null;
+        if (v instanceof android.widget.TextView) t = ((android.widget.TextView) v).getText();
+        if (t != null && t.length() > 0) return idName + "[" + t + "]";
+        if (v.getParent() instanceof android.view.View) {
+            android.view.View p = (android.view.View) v.getParent();
+            String pid = "?";
+            try {
+                pid = getResources().getResourceEntryName(p.getId());
+            } catch (Throwable ignored) {
+            }
+            return idName + "(父=" + pid + ")";
+        }
+        return idName;
+    }
+
+    /** 当前内置源编号/名称，日志里用于区分"是不是因源而异" */
+    private String currentSourceLabel() {
+        try {
+            SourceManager mgr = new SourceManager(this, "live_history");
+            String url = mgr.getDefaultUrl();
+            String[] urls = {
+                    com.tv.live.UrlConfig.LIVE_URL,
+                    com.tv.live.UrlConfig.LIVE_URL_2,
+                    com.tv.live.UrlConfig.LIVE_URL_CHANXIANG,
+                    com.tv.live.UrlConfig.LIVE_URL_4,
+                    com.tv.live.UrlConfig.LIVE_URL_5,
+                    com.tv.live.UrlConfig.LIVE_URL_6,
+                    com.tv.live.UrlConfig.LIVE_URL_7,
+                    com.tv.live.UrlConfig.LIVE_URL_8};
+            for (int i = 0; i < urls.length; i++) {
+                if (urls[i] != null && !urls[i].isEmpty() && urls[i].equals(url)) {
+                    return "源" + (i + 1);
+                }
+            }
+            return url;
+        } catch (Throwable t) {
+            return "?";
+        }
+    }
+
+    /**
+     * 焦点链：一级导航 + 顶栏「直播模式」「菜单」按「下」→ 二级分组当前项（我的页则是列表第一行）。
+     *
+     * <p>【2026-10-23 修复·不再因源而异】此前只有<b>当前选中</b>的一级导航项设了链，
+     * 其余（含「直播模式」「菜单」两个按钮、其它未选中的一级导航项）全靠
+     * {@code FocusFinder} 几何搜索 → 落点随源变化：
+     * <ul>
+     *   <li>点播源（源5/6/7/8/2）左栏是<b>集数列表</b>，比网格更靠上靠左 → 落到集数行，
+     *       且末行 {@code nextFocusDown} 指向自己（2026-10-14 的既定行为），按「下」原地不动，
+     *       用户观感就是"焦点丢失"；</li>
+     *   <li>直播源左栏是节目单 3 行 → 落到节目单行，不是网格；</li>
+     *   <li>分组多的源（源8 八组 / 源7 五组）Tab 行更高 → 落到某个 Tab，要再按一次。</li>
+     * </ul>
+     * 现在把链<b>统一绑到所有顶栏入口</b>（3 个一级导航项 + 2 个按钮），
+     * 且都指向同一个「当前分组 Tab」（其下键已是 {@code R.id.gv_ott_channel}），
+     * 保证 顶栏 →(下) 分组 Tab →(下) 网格 这条链<b>与源无关</b>。
+     * 这与【2026-09-29】给预览窗补 nextFocusUpId 是同一类问题的镜像修法。
+     */
     private void bindTopNavFocusDown() {
         if (topNavViews.isEmpty()) return;
         int idx = Math.min(Math.max(topSection, 0), topNavViews.size() - 1);
-        TextView cur = topNavViews.get(idx);
+
+        // 统一算一次落点：我的页 → 列表首行；其它板块 → 当前分组 Tab（Tab 下键已指向网格）
+        int downId;
         if (topSection == SECTION_MINE) {
             View first = firstFocusableChild(llMineHistory);
             if (first == null) first = firstFocusableChild(llMineFavorite);
-            cur.setNextFocusDownId(first != null && first.getId() != View.NO_ID
-                    ? first.getId() : View.NO_ID);
-            return;
+            downId = (first != null && first.getId() != View.NO_ID) ? first.getId() : View.NO_ID;
+        } else {
+            TextView selTab = selectedTabView();
+            downId = (selTab != null) ? selTab.getId()
+                    : (gvChannel != null ? gvChannel.getId() : View.NO_ID);
         }
-        TextView selTab = selectedTabView();
-        cur.setNextFocusDownId(selTab != null ? selTab.getId()
-                : (gvChannel != null ? gvChannel.getId() : View.NO_ID));
+
+        // 3 个一级导航项全部绑定（不再只有选中项有链）
+        for (TextView tv : topNavViews) {
+            if (tv != null) tv.setNextFocusDownId(downId);
+        }
+        // 顶栏「直播模式」「菜单」此前完全没有焦点链，一律补上
+        if (btnFullscreen != null) btnFullscreen.setNextFocusDownId(downId);
+        if (btnMenu != null) btnMenu.setNextFocusDownId(downId);
+
+        // 顺带补「上」：这两个按钮按上回到当前一级导航项，避免几何搜索落到分组条第一个 Tab
+        //   （【2026-09-29】同类问题：几何搜索落到「全部」Tab，被"焦点即切换"误当用户操作）
+        TextView cur = topNavViews.get(idx);
+        int upId = (cur != null) ? cur.getId() : View.NO_ID;
+        if (btnFullscreen != null) btnFullscreen.setNextFocusUpId(upId);
+        if (btnMenu != null) btnMenu.setNextFocusUpId(upId);
     }
 
     private String sectionName(int s) {
@@ -1568,6 +1688,8 @@ public class OttHomeActivity extends AppCompatActivity {
         }
 
         syncGridFocusUp();
+        // 【2026-10-23】Tab 重建后重绑顶栏入口（直播模式/菜单/一级导航）的「下」焦点链
+        rebindTopNavAfterTabsRebuilt();
         // 焦点原本在某个分组 Tab 上 → 重建后按文案还给它（否则会掉到控制栏）
         restoreChildFocusByText(llCategory, keepTab);
 
@@ -1680,6 +1802,12 @@ public class OttHomeActivity extends AppCompatActivity {
         for (View c : subGroupChipViews) {
             if (c != null) c.setNextFocusUpId(cur.getId());
         }
+    }
+
+    // 【2026-10-23】分组 Tab 是动态生成的，重建后必须重绑顶栏入口的「下」，
+    //   否则会指向已被 removeAllViews 删掉的旧 Tab id → 焦点真的丢了。
+    private void rebindTopNavAfterTabsRebuilt() {
+        bindTopNavFocusDown();
     }
 
     /** 【2026-09-29 子分组焦点】当前生效的子分组胶囊（huyaGroupCursor 指向的那个） */

@@ -38,13 +38,17 @@ public final class RybSourceLoader {
 
     private static final String BASE = "https://www.renyibo.com";
     /** 【2026-10-22 S1-03】缓存文件名带版本号：源8 过滤/去重规则变更时改名冷落旧缓存，
-     *  避免旧缓存持续生效导致新规则不显示（同 nbmovie/renyibo_vod 的版本化约定）。 */
-    private static final String CACHE_FILE = "ryb8_source_v2.m3u";
+     *  避免旧缓存持续生效导致新规则不显示（同 nbmovie/renyibo_vod 的版本化约定）。
+     *  v3：动漫日韩动漫(42)拉取页数由 2 页增至 5 页。 */
+    private static final String CACHE_FILE = "ryb8_source_v3.m3u";
     private static final long CACHE_TTL_MS = 12L * 60L * 60L * 1000L;
     private static final long FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
 
     /** 每个分组抓几页（1 页 20 部） */
     private static final int PAGES_PER_GROUP = 2;
+    /** 【2026-10-22 用户要求】动漫日韩动漫(typeId=42)单独多拉的页数：5 页 ≈ 100 部，
+     *  其余分组仍按 {@link #PAGES_PER_GROUP}（2 页 ≈ 40 部）。 */
+    private static final int ANIME_JP_KR_PAGES = 5;
     /** 并行度上限：同一站点同时最多 3 个请求 */
     private static final int FETCH_PARALLEL = 3;
 
@@ -111,7 +115,9 @@ public final class RybSourceLoader {
             List<List<Future<List<Card>>>> futuresByGroup = new ArrayList<>();
             for (String[] g : GROUPS) {
                 List<Future<List<Card>>> fs = new ArrayList<>();
-                for (int p = 1; p <= PAGES_PER_GROUP; p++) {
+                // 动漫日韩动漫(42)单独多拉 ANIME_JP_KR_PAGES 页，其余分组按 PAGES_PER_GROUP
+                int pages = "42".equals(g[1]) ? ANIME_JP_KR_PAGES : PAGES_PER_GROUP;
+                for (int p = 1; p <= pages; p++) {
                     final String url = listUrl(g[1], p);
                     fs.add(pool.submit(() -> parseCards(url)));
                 }

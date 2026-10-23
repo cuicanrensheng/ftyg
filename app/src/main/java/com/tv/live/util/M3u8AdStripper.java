@@ -155,7 +155,7 @@ public class M3u8AdStripper {
             int seamStripped = segmentCount - countSegments(seamResult);
             LogBridge.i(TAG, "【算法选择⓪】拼接缝算法成功！剔除广告分片 " + seamStripped + " 个");
             LogBridge.i(TAG, "========== 广告剥离流程结束（拼接缝成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
-            recordAdWindows(content, baseUrl);
+            recordRemovedWindows(content, seamResult, baseUrl);
             return seamResult;
         }
         LogBridge.i(TAG, "【算法选择⓪】拼接缝未命中，继续主算法");
@@ -167,7 +167,7 @@ public class M3u8AdStripper {
             int strippedCount = segmentCount - countSegments(result);
             LogBridge.i(TAG, "【算法选择①】主算法成功！剔除广告分片 " + strippedCount + " 个");
             LogBridge.i(TAG, "========== 广告剥离流程结束（主算法成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
-            recordAdWindows(content, baseUrl);
+            recordRemovedWindows(content, result, baseUrl);
             return result;
         }
         LogBridge.i(TAG, "【算法选择①】主算法未命中，降级到备用算法");
@@ -178,6 +178,7 @@ public class M3u8AdStripper {
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
             LogBridge.i(TAG, "【算法选择②】时长异常算法成功！剔除广告分片 " + strippedCount + " 个");
+            recordRemovedWindows(content, result, baseUrl);
             LogBridge.i(TAG, "========== 广告剥离流程结束（时长异常成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
             return result;
         }
@@ -189,6 +190,7 @@ public class M3u8AdStripper {
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
             LogBridge.i(TAG, "【算法选择③】关键词过滤成功！剔除广告分片 " + strippedCount + " 个");
+            recordRemovedWindows(content, result, baseUrl);
             LogBridge.i(TAG, "========== 广告剥离流程结束（关键词过滤成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
             return result;
         }
@@ -205,6 +207,7 @@ public class M3u8AdStripper {
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
             LogBridge.i(TAG, "【算法选择④】时长前缀过滤成功！剔除广告分片 " + strippedCount + " 个");
+            recordRemovedWindows(content, result, baseUrl);
             LogBridge.i(TAG, "========== 广告剥离流程结束（时长前缀成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
             return result;
         }
@@ -223,12 +226,15 @@ public class M3u8AdStripper {
 
     /**
      * 源8（renyibo）这类站点会把博彩横幅**烧进画面**，剥离代理去掉分片后横幅仍在
-     * （横幅是按时间出现的）。这里把广告块在<b>原始时间轴</b>上的起止时间记录下来，
+     * （横幅是按时间出现的）。这里把<b>实际被剔除的分片</b>在<b>原始时间轴</b>上的起止时间记录下来，
      * 供 UI 侧在对应时段显示顶部遮罩。
      *
      * <p>存的是三元组 {@code {startMs, endMs, removedBeforeMs}}：
      * {@code removedBeforeMs} 是本段之前已被剔除的广告总时长，
      * UI 侧用它把「原始时间」换算成「剥离后的播放时间」。
+     *
+     * <p>登记统一由 {@link #recordRemovedWindows} 按「原文 vs 剥离结果」的实际差异完成，
+     * ⓪–④ 五层算法共用同一口径。
      */
     private static final java.util.Map<String, long[]> sAdWindows =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -255,61 +261,129 @@ public class M3u8AdStripper {
         return null;
     }
 
-    private static void recordAdWindows(String content, String baseUrl) {
-        if (content == null || baseUrl == null) return;
+    /**
+     * 【2026-10-22】按「原文 vs 剥离结果」的真实差异登记广告时间窗（⓪–④ 统一口径）。
+     *
+     * <p>旧实现用「分片数不到最大块 10% 的块判为广告」的启发式登记，只对整块剔除的 ⓪/①
+     * 近似成立；② 按时长异常、③ 按关键词（会剔块内单条分片）、④ 按时长前缀，剔除粒度与
+     * ⓪/① 不同，启发式会对不上（漏登记或错登记）。现在统一改为对比剥离前后保留的分片序列，
+     * 把「消失的分片」按原始时间轴合并成连续区间。
+     *
+     * @param original 剥离前的清单（URL 已绝对化）
+     * @param stripped 剥离后的清单
+     * @param baseUrl  媒体清单地址（时间窗按它索引）
+     */
+    private static void recordRemovedWindows(String original, String stripped, String baseUrl) {
+        if (original == null || stripped == null || baseUrl == null) return;
         try {
-            String[] blocks = content.split("#EXT-X-DISCONTINUITY");
-            double[] dur = new double[blocks.length];
-            int[] cnt = new int[blocks.length];
-            for (int i = 0; i < blocks.length; i++) {
-                double d = 0;
-                int c = 0;
-                for (String line : blocks[i].split("\n")) {
-                    line = line.trim();
-                    if (line.startsWith("#EXTINF:")) {
-                        try {
-                            d += Double.parseDouble(line.substring(8).split(",")[0]);
-                            c++;
-                        } catch (Throwable ignored) {
-                        }
-                    }
-                }
-                dur[i] = d;
-                cnt[i] = c;
-            }
-            int max = 0;
-            for (int c : cnt) if (c > max) max = c;
-            if (max <= 0) return;
+            List<Seg> before = parseSegments(original);
+            List<Seg> after = parseSegments(stripped);
+            if (before.isEmpty() || after.size() >= before.size()) return;
 
-            // 少数派块 = 广告：分片数不到最大块的 10%
-            java.util.List<long[]> win = new java.util.ArrayList<>();
-            double cum = 0, removedBefore = 0;
-            for (int i = 0; i < blocks.length; i++) {
-                boolean isAd = cnt[i] > 0 && cnt[i] < max * 0.10;
-                if (isAd) {
-                    win.add(new long[]{Math.round(cum * 1000),
-                            Math.round((cum + dur[i]) * 1000),
-                            Math.round(removedBefore * 1000)});
-                    removedBefore += dur[i];
+            ArrayList<long[]> win = new ArrayList<>();
+            double origPos = 0;        // 原始时间轴位置（秒）
+            double removedTotal = 0;   // 已剔除的累计时长（秒）
+            boolean inRun = false;
+            long runStartMs = 0, runEndMs = 0, runRemovedBeforeMs = 0;
+            int j = 0;
+            for (Seg s : before) {
+                boolean kept = j < after.size()
+                        && s.identity().equals(after.get(j).identity());
+                if (kept) {
+                    if (inRun) {
+                        win.add(new long[]{runStartMs, runEndMs, runRemovedBeforeMs});
+                        inRun = false;
+                    }
+                    j++;
+                    origPos += s.durSec;
+                } else {
+                    if (!inRun) {
+                        inRun = true;
+                        runStartMs = Math.round(origPos * 1000);
+                        runRemovedBeforeMs = Math.round(removedTotal * 1000);
+                    }
+                    origPos += s.durSec;
+                    runEndMs = Math.round(origPos * 1000);
+                    removedTotal += s.durSec;
                 }
-                cum += dur[i];
             }
-            if (win.isEmpty()) return;
-            long[] flat = new long[win.size() * 3];
+            if (inRun) {
+                win.add(new long[]{runStartMs, runEndMs, runRemovedBeforeMs});
+            }
+            // 剥离只删不改：结果必须是原文的子序列。对不上说明解析/改写异常，宁可不登记。
+            if (j != after.size()) {
+                LogBridge.w(TAG, "【广告时间窗】剥离结果与原文对不上，跳过登记");
+                return;
+            }
+            // 去掉零时长窗口（分片缺 EXTINF 时无法定位）
+            ArrayList<long[]> valid = new ArrayList<>();
+            for (long[] w : win) {
+                if (w[1] > w[0]) valid.add(w);
+            }
+            if (valid.isEmpty()) return;
+
+            long[] flat = new long[valid.size() * 3];
             StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < win.size(); i++) {
-                flat[i * 3] = win.get(i)[0];
-                flat[i * 3 + 1] = win.get(i)[1];
-                flat[i * 3 + 2] = win.get(i)[2];
-                long ss = (win.get(i)[0] - win.get(i)[2]) / 1000;   // 剥离后时间轴上的起点
-                sb.append(String.format("%02d:%02d(%ds) ", ss / 60, ss % 60,
-                        (win.get(i)[1] - win.get(i)[0]) / 1000));
+            for (int i = 0; i < valid.size(); i++) {
+                flat[i * 3] = valid.get(i)[0];
+                flat[i * 3 + 1] = valid.get(i)[1];
+                flat[i * 3 + 2] = valid.get(i)[2];
+                long ss = (valid.get(i)[0] - valid.get(i)[2]) / 1000; // 剥离后时间轴上的起点
+                sb.append(String.format(java.util.Locale.US, "%02d:%02d(%ds) ",
+                        ss / 60, ss % 60, (valid.get(i)[1] - valid.get(i)[0]) / 1000));
             }
             sAdWindows.put(baseUrl, flat);
-            LogBridge.i(TAG, "【广告时间窗】登记 " + win.size() + " 段 → 播放轴起点: " + sb);
+            LogBridge.i(TAG, "【广告时间窗】登记 " + valid.size()
+                    + " 段（按实际剔除差异）→ 播放轴起点: " + sb);
         } catch (Throwable t) {
-            LogBridge.w(TAG, "【广告时间窗】登记失败 " + t.getMessage());
+            LogBridge.w(TAG, "【广告时间窗】差异登记失败 " + t.getMessage());
         }
+    }
+
+    /** 一个媒体分片：URI + 可选 BYTERANGE + 时长（秒），用于剥离前后对账 */
+    private static final class Seg {
+        final String uri;
+        final String byteRange;
+        final double durSec;
+
+        Seg(String uri, String byteRange, double durSec) {
+            this.uri = uri;
+            this.byteRange = byteRange;
+            this.durSec = durSec;
+        }
+
+        String identity() {
+            // 同一 URI 可能按 BYTERANGE 切成多条，必须把范围纳入身份，否则会误配
+            return byteRange == null ? uri : uri + "|" + byteRange;
+        }
+    }
+
+    /** 解析媒体分片序列（忽略标签与非分片行；BYTERANGE 参与身份判定） */
+    private static List<Seg> parseSegments(String content) {
+        ArrayList<Seg> out = new ArrayList<>();
+        double dur = 0;
+        String range = null;
+        for (String raw : content.split("\n")) {
+            String line = raw.trim();
+            if (line.isEmpty()) continue;
+            if (line.startsWith("#EXTINF:")) {
+                try {
+                    dur = Double.parseDouble(line.substring(8).split(",")[0].trim());
+                } catch (Throwable ignored) {
+                    dur = 0;
+                }
+                continue;
+            }
+            if (line.startsWith("#EXT-X-BYTERANGE:")) {
+                range = line.substring("#EXT-X-BYTERANGE:".length()).trim();
+                continue;
+            }
+            if (line.startsWith("#")) continue;
+            out.add(new Seg(line, range, dur));
+            dur = 0;
+            range = null;
+        }
+        return out;
     }
 
     // ========================================================================

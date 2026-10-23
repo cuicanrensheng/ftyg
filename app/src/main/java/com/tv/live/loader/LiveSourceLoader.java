@@ -129,6 +129,9 @@ public class LiveSourceLoader {
                     continue;
                 }
 
+                // 【2026-10-22 S1-04】镜像竞速仅对 GitHub raw 地址生效（isGitHubUrl 只认 GitHub）。
+                // 当前源1 为 Gitee 地址，此条件恒为 false → 竞速分支不触发，源1 直接走下方常规下载。
+                // Gitee 不需要 CDN 加速，直连即可；保留此分支是为未来源1 切回 GitHub 时自动复用。
                 if (i == 0 && accelerateEnabled && isGitHubUrl(url)) {
                     String racedContent = downloadSource1Racing(url);
                     if (racedContent != null) {
@@ -444,6 +447,15 @@ public class LiveSourceLoader {
         }
     }
 
+    /**
+     * 判断是否为 GitHub 原始文件地址（仅这类地址需要 jsDelivr/ghproxy/gitmirror CDN 加速）。
+     *
+     * <p>【2026-10-22 S1-04 定案】Gitee 地址（源1/源2 当前使用的 gitee.com/.../raw/...）
+     * <b>不</b>需要镜像加速，直连即可，故此处<b>故意不</b>匹配 gitee.com。
+     * 源1 自 2026-08-29 起已从 GitHub 切换为 Gitee（见 SourceManager 注释），
+     * 因此镜像竞速分支对当前源1 永不触发，属预期行为，非 Bug。
+     * 若未来源1 切回 GitHub raw 地址，本方法与竞速/加速链路自动恢复生效。
+     */
     private boolean isGitHubUrl(String url) {
         if (url == null) return false;
         return url.contains("raw.githubusercontent.com")

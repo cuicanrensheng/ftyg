@@ -4502,6 +4502,27 @@ public class TVPlayerManager {
 
     private void playUrlInternal(String url, long initialSeekPosition) {
 
+        // 【2026-10-22 死流检测】注册清单滚动性检测回调（覆盖式、幂等）：
+        // 直播清单连续多次刷新 MEDIA-SEQUENCE 不前进 → 判定死流 → 复用既有 autoRetry 兜底链
+        //（isRetrying 去重 / 后台跳过 / 重试上限后切备用源、换线、上报等保护全部保留）。
+        // ★ 上限兜底修正：死流源"能播到窗口尾"→ onPlayReady 会把 retryCount 清零，
+        //   死流重试永远停在"第1/2次"、达不了上限，用户会无限循环卡顿（2026-10-22 实机日志证实）。
+        //   因此同一 URL 累计判死流 ≥2 次（重试后仍在死流上）→ 强制置满上限，
+        //   让 autoRetry 走"达上限 → 判失效源 → 切备用源 → 线路轮转 → onSourceFailed 上报"闭环。
+        DeadStreamMonitor.setListener(deadStreamUrl -> {
+            if (currentUrl != null && currentUrl.equals(deadStreamUrl)) {
+                mHandler.post(() -> {
+                    int triggerCount = DeadStreamMonitor.getTriggerCount(deadStreamUrl);
+                    if (triggerCount >= 2) {
+                        retryCount = MAX_RETRY_COUNT;
+                        autoRetry("死流:固定窗口不滚动(清单MEDIA-SEQUENCE未前进)，重试后仍不前进→判失效源");
+                    } else {
+                        autoRetry("死流:固定窗口不滚动(清单MEDIA-SEQUENCE未前进)");
+                    }
+                });
+            }
+        });
+
         // 【2026-10-11 源7 联播】任何一次主动起播都解除「已全部播完」标记，
         //   让卡住检测的重试恢复正常（否则重播下一集后看门狗会被挡住）。
         afhgrjPlaybackFinished = false;

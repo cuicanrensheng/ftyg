@@ -1,5 +1,7 @@
 package com.tv.live;
 
+import android.net.Uri;
+
 import androidx.annotation.OptIn;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.hls.playlist.HlsMultivariantPlaylist;
@@ -10,6 +12,9 @@ import androidx.media3.exoplayer.hls.playlist.HlsPlaylistParserFactory;
 import androidx.media3.exoplayer.upstream.ParsingLoadable;
 
 import com.tv.live.util.LogBridge;
+
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * HLS 播放列表解析器工厂（带加载链路日志）
@@ -28,7 +33,7 @@ public final class LoggingHlsPlaylistParserFactory implements HlsPlaylistParserF
     @Override
     public ParsingLoadable.Parser<HlsPlaylist> createPlaylistParser() {
         LogBridge.d(TAG, "创建 HLS 播放列表解析器（Multivariant）");
-        return new HlsPlaylistParser();
+        return wrap(new HlsPlaylistParser());
     }
 
     @Override
@@ -37,6 +42,31 @@ public final class LoggingHlsPlaylistParserFactory implements HlsPlaylistParserF
             HlsMediaPlaylist previousMediaPlaylist) {
         int variantCount = multivariantPlaylist != null ? multivariantPlaylist.variants.size() : 0;
         LogBridge.d(TAG, "创建 HLS 播放列表解析器（Media，子流数=" + variantCount + "）");
-        return new HlsPlaylistParser();
+        return wrap(new HlsPlaylistParser());
+    }
+
+    /**
+     * 包装解析器：媒体清单解析成功后送入 {@link DeadStreamMonitor} 做「死流」检测
+     * （跟踪直播清单 MEDIA-SEQUENCE 是否前进）。只观察、不修改内容，
+     * 检测器任何异常均被吞掉，绝不阻断播放链路。
+     */
+    private static ParsingLoadable.Parser<HlsPlaylist> wrap(
+            final ParsingLoadable.Parser<HlsPlaylist> delegate) {
+        return new ParsingLoadable.Parser<HlsPlaylist>() {
+            @Override
+            public HlsPlaylist parse(Uri uri, InputStream inputStream) throws IOException {
+                HlsPlaylist playlist = delegate.parse(uri, inputStream);
+                if (playlist instanceof HlsMediaPlaylist) {
+                    try {
+                        DeadStreamMonitor.onMediaPlaylistParsed(
+                                uri == null ? "" : uri.toString(),
+                                (HlsMediaPlaylist) playlist);
+                    } catch (Throwable ignored) {
+                        // 检测器只观察，异常绝不阻断播放链路
+                    }
+                }
+                return playlist;
+            }
+        };
     }
 }

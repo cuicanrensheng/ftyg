@@ -98,7 +98,21 @@ public class WebServerManager {
     //   起播瞬间的重复请求（不降低上游请求频率：播放器本来就是每 targetDuration 拉一次）。
     private static final long M3U8_LIVE_CACHE_TTL_MS = 1200L;
     private static final String TAG_HLS_ENDLIST = "#EXT-X-ENDLIST";
-    private static final long STRIP_TIMEOUT_MS = 500L;
+    /**
+     * 【2026-10-23 已废弃】原「剥离超过 500ms 就返回原文」的超时阈值。
+     *
+     * <p>⚠️ 该降级是**广告漏出到播放器的直接原因**（2026-10-23 电视实测）：
+     * <pre>
+     *   09:19:51  【算法选择①】主算法成功！剔除广告分片 10 个   ← 剥掉了
+     *   09:19:51  [超时降级] 剥离超过500ms，返回原文            ← 但已超时
+     *   09:19:51  剥离后: 分片数=367, 剔除=0 个← 播放器拿到的是原文
+     * </pre>
+     * 更糟的是它把**原文也写进了 m3u8 缓存**，等于把带广告的清单固化了。
+     * 现改为：剥离未完成就**不返回**（见 stripBlocking），由外层 5s 统一兜底为 502，
+     * 播放器退避重试时后台任务已存入剥离版缓存 → 下次命中缓存拿到干净清单。
+     */
+    @SuppressWarnings("unused")
+    private static final long STRIP_TIMEOUT_MS_DEPRECATED = 500L;
 
     // ========== 分片代理缓存（2026-10-21 seek 快速恢复：SEEK 中断后代理继续转发并缓存，下次命中秒回） ==========
     /** 内存上限 32MB（电视盒子内存有限，按字节 LRU 淘汰，防止缓存膨胀） */
@@ -413,21 +427,16 @@ public class WebServerManager {
                             }
                             int beforeSegments = countSegmentsInM3u8(finalContent);
                             LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
-                            // 【2026-10-22 P1-05】剥离步骤改走 stripWithTimeout（500ms 超时降级
-                            //   返回原文 + 后台继续剥离存缓存），替代原先同步硬算：
-                            //   慢源大体量清单（多维评分/编辑距离）此前把起播关键路径拖过 5s，
-                            //   代理返 500 → 播放器 3s 退避重试 → 再次超时，形成重试风暴。
-                            String stripped;
-                            try {
-                                stripped = stripWithTimeout(finalContent, finalBaseUrl, finalTargetUrl);
-                            } catch (Exception stripEx) {
-                                LogBridge.e("WebServer", "广告剥离异常，返回原文(已绝对化): " + stripEx.getMessage());
-                                try {
-                                    stripped = M3u8AdStripper.resolveAllUrls(finalContent, finalBaseUrl);
-                                } catch (Exception rex) {
-                                    stripped = finalContent;
-                                }
-                            }
+                            // 【2026-10-23 禁止降级返回原文】原先这里是 stripWithTimeout：
+                            //   剥离超过 500ms 就降级返回「未剥离原文」+ 后台继续剥离存缓存。
+                            //   实测证明这条降级正是**广告漏出到播放器的直接原因**：主算法明明
+                            //   成功剔除了 10 个分片，却因为耗时 498~3959ms 超过 500ms 而把原文
+                            //   发了出去，而且原文还被写进 m3u8 缓存固化（后续请求全命中带广告清单）。
+                            //   现改为 stripBlocking：**阻塞等剥离完成**，未完成就不返回；
+                            //   剥离抛异常同样**不返回原文**（上抛 → 外层统一回 502）。
+                            //   外层已有 5s 上限 → 502 后播放器 3s 退避重试，届时后台任务多已把
+                            //   剥离版写进缓存，下次直接命中（实测缓存命中仅 9ms）。
+                            String stripped = stripBlocking(finalContent, finalBaseUrl, finalTargetUrl);
                             int afterSegments = countSegmentsInM3u8(stripped);
                             LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个");
                             return putM3u8Cache(finalTargetUrl, stripped);
@@ -1171,9 +1180,23 @@ public class WebServerManager {
     }
 
     /**
-     * 带超时的广告剥离：超过500ms返回原文，后台继续剥离存缓存
+     * 【2026-10-23 新增】广告剥离：**只接受剥离完成的结果，绝不返回未剥离的原文**。
+     *
+     * <p>取代原 {@code stripWithTimeout(…, 500ms)}。原实现在超过 500ms 时会把
+     * <b>未剥离的原文</b>返回给播放器并写进 m3u8 缓存（双重伤害：既漏广告、又固化清单），
+     * 实测主算法耗时 448~3959ms，6 次里 3 次踩线 → 广告照播。
+     *
+     * <p>现在的口径：
+     * <ul>
+     *   <li>剥离未完成 → 本方法<b>阻塞等待</b>（不设内部超时）；超时由外层
+     *       {@code future.get(5, SECONDS)} 统一兜底为 502，绝不把原文发出去；</li>
+     *   <li>剥离抛异常 → 直接抛出，交给外层回 502。<b>不做「绝对化原文」兜底</b>，
+     *       因为那仍是带广告的清单，与本方法目的相悖；</li>
+     *   <li>502 之后播放器 3s 退避重试，此时后台任务通常已把<b>剥离版</b>写入缓存，
+     *       下次请求直接命中（实测缓存命中 9ms）→ 最终仍拿到干净清单。</li>
+     * </ul>
      */
-    private String stripWithTimeout(final String content, final String baseUrl, final String cacheKey) {
+    private String stripBlocking(final String content, final String baseUrl, final String cacheKey) {
         if (stripExecutor == null) {
             return M3u8AdStripper.stripAds(content, baseUrl);
         }
@@ -1184,24 +1207,18 @@ public class WebServerManager {
             }
         });
         try {
-            String result = future.get(STRIP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            // 无超时阻塞等待：宁可让外层回 502，也绝不把未剥离原文发给播放器
+            String result = future.get();
             return putM3u8Cache(cacheKey, result);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("广告剥离被中断", ie);
         } catch (Exception e) {
-            LogBridge.w("WebServer", "[超时降级] 剥离超过" + STRIP_TIMEOUT_MS + "ms，返回原文，后台继续剥离");
-            // 后台继续剥离并存缓存
-            stripExecutor.execute(() -> {
-                try {
-                    String stripped = M3u8AdStripper.stripAds(content, baseUrl);
-                    putM3u8Cache(cacheKey, stripped);
-                    LogBridge.i("WebServer", "[超时降级] 后台剥离完成，已存入缓存");
-                } catch (Exception ignored) {}
-            });
-            // 【2026-10-17】返回原文前也要把相对分片转绝对，否则播放器会拿本地代理地址当 base
-            try {
-                return M3u8AdStripper.resolveAllUrls(content, baseUrl);
-            } catch (Exception ignored) {
-                return content;
-            }
+            // ⚠️ 刻意**不**回退到 resolveAllUrls(原文)：那仍是带广告的清单。
+            //    直接上抛 → 外层 502 → 播放器退避重试 → 命中缓存后的剥离版。
+            LogBridge.e("WebServer", "[禁止降级] 广告剥离失败，不返回原文，向上抛出让本请求回 502: "
+                    + e.getMessage());
+            throw new IllegalStateException("广告剥离失败，拒绝返回未剥离原文", e);
         }
     }
     /**

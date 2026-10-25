@@ -332,6 +332,33 @@ public final class SecurityCore {
     public static final int C_VODP_DMM     = 26;   // 49.233.180.127:7788/dmm.php（动漫专线 ZY-anime_）
     public static final int C_BUGLY_APP_ID = 27;   // 腾讯 Bugly App ID（I1-07 卫生项：dex 不再有明文）
 
+    // 【2026-10-23 第五批】内置源9 橘汁（com.tv.live.juzhi）协议常量。
+    // 原为 JzProtocol 的 Java 常量（多为 public static final → 编译期内联，dex 明文可见）。
+    // ⚠ 与 cpp/secstore.cpp 的 case 必须成对维护；取值见 JzProtocol 的惰性 getter。
+    public static final int C_JZ_SAFE_CODE       = 28;  // 橘汁 body 加密工作密钥（AES-256）
+    public static final int C_JZ_SAFE_SECRET_KEY = 29;  // 橘汁 sig2/sig3 与 GET query 加密密钥
+    public static final int C_JZ_DECRYPT_KEY     = 30;  // 橘汁 firstLevelPublic 解密密钥
+    public static final int C_JZ_OSS_URL_1       = 31;  // 域名引导 OSS①（cos.ap-guangzhou）
+    public static final int C_JZ_OSS_URL_2       = 32;  // 域名引导 OSS②（cos.ap-chengdu）
+    public static final int C_JZ_OSS_URL_3       = 33;  // 域名引导 OSS③（cos.ap-shanghai）
+    public static final int C_JZ_OSS_URL_4       = 34;  // 域名引导 OSS④（123pan tv4.txt）
+    public static final int C_JZ_OSS_URL_5       = 35;  // 域名引导 OSS⑤（123pan tv5.txt）
+    public static final int C_JZ_FALLBACK_BASE   = 36;  // 橘汁兜底 baseUrl（OSS 全不可达时）
+    public static final int C_JZ_FLP_CIPHER      = 37;  // firstLevelPublic 密文（与 id=30 成对）
+    public static final int C_JZ_SLP_FALLBACK    = 38;  // secondLevelPublic 兜底 RSA 公钥
+    public static final int C_JZ_V_APP           = 39;  // 橘汁 versionCode（服务端按它校 sig）
+    public static final int C_JZ_V_NAME          = 40;  // 橘汁 versionName
+    public static final int C_JZ_PKG             = 41;  // 橘汁包名 com.exxammpea.a1
+    public static final int C_JZ_APP_NAME        = 42;  // 橘汁 App 名
+    public static final int C_JZ_PATH_SEARCH     = 43;  // 点播搜索接口
+    public static final int C_JZ_PATH_DETAIL     = 44;  // 详情/集数接口
+    public static final int C_JZ_PATH_PLAY_URL   = 45;  // 换直链接口
+    public static final int C_JZ_PATH_RSA_ZONE   = 46;  // 密钥协商端点（RSARequest 专用）
+    public static final int C_JZ_PATH_CATEGORY   = 47;  // 直播分组接口
+    public static final int C_JZ_PATH_LIVE_LIST  = 48;  // 直播分组卡/频道列表（GET ?query=）
+    public static final int C_JZ_PATH_TAG_LIST   = 49;  // tab 列表（GET ?query=）
+    public static final int C_HUYA_PHP           = 50;  // 虎牙第三条线路（任意播）huya.php 端点前缀（含 token）
+
     /**
      * 取加密常量明文。SO 不可用时返回 null（调用方按「该源不可用」降级）。
      * 不可缓存到 static final：init() 要 loadLibrary，可能耗时。

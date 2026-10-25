@@ -501,7 +501,8 @@ public class HuyaTogetherWatchGroupManager {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(API_HTTP_LIVE_LIST + page + "&_=" + System.currentTimeMillis());
-            conn = (HttpURLConnection) url.openConnection();
+            // 【2026-10-25 代理坑修复】绕过系统代理（失效代理会让第二路列表整体超时）
+            conn = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
             conn.setConnectTimeout(HTTP_LIST_TIMEOUT_MS);
             conn.setReadTimeout(HTTP_LIST_TIMEOUT_MS);
             conn.setRequestMethod("GET");
@@ -763,12 +764,17 @@ public class HuyaTogetherWatchGroupManager {
             if (uid > 0) channelIdStr = "huya_uid_" + uid;
             else if (profileRoom > 0) channelIdStr = "huya_" + profileRoom;
             else channelIdStr = "huya_long_" + channelId;
+            // 【2026-10-25 短名接入】按 profileRoom 查第二路短名表：
+            // 命中用「类型_内容」短名（TV 面板放得下），未命中回落虎牙原名。
+            // 第二路频道实时上下线，映射表天然是「快照 + 兜底」，新房间走原名属正常。
+            String displayName = HuyaTogetherWatchGroupShortNames.of(profileRoom);
+            if (TextUtils.isEmpty(displayName)) displayName = display;
             Channel ch;
             if (uid > 0) {
-                ch = new Channel(display, "huya://uid/" + uid, groupName, channelIdStr, true, profileRoom);
+                ch = new Channel(displayName, "huya://uid/" + uid, groupName, channelIdStr, true, profileRoom);
                 ch.setHuyaUid(uid);
             } else if (profileRoom > 0) {
-                ch = new Channel(display, "huya://room/" + profileRoom, groupName, channelIdStr, true, profileRoom);
+                ch = new Channel(displayName, "huya://room/" + profileRoom, groupName, channelIdStr, true, profileRoom);
             } else {
                 return null;
             }
@@ -845,15 +851,19 @@ public class HuyaTogetherWatchGroupManager {
                 if (uid > 0) channelIdStr = "huya_uid_" + uid;
                 else if (roomId > 0) channelIdStr = "huya_" + roomId;
                 else channelIdStr = "huya_long_" + channelId;
+                // 【2026-10-25 短名接入】同 buildChannelFromInfo：按 profileRoom 查表，
+                // 命中用短名，未命中回落原名。
+                String displayName = HuyaTogetherWatchGroupShortNames.of(profileRoom);
+                if (TextUtils.isEmpty(displayName)) displayName = display;
                 Channel ch;
                 if (uid > 0) {
 
-                    ch = new Channel(display, "huya://uid/" + uid,
+                    ch = new Channel(displayName, "huya://uid/" + uid,
                             tag.groupName, channelIdStr, true, profileRoom);
                     ch.setHuyaUid(uid);
                 } else if (profileRoom > 0) {
 
-                    ch = new Channel(display, "huya://room/" + profileRoom,
+                    ch = new Channel(displayName, "huya://room/" + profileRoom,
                             tag.groupName, channelIdStr, true, profileRoom);
                 } else {
                     continue;
@@ -1059,14 +1069,21 @@ public class HuyaTogetherWatchGroupManager {
                 if (carr != null) {
                     for (int j = 0; j < carr.length(); j++) {
                         JSONObject co = carr.getJSONObject(j);
+                        int rid = co.optInt("rid", 0);
+                        long uid = co.optLong("uid", 0L);
+                        // 【2026-10-25 短名接入】缓存里存的是写缓存那一刻的显示名。
+                        // 旧版本写下的缓存是长名，若不在回读时覆盖，升级后仍会看到长名，
+                        // 必须等下一次联网刷新才生效。这里按 rid(profileRoom) 统一覆盖一次，
+                        // 命中短名表则用短名，未收录保留缓存原名。
+                        String cachedName = co.optString("name", "精彩节目");
+                        String shortName = HuyaTogetherWatchGroupShortNames.of(rid);
+                        if (!TextUtils.isEmpty(shortName)) cachedName = shortName;
                         Channel ch = new Channel(
-                                co.optString("name", "精彩节目"),
+                                cachedName,
                                 co.optString("url", ""),
                                 co.optString("group", ""),
                                 co.optString("cid", "")
                         );
-                        int rid = co.optInt("rid", 0);
-                        long uid = co.optLong("uid", 0L);
                         if (rid > 0) ch.setHuyaRoomId(rid);
                         if (uid > 0) ch.setHuyaUid(uid);
                         if (co.optBoolean("sdk", false)) ch.setHuyaSdkTogetherWatch(true);

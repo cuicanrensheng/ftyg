@@ -347,7 +347,14 @@ public class HuyaTogetherWatchManager {
         }
 
         public Channel toChannel() {
-            String displayName = roomName;
+            // 【2026-10-25 短名·重入】优先用「类型_内容」短名（如 电影_周星驰）：虎牙原名 20~30 字，
+            //   OTT 频道面板/Grid 放不下。映射表见 HuyaTogetherWatchShortNames（604 个房间，
+            //   2026-10-25 抓包快照生成）；未收录的新上架房间回落原名，不会出现空名。
+            //   注意：只改显示名，播放地址（huya://uid/<uid>）与 profileRoom 原样传递，起播不受影响。
+            //   （曾因「解析失败」被误判为改名引起而回滚，实为设备系统代理 10.0.2.2:8899 不可达，
+            //    已在 2.0.240 用 NO_PROXY 根治，本次 2.0.241 正式重入。）
+            String shortName = HuyaTogetherWatchShortNames.of(roomId);
+            String displayName = !TextUtils.isEmpty(shortName) ? shortName : roomName;
             String channelIdStr;
             if (huyaUid > 0) channelIdStr = "huya_uid_" + huyaUid;
             else if (roomId > 0) channelIdStr = "huya_" + roomId;
@@ -755,7 +762,9 @@ public class HuyaTogetherWatchManager {
         InputStream is = null;
         try {
             URL u = new URL(url);
-            conn = (HttpURLConnection) u.openConnection();
+            // 【2026-10-25 代理坑修复】绕过系统代理：设备挂着失效代理时，本列表通道会整体超时，
+            //   表现为「虎牙一起看」频道列表加载不出来（其余通道均已显式 NO_PROXY）。
+            conn = (HttpURLConnection) u.openConnection(java.net.Proxy.NO_PROXY);
             conn.setConnectTimeout(HTTP_TIMEOUT_MS);
             conn.setReadTimeout(HTTP_TIMEOUT_MS);
             conn.setRequestMethod("GET");

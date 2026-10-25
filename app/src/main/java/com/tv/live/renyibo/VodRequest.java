@@ -42,14 +42,36 @@ public final class VodRequest {
 
     /** 【2026-10-14】带分组级 class 筛选的分类列表（如恐怖分组传 "恐怖"）。其余参数不变。 */
     public static String videoList(int typeId, int page, String classFilter) {
+        return videoList(typeId, page, classFilter, "", "", "");
+    }
+
+    /**
+     * 【2026-10-24 筛选维度移植】全维度筛选列表（class / area / lang / year 四维，
+     * 与爱其意 App「导航列表」下发的筛选维度一致，见 {@link RenYiBoVodCatalog.Category#filters}）。
+     *
+     * <p>参数形状沿用 2026-10-12 单次在线实测锁定的 {@code video_list} 请求：
+     * 四个维度字段名不变（此前 area/lang/year 恒传空串），空串 = 不筛选该维度。
+     * order 固定「最热」（2026-10-13 A/B 实测口径，不随筛选变化）。
+     */
+    public static String videoList(int typeId, int page, String classFilter,
+                                   String area, String lang, String year) {
+        return videoList(typeId, page, classFilter, area, lang, year, "最热");
+    }
+
+    /**
+     * 【2026-10-24 排序维度】order 可选（最新/最热/好评，默认最热）。
+     * 请求体字段与锁定形状一致，仅 order 从硬编码放开为参数。
+     */
+    public static String videoList(int typeId, int page, String classFilter,
+                                   String area, String lang, String year, String order) {
         JSONObject data = new JSONObject();
         put(data, "pg", page);
         put(data, "tid", typeId);
         put(data, "class", classFilter == null ? "" : classFilter);
-        put(data, "area", "");
-        put(data, "lang", "");
-        put(data, "year", "");
-        put(data, "order", "最热");
+        put(data, "area", area == null ? "" : area);
+        put(data, "lang", lang == null ? "" : lang);
+        put(data, "year", year == null ? "" : year);
+        put(data, "order", order == null || order.isEmpty() ? "最热" : order);
         put(data, "token", "");
         return envelope("video_list", data);
     }

@@ -329,7 +329,10 @@ public class PlaylistParser {
                 || uri.startsWith(com.tv.live.renyibo.RenYiBoVodSourceLoader.SCHEME)
                 || uri.startsWith(com.tv.live.afhgrj.AfhgrjUrlResolver.SCHEME)
                 || uri.startsWith(com.tv.live.ryb.RybUrlResolver.SCHEME)
-                || uri.startsWith(com.tv.live.nbmovie.NbMovieUrlResolver.SCHEME);
+                || uri.startsWith(com.tv.live.nbmovie.NbMovieUrlResolver.SCHEME)
+                // 【2026-10-23 源9 橘汁】juzhi://<vodId> 待解析地址。
+                //   白名单漏项时 M3U 里所有 juzhi:// 行会被丢弃 → 「解析后频道数=0」。
+                || uri.startsWith(com.tv.live.juzhi.JzProtocol.SCHEME);
     }
 
     private static int findFirstHttpComma(String line) {

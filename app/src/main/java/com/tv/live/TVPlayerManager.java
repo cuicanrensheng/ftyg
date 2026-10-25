@@ -588,6 +588,12 @@ public class TVPlayerManager {
     private final Object variantListLock = new Object();
     private volatile List<Variant> variantList = new ArrayList<>();
     private volatile boolean isParsingMasterPlaylist = false;
+
+    /** 【2026-10-24 冷启动优化①】延后的主清单预取地址：
+     *  播放器未就绪时 doPlayNormal 不立即预取（慢源场景会与 ExoPlayer 首帧抢同一台慢服务器），
+     *  改为挂到这里，首次 STATE_READY 且仍是当前地址时再解析（清晰度菜单只延后、首帧更快）。 */
+    private final Object mPendingMasterParseLock = new Object();
+    private String mPendingMasterParseUrl = null;
     /**
      * 【2026-10-10】一次性抑制「普通源 master 重解析」：用户手选清晰度后重播该档地址时置位，
      * 让 {@link #doPlayNormal} 跳过 {@code fetchAndParseMasterPlaylistNormal} —— 否则重播的
@@ -705,6 +711,18 @@ public class TVPlayerManager {
                         long now = System.currentTimeMillis();
                         if (lastPositionUpdateTime == 0) {
                             lastPositionUpdateTime = now;
+                        }
+                        // 【2026-10-23 源9 慢速 CDN 专项】网络正在交付字节（慢速但活着）
+                        //   → 视为有进展，重置计时。源9 实测 CDN 单连接仅 35~60KB/s，一个 1.5MB
+                        //   分片需 25~45s，播放器这段时间一直 STATE_BUFFERING；20s 看门狗会把
+                        //   「正在下载」误判成卡死并重启 doPlay，形成 24s 一次的重试风暴（适得其反）。
+                        //   字节来源不限：本地代理流式回传（WebServerManager）与播放器直连读取
+                        //   （RedirectLoggingHttpDataSource.read）都会打点。真正挂死（字节停流）时
+                        //   10s 窗口过后即恢复看门狗判定，上游读超时也会先暴露为数据源错误。
+                        if (WebServerManager.isNetProgressing()) {
+                            lastPositionUpdateTime = now;
+                            mHandler.postDelayed(this, 2000);
+                            return;
                         }
                         if (now - lastPositionUpdateTime > STUCK_TIMEOUT) {
                             if (isHuyaSigRetryJustFired()) {
@@ -1165,6 +1183,19 @@ public class TVPlayerManager {
                     // 【2026-10-17 启动体验】记录就绪时刻（BUFFERING 提示的抑制窗口用）
                     lastPlayReadyAtMs = android.os.SystemClock.elapsedRealtime();
 
+                    // 【2026-10-24 冷启动优化①】出画后补跑延后的主清单预取（清晰度菜单数据）：
+                    //   仅当挂起地址仍是当前播放地址时才消费，换台/失败留下的陈旧挂起直接丢弃。
+                    String pendingMasterParse;
+                    synchronized (mPendingMasterParseLock) {
+                        pendingMasterParse = mPendingMasterParseUrl;
+                        mPendingMasterParseUrl = null;
+                    }
+                    if (pendingMasterParse != null && isHlsUrl(pendingMasterParse)
+                            && TextUtils.equals(currentUrl, pendingMasterParse)) {
+                        LogBridge.i(TAG, "【普通源】出画后补跑主清单预取（清晰度菜单）");
+                        fetchAndParseMasterPlaylistNormal(pendingMasterParse);
+                    }
+
                     // 【P0-B】首帧已出，此刻再初始化虎牙 SDK，避免与首帧抢 CPU/IO
                     try {
                         MyApplication app = MyApplication.getInstance();
@@ -1421,6 +1452,50 @@ public class TVPlayerManager {
     private volatile String renyiboResolvingUrl = "";
 
     /**
+     * 【2026-10-24 新增】虎牙第三条线路（任意播）待解析地址解析后起播。
+     *
+     * <p>M3U/频道表里存的是 {@code rybhuya://<roomId>}。起播这一刻直接调任意播
+     * huya.php（单房间单次 GET，遵守「禁止未经授权批量/高频/并发请求」红线），
+     * 拿到落地 FLV 地址后<b>直接交给播放器</b> —— 不经过自研 HuyaParser、
+     * 不触碰第一/二路的任何解析状态（mHuyaRoomId/mLastAliveStreams 等均不共享）。
+     * 参照源5 {@link #resolveRenyiboAndPlay} 的惰性解析模式。</p>
+     */
+    private void resolveRenYiBoHuyaAndPlay(String rawUrl, long initialSeekPosition) {
+        final int roomId = com.tv.live.manager.HuyaRenYiBoLineManager.roomIdOfScheme(rawUrl);
+        if (roomId <= 0) {
+            LogBridge.w(TAG, "【任意播】房间号解析失败: " + rawUrl);
+            Toast.makeText(context, "任意播房间号无效", Toast.LENGTH_SHORT).show();
+            if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
+            return;
+        }
+        LogBridge.i(TAG, "【任意播】起播解析 roomId=" + roomId + " → huya.php 直连 API");
+        new Thread(() -> {
+            String resolved = null;
+            try {
+                resolved = com.tv.live.manager.HuyaRenYiBoLineManager.resolvePlayUrlBlocking(roomId);
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "【任意播】解析异常: " + t.getMessage());
+            }
+            final String finalResolved = resolved;
+            mHandler.post(() -> {
+                // 解析期间用户已换台（currentUrl 不再是这条待解析地址）→ 丢弃本次结果
+                if (!TextUtils.equals(currentUrl, rawUrl)) {
+                    LogBridge.d(TAG, "【任意播】解析完成但已切换频道，丢弃");
+                    return;
+                }
+                if (TextUtils.isEmpty(finalResolved)) {
+                    LogBridge.w(TAG, "【任意播】roomId=" + roomId + " 解析失败（源失效或网络异常）");
+                    Toast.makeText(context, "任意播源失效或网络异常", Toast.LENGTH_SHORT).show();
+                    if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
+                    return;
+                }
+                // 直接交给播放器：跳过自研解析器环节
+                doPlay(finalResolved, initialSeekPosition);
+            });
+        }, "RenYiBoHuya-Resolve").start();
+    }
+
+    /**
      * 【2026-10-12 新增】源5 点播（爱其意影视）待解析地址解析后起播。
      *
      * <p>M3U 里存的是 {@code renyibo-vod://<typeId>:<vodId>}。本期 VOD 播放地址
@@ -1618,6 +1693,53 @@ public class TVPlayerManager {
                 doPlay(resolved, initialSeekPosition);
             });
         }, "Nbm-Resolve").start();
+    }
+
+    /** 【2026-10-23 源9 橘汁】当前正在解析的待解析地址（去重用） */
+    private volatile String jzResolvingUrl = "";
+
+    /**
+     * 【2026-10-23 源9 橘汁】惰性解析并播放 —— 与 {@link #resolveRybAndPlay} 同构：
+     * 起播这一刻调 getDetail 取集数 + videoUsableUrl 换真实 m3u8（RSA/AES 加密 protobuf）。
+     *
+     * @param rawUrl {@code juzhi://<vodId>} 或 {@code juzhi://<vodId>@<ep>}
+     */
+    private void resolveJzAndPlay(String rawUrl, long initialSeekPosition) {
+        synchronized (this) {
+            if (rawUrl.equals(jzResolvingUrl)) {
+                LogBridge.d(TAG, "【源9 橘汁】解析进行中，忽略重复请求");
+                return;
+            }
+            jzResolvingUrl = rawUrl;
+        }
+        LogBridge.i(TAG, "【源9 橘汁】起播解析 → " + rawUrl);
+        new Thread(() -> {
+            String finalUrl = null;
+            try {
+                finalUrl = com.tv.live.juzhi.JzUrlResolver.resolve(rawUrl);
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "【源9 橘汁】解析异常: " + t.getMessage());
+            }
+            final String resolved = finalUrl;
+            mHandler.post(() -> {
+                jzResolvingUrl = "";
+                if (!TextUtils.equals(currentUrl, rawUrl)) {
+                    LogBridge.d(TAG, "【源9 橘汁】解析完成但已切台，丢弃");
+                    return;
+                }
+                if (TextUtils.isEmpty(resolved)) {
+                    LogBridge.w(TAG, "【源9 橘汁】解析失败，转自动重试");
+                    autoRetry("源9(橘汁)解析失败");
+                    return;
+                }
+                LogBridge.i(TAG, "【源9 橘汁】落地地址就绪 → " + resolved);
+                try {
+                    com.tv.live.MyApplication.prewarmStreamAsync(resolved);
+                } catch (Throwable ignored) {
+                }
+                doPlay(resolved, initialSeekPosition);
+            });
+        }, "Jz-Resolve").start();
     }
 
     /** 源7（afhgrj 影视）当前正在解析的待解析地址（去重用；空 = 无解析进行中） */
@@ -4803,6 +4925,11 @@ public class TVPlayerManager {
             boolean isRybPending = com.tv.live.ryb.RybUrlResolver.isRybUrl(playUrl);
             // 【2026-10-21】内置源2 追加的 4K影视：nbm://<vodId> 是待解析地址（NM 加密帧惰性解析）
             boolean isNbmPending = com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(playUrl);
+            // 【2026-10-23】内置源9（橘汁）：juzhi://<vodId> 是待解析地址（加密 protobuf 惰性解析）
+            boolean isJzPending = com.tv.live.juzhi.JzUrlResolver.isJzUrl(playUrl);
+            // 【2026-10-24】虎牙第三条线路（任意播）：rybhuya://<roomId> 是待解析地址，
+            //   起播这一刻单独请求 huya.php 拿落地 FLV（与第一/二路的自研解析链完全独立，互不污染）。
+            boolean isRybhuyaPending = com.tv.live.manager.HuyaRenYiBoLineManager.isSchemeUrl(playUrl);
             LogBridge.d(TAG, "doPlay: url=" + playUrl.substring(0, Math.min(100, playUrl.length())) + " isHls=" + isHlsUrl(playUrl) + " isRealStream=" + isRealStream);
 
             String finalUrl;
@@ -4810,6 +4937,7 @@ public class TVPlayerManager {
             // 直接采用传入的源串，不能被「频道线路表」覆盖（咪咕频道 backupUrls 不含这些源）。
             if (currentChannel != null && !isRealStream && !isZgyjVod && !isYunTuLb
                     && !isRenyiboPending && !isAfhgrjPending && !isRybPending && !isNbmPending
+                    && !isJzPending && !isRybhuyaPending
                     && !isRenyiboResolvedStream
                     && !mHuyaDirectPlay && !mMiguDirectPlay) {
                 SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
@@ -4894,6 +5022,14 @@ public class TVPlayerManager {
                 return;
             }
 
+            // ★【2026-10-24】虎牙第三条线路（任意播）：rybhuya://<roomId> 起播这一刻
+            //   直接调任意播 huya.php 拿落地 FLV 地址交给播放器 —— 全程不经过自研
+            //   HuyaParser 解析器（与第一/二路解析链完全独立、互不污染）。
+            if (isRybhuyaPending) {
+                resolveRenYiBoHuyaAndPlay(finalUrl, initialSeekPosition);
+                return;
+            }
+
             // ★内置源7（afhgrj 影视）：M3U 里存的是 afhgrj://<vodId>（EPG 切集时带 sid/nid），
             //   起播这一刻才抓播放页 player_aaaa 取真实 m3u8（惰性解析，参照源5/源6 模式）。
             if (isAfhgrjPending) {
@@ -4912,6 +5048,13 @@ public class TVPlayerManager {
             //   起播这一刻才走 NM 加密帧通道取详情/播放地址拿真实 m3u8 —— 纯 HTTP，照源8 的做法。
             if (com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(finalUrl)) {
                 resolveNbmAndPlay(finalUrl, initialSeekPosition);
+                return;
+            }
+
+            // ★【2026-10-23】内置源9（橘汁）：M3U 里存的是 juzhi://<vodId>（EPG 切集时为 @ep），
+            //   起播这一刻调 getDetail + videoUsableUrl 取真实 m3u8 —— 加密 protobuf 通道。
+            if (com.tv.live.juzhi.JzUrlResolver.isJzUrl(finalUrl)) {
+                resolveJzAndPlay(finalUrl, initialSeekPosition);
                 return;
             }
 
@@ -5005,6 +5148,11 @@ public class TVPlayerManager {
                 || com.tv.live.ryb.RybUrlResolver.isRybUrl(u)
                 // 【2026-10-21 源2 追加 4K影视】点播形态，同样走本地代理剥离广告
                 || com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(u)
+                // 【2026-10-23 源9 橘汁】仅点播走本地代理剥离广告；
+                //   直播（juzhi://live/...）必须直连 —— 代理的清单缓存会让直播拿到旧清单
+                //   → 卡顿/黑屏（与源1/2/3 直播直连同一口径）。
+                || (com.tv.live.juzhi.JzUrlResolver.isJzUrl(u)
+                    && !com.tv.live.juzhi.JzUrlResolver.isLiveUrl(u))
                 || com.tv.live.migu.source.ZgyjVodApi.isZgyjVodUrl(u)
                 || com.tv.live.migu.source.CarouselApi.isYunTuLookBackUrl(u);
     }
@@ -5018,6 +5166,18 @@ public class TVPlayerManager {
         //   20s 又被 PLTV 清单陈旧度吃掉，见下方 HLS 分支注释；30s = media3 默认值 = 10.8 行为）。
         boolean isLiveHls = isHlsUrl(url) && url.contains(".m3u8") && !isVodPlayContext(url);
 
+        // 【2026-10-23 源9 直连】源9 点播禁止走广告剥离代理，由播放器直接播放：
+        //   ① 对齐橘汁原版——原版 ProxyCacheManager.doCacheLogic 明确 .m3u8 不走本地代理，
+        //      m3u8 与分片全由播放内核直连；实测源9 落地 CDN（meilinvps / xfyvideochandi2 等）
+        //      也无广告分片需求，剥离对它零收益；
+        //   ② 少一层本地代理 = 少一次 127.0.0.1 中继，起播更快、seek 恢复路径更短；
+        //   ③ 防盗链 UA/Referer 已由 videoUsableUrl 下发并合并进播放器请求头（见下方 headers），
+        //      直连时随数据源请求一并发出，不依赖代理透传。
+        // 源9 直播（juzhi://live/…）本就走 isLiveHls 直连，此处只点播。
+        boolean jzVodDirect = currentChannel != null
+                && com.tv.live.juzhi.JzUrlResolver.isJzUrl(currentChannel.getMainPlayUrl())
+                && !com.tv.live.juzhi.JzUrlResolver.isLiveUrl(currentChannel.getMainPlayUrl());
+
         // 【广告剥离】仅 m3u8 点播走本地代理剥离广告
         // 【2026-10-17 直播黑屏·二期修复】直播源直连，彻底绕开本地剥离代理：
         //   代理的「剥离 + 5 分钟缓存 + 请求去重」只对点播（有 #EXT-X-ENDLIST）有意义；
@@ -5030,6 +5190,10 @@ public class TVPlayerManager {
         if (isHlsUrl(url) && url.contains(".m3u8")) {
             if (isLiveHls) {
                 LogBridge.i(TAG, "【广告剥离】直播源直连（跳过代理，避免清单缓存过期导致黑屏）: "
+                        + url.substring(0, Math.min(80, url.length())));
+            } else if (jzVodDirect) {
+                // 【2026-10-23 源9 直连】点播也直连：不走本地剥离代理，播放器自己拉 m3u8 与分片
+                LogBridge.i(TAG, "【广告剥离】源9点播直连（不走代理，播放器直接播放）: "
                         + url.substring(0, Math.min(80, url.length())));
             } else {
             WebServerManager webServer = WebServerManager.getRunningInstance();
@@ -5090,7 +5254,18 @@ public class TVPlayerManager {
             // 用户手选清晰度导致的重播（分片地址）：不要重新解析 master，否则 variantList 被清空。
             mSuppressMasterParseOnce = false;
         } else if (isHlsUrl(url)) {
-            fetchAndParseMasterPlaylistNormal(url);
+            // 【2026-10-24 冷启动优化①】播放器未就绪（冷启动首播/换台缓冲中）时延后主清单预取：
+            //   慢源场景下预取会与 ExoPlayer 首帧加载抢同一个慢服务器（实测 hwrr.jx 网关清单
+            //   10s 才 200，两个并发连接互相拖累）。延后到首次 STATE_READY 后再解析，
+            //   只牺牲「清晰度菜单的就绪时机」，换取首帧少一个并发竞争。
+            if (player != null && player.getPlaybackState() == Player.STATE_READY) {
+                fetchAndParseMasterPlaylistNormal(url);
+            } else {
+                synchronized (mPendingMasterParseLock) {
+                    mPendingMasterParseUrl = url;
+                }
+                LogBridge.i(TAG, "【普通源】主清单预取延后到出画后（首帧优先，省并发连接）");
+            }
         } else {
             synchronized (variantListLock) { variantList.clear(); }
         }
@@ -5109,6 +5284,32 @@ public class TVPlayerManager {
                 Map<String, String> localHeaders = new HashMap<>();
                 for (String name : globalHeaders.names()) {
                     localHeaders.put(name, globalHeaders.get(name));
+                }
+                // 【2026-10-23 修复5】源9 点播/直播：videoUsableUrl 下发的防盗链播放头
+                //   （User-Agent/Referer，JzUrlResolver.playHeaders()）合并进请求头，
+                //   经 /ts 代理透传（既有逻辑）与 /m3u8 代理透传（downloadM3u8 读同一 holder）带给 CDN。
+                //   只合并 UA/Referer 两个键，不把 Cookie 等带到无关 CDN；
+                //   非源9 起播则清空 holder，防止上一条源9 线路的头污染其它源。
+                //   服务端未下发时行为与原来完全一致。
+                if (currentChannel != null
+                        && com.tv.live.juzhi.JzUrlResolver.isJzUrl(currentChannel.getMainPlayUrl())) {
+                    java.util.Map<String, String> playHdrs = com.tv.live.juzhi.JzUrlResolver.playHeaders();
+                    if (playHdrs != null && !playHdrs.isEmpty()) {
+                        int merged = 0;
+                        for (java.util.Map.Entry<String, String> e : playHdrs.entrySet()) {
+                            if (e.getKey() == null || e.getValue() == null) continue;
+                            if ("user-agent".equalsIgnoreCase(e.getKey())
+                                    || "referer".equalsIgnoreCase(e.getKey())) {
+                                localHeaders.put(e.getKey(), e.getValue());
+                                merged++;
+                            }
+                        }
+                        if (merged > 0) {
+                            dLog("【源9】合并防盗链播放头 " + merged + " 项（UA/Referer）");
+                        }
+                    }
+                } else if (currentChannel != null) {
+                    com.tv.live.juzhi.JzUrlResolver.clearPlayHeaders();
                 }
                 dLog("【普通源】使用默认 headers " + localHeaders.size() + " 项");
 

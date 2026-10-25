@@ -132,9 +132,10 @@ public final class RenYiBoVodSourceLoader {
     private static volatile int sLastRealCount = 0;
 
     private static final M3uDiskCache sVodCache = new M3uDiskCache(
-            // 【2026-10-21】缓存名带 v2：新增科幻/灾难两分组，旧缓存（8 分类）在 12h
-            // TTL 内会持续生效，改名冷落旧文件，升级后首次加载即重抓 10 分类。
-            TAG, "源5点播分组", "renyibo_vod_v2.m3u", VOD_CACHE_TTL_MS, VOD_FAIL_COOLDOWN_MS,
+            // 【2026-10-24】缓存名带 v3：用户口径分组收敛（删恐怖/科幻/灾难/短剧，回六大分类
+            // + 筛选维度交互），旧缓存（10 分类）在 12h TTL 内会持续生效，改名冷落旧文件，
+            // 升级后首次加载即重抓 6 分类。
+            TAG, "源5点播分组", "renyibo_vod_v3.m3u", VOD_CACHE_TTL_MS, VOD_FAIL_COOLDOWN_MS,
             new M3uDiskCache.Fetcher() {
                 @Override
                 public String fetch() {
@@ -537,9 +538,29 @@ public final class RenYiBoVodSourceLoader {
     }
 
     private static List<String[]> fetchCategoryPageReal(int typeId, int page, String classFilter) {
+        return fetchCategoryPageReal(typeId, page, classFilter, "", "", "");
+    }
+
+    /**
+     * 【2026-10-24 筛选维度移植】全维度重载：class 之外补 area / lang / year 三维。
+     * 请求体字段与 2026-10-12 锁定的 {@code video_list} 形状一致（空串 = 不筛该维度），
+     * 响应解析与单 class 版完全相同。
+     */
+    private static List<String[]> fetchCategoryPageReal(int typeId, int page, String classFilter,
+                                                        String area, String lang, String year) {
+        return fetchCategoryPageReal(typeId, page, classFilter, area, lang, year, "最热");
+    }
+
+    /**
+     * 【2026-10-24 排序维度】全维度+排序重载：order 可选（最新/最热/好评，默认最热）。
+     * 请求体字段与 2026-10-12 锁定的 {@code video_list} 形状一致，响应解析不变。
+     */
+    private static List<String[]> fetchCategoryPageReal(int typeId, int page, String classFilter,
+                                                        String area, String lang, String year,
+                                                        String order) {
         try {
             byte[] iv = VodCrypto.genRandomIv();
-            String plain = VodRequest.videoList(typeId, page, classFilter);
+            String plain = VodRequest.videoList(typeId, page, classFilter, area, lang, year, order);
             byte[] cipher = VodCrypto.encrypt(plain, iv);
             // 【2026-10-12 线上实测定案】请求体 = base64url( IV(16B) ‖ 密文 )，IV 前置。
             byte[] payload = new byte[iv.length + cipher.length];
@@ -647,8 +668,12 @@ public final class RenYiBoVodSourceLoader {
         //   video_detail 明文，<b>不新增任何网络请求</b>），让 STATE_ENDED 的自动联播在
         //   主界面 / OTT 两条播放通路下都能拿到「当前 vod 全部集顺序」。
         ensureVodEpisodeCacheFromDetail(vodId, obj);
-        // 【2026-10-16 源5 CDN测速自动切源】优先取用户所选线路的直链；
-        // 若用户线路不可达，则自动测速选择最快的可达线路。
+        // 【2026-10-24 线路优先级=畅享(白天用)＞官方①–⑥＞备用1＞动漫专线＞备用(顺序降级)
+        //   ＋ 禁用 CDN 测速自动换线】起播直接采用「当前选中线路」：
+        //   官方解析线路 → HTTP 解析出直链；解析页面线路 → WebView 解析；直链线路 → 直接用。
+        //   不再 probeSpeed 测速、不因测速结果自动切换线路（避免 CDN 测速把用户线路
+        //   甩到第三方 CDN，带来烧录水印/插播广告/黑屏问题）；播放中彻底失效的轮转兜底
+        //   由 {@link #tryNextVodLineAuto}（失效换线，非测速换线）承担。
         // 【2026-10-16 增加线路】解析页面线路（直链为空）通过 WebVideoResolver 异步解析。
         List<String[]> lines = sVodLineCache.get(vodId);
         String u = null;
@@ -671,43 +696,46 @@ public final class RenYiBoVodSourceLoader {
                             : WebVideoResolver.get(sAppContext).resolve(
                                     firstSeg != null ? firstSeg : selLine[4]);
                 }
-                if (resolved != null && !resolved.isEmpty()) {
+                if (resolved != null && !resolved.isEmpty() && !isWatermarkHost(resolved)) {
                     userUrl = resolved;
                     // 缓存解析结果到线路表，避免重复解析
                     selLine[3] = resolved;
                     LogBridge.i(TAG, "源5点播：解析型线路解析成功 [" + selLine[0] + "] -> " + resolved);
                 } else {
-                    LogBridge.w(TAG, "源5点播：解析型线路解析失败 [" + selLine[0] + "]，尝试其他线路");
-                    // 解析失败，自动测速选择其他直链线路
-                    int bestIdx = selectBestLineBySpeed(lines);
-                    if (bestIdx >= 0 && bestIdx != idx) {
-                        userUrl = lines.get(bestIdx)[3];
-                        sVodLineSel.put(vodId, bestIdx);
-                        LogBridge.i(TAG, "源5点播：解析失败回退到直链线路 [" + lines.get(bestIdx)[0] + "]");
+                    if (resolved != null && !resolved.isEmpty()) {
+                        LogBridge.w(TAG, "源5点播：解析结果带烧录水印 [" + selLine[0] + "]，弃用");
+                    }
+                    // 【2026-10-24 禁用测速自动换线】解析失败/带水印 → 不再测速选线，
+                    //   按官方①–⑥顺序顺次尝试其余官方解析线路；全部不可用则落到
+                    //   video_detail 自带直链（extractPlayUrl，优先干净 host）。
+                    LogBridge.w(TAG, "源5点播：解析型线路不可用 [" + selLine[0] + "]，按官方优先顺延");
+                    for (int j = 1; j < lines.size(); j++) {
+                        int k = (idx + j) % lines.size();
+                        String[] alt = lines.get(k);
+                        String tok = firstSegPlayable(alt[4]);
+                        if (tok == null || !VodLineResolver.isOfficialToken(tok)) continue;
+                        LogBridge.i(TAG, "源5点播：顺延尝试官方解析线路 [" + alt[0] + "]");
+                        String altResolved = VodLineResolver.resolveToken(tok);
+                        if (altResolved == null || altResolved.isEmpty()) continue;
+                        if (isWatermarkHost(altResolved)) {
+                            LogBridge.w(TAG, "源5点播：顺延解析结果带水印 [" + alt[0] + "]，跳过");
+                            continue;
+                        }
+                        alt[3] = altResolved;   // 缓存解析结果，避免重复解析
+                        userUrl = altResolved;
+                        sVodLineSel.put(vodId, k);
+                        LogBridge.i(TAG, "源5点播：顺延官方线路解析成功 [" + alt[0] + "] -> " + altResolved);
+                        break;
                     }
                 }
             }
-            // 先探测用户选择的线路的实际传输速度（仅对直链线路测速）
+            // 【2026-10-24 禁用 CDN 测速自动换线】起播直接采用当前选中线路，不再测速：
+            //   - 直链线路：直接使用；
+            //   - 官方/解析型线路：上面已解析出直链（解析失败已按官方优先顺延/兜底）。
+            // 播放中彻底失效的轮转兜底由 tryNextVodLineAuto 承担（失效换线，非测速换线）。
             if (userUrl != null && !userUrl.isEmpty()) {
-                long userSpeed = probeSpeed(userUrl);
-                if (userSpeed >= MIN_ACCEPTABLE_SPEED_KBPS) {
-                    u = userUrl;
-                    LogBridge.i(TAG, "源5点播：用户线路速度正常 [" + selLine[0] + "] 速度=" + userSpeed + "KB/s");
-                } else {
-                    // 用户线路不可达或速度过低，自动测速选择最快的可达线路
-                    String reason = (userSpeed <= 0) ? "不可达" : "速度过低(" + userSpeed + "KB/s)";
-                    LogBridge.w(TAG, "源5点播：用户线路" + reason + " [" + selLine[0] + "]，启动自动测速选线");
-                    int bestIdx = selectBestLineBySpeed(lines);
-                    if (bestIdx >= 0) {
-                        u = lines.get(bestIdx)[3];
-                        sVodLineSel.put(vodId, bestIdx); // 更新用户选择为最快线路
-                        LogBridge.i(TAG, "源5点播：自动测速选线成功 [" + lines.get(bestIdx)[0] + "]");
-                    } else {
-                        // 全部不可达，回退用户线路
-                        u = userUrl;
-                        LogBridge.w(TAG, "源5点播：全部线路不可达，回退用户线路 [" + selLine[0] + "]");
-                    }
-                }
+                u = userUrl;
+                LogBridge.i(TAG, "源5点播：起播采用选中线路 [" + selLine[0] + "]（官方优先·禁用测速换线）");
             }
         }
         if (u == null) {
@@ -912,28 +940,22 @@ public final class RenYiBoVodSourceLoader {
                     raw,
             });
         }
-        // 【2026-10-13 默认线路=畅享(白天用) + 水印规避】四级稳定排序（同级保持服务端原顺序）：
-        //   ⓪ 名含「畅享」且 host 干净 → 最优先（★用户指定默认线路：畅享(白天用)）；
-        //   ① 名含「无水印/无广告」且 host 干净 → 次优先（原 App 的服务端线路分级口径）；
-        //   ② 其余 host 干净线路；
-        //   ③ host 命中 WATERMARK_HOST_MARKERS（正片烧录博彩水印）→ 兜底
-        //      （仅当 ⓪①② 全部不可用/不可达时才回退带水印线路，保证仍有画面）。
-        List<String[]> ordered = new ArrayList<>(lines.size());
-        int wmCount = 0;
-        for (String[] ln : lines) {                                        // ⓪ 畅享线 + host 干净
-            if (isChangxiangName(ln[0]) && !isWatermarkHost(ln[3])) ordered.add(ln);
-        }
-        for (String[] ln : lines) {                                        // ① 名干净 + host 干净
-            if (!isChangxiangName(ln[0]) && isCleanName(ln[0]) && !isWatermarkHost(ln[3])) ordered.add(ln);
-        }
-        for (String[] ln : lines) {                                        // ② 其余 host 干净
-            if (!isChangxiangName(ln[0]) && !isCleanName(ln[0]) && !isWatermarkHost(ln[3])) ordered.add(ln);
-        }
-        for (String[] ln : lines) {                                        // ③ host 带烧录水印 → 兜底
-            if (isWatermarkHost(ln[3])) { ordered.add(ln); wmCount++; }
-        }
-        lines = ordered;
+        // 【2026-10-24 用户指定线路优先级】稳定排序（Collections.sort=TimSort 稳定，同级保持服务端原顺序；
+        //   不用 List.sort——那是 API 24 默认方法，minSdk=21 的 5.0~7.1 机型上会 NoSuchMethodError）：
+        //   ⓪ 畅享(白天用) 且 host 干净        → 最优先（用户指定默认线路）
+        //   ① 官方解析路线 官方①–⑥             → 按官方编号 ①BBA→②NBY→③ZY→④YKTX→⑤co→⑥yzx
+        //   ② 备用1 且 host 干净
+        //   ③ 动漫专线（ZY-anime_/DMM）
+        //   ④ 其余 host 干净线路               → 备用等按服务端原顺序降级
+        //   ⑤ host 命中 WATERMARK_HOST_MARKERS → 正片烧录博彩水印，永远兜底
+        java.util.Collections.sort(lines, (a, b) -> Integer.compare(lineRank(a), lineRank(b)));
         if (!lines.isEmpty()) {
+            int wmCount = 0;
+            int offCount = 0;
+            for (String[] ln : lines) {
+                if (isWatermarkHost(ln[3])) wmCount++;
+                if (VodLineResolver.officialNo(firstSegPlayable(ln[4])) > 0) offCount++;
+            }
             sVodLineCache.put(vodId, lines);
             // 【2026-10-13 水印规避】原选中下标若在排序后落在带水印的兜底线路 → 复位为默认
             //   （第 0 条干净线路），避免旧的选区绕开新策略、用户依旧看到烧录水印。
@@ -944,6 +966,7 @@ public final class RenYiBoVodSourceLoader {
             }
             LogBridge.i(TAG, "源5点播：线路表就绪 vodId=" + vodId + " 共 " + lines.size()
                     + " 条，默认线路[" + lines.get(0)[0] + "]"
+                    + (offCount > 0 ? "（官方路线 " + offCount + " 条列 ① 档）" : "")
                     + (wmCount > 0 ? "（其中 " + wmCount + " 条带烧录水印已降级为兜底）" : ""));
             // 【2026-10-13 线路体检】把全部线路（名/host/直链）逐条打日志，
             //   供 PC 端逐线拉 m3u8 抽帧、判定哪条线路正片带广告/水印（无水印者定为默认线）。
@@ -1024,14 +1047,42 @@ public final class RenYiBoVodSourceLoader {
                 lower.contains("jiexi"));
     }
 
-    /** 【2026-10-13】线路名是否声明「无水印/无广告」（原 App 服务端线路分级口径）。 */
-    private static boolean isCleanName(String name) {
-        return name != null && (name.contains("无水印") || name.contains("无广告"));
-    }
-
     /** 【2026-10-13】线路名是否「畅享」（★用户指定默认线路：畅享(白天用)）。 */
     private static boolean isChangxiangName(String name) {
         return name != null && name.contains("畅享");
+    }
+
+    /** 【2026-10-24 用户指定优先级】线路名是否「备用1」（「备用10」等不误判）。 */
+    private static boolean isBackup1Name(String name) {
+        if (name == null) return false;
+        int i = name.indexOf("备用1");
+        if (i < 0) return false;
+        int j = i + 3;
+        return j >= name.length() || !Character.isDigit(name.charAt(j));
+    }
+
+    /**
+     * 【2026-10-24 用户指定线路优先级】线路排序档位（越小越优先；
+     * 同级由 {@link java.util.Collections#sort} 的稳定性保持服务端原顺序）：
+     * <pre>
+     *   0  畅享(白天用) + host 干净
+     *   1x 官方①–⑥（x=官方编号：①BBA→②NBY→③ZY→④YKTX→⑤co→⑥yzx）
+     *   2  备用1 + host 干净
+     *   3  动漫专线（ZY-anime_/DMM）
+     *   4  其余 host 干净线路（备用等按服务端原顺序降级）
+     *   5  host 命中 WATERMARK_HOST_MARKERS（正片烧录博彩水印）→ 永远兜底
+     * </pre>
+     */
+    private static int lineRank(String[] ln) {
+        if (ln == null || ln.length < 5) return 99;
+        if (isWatermarkHost(ln[3])) return 5;                        // 水印兜底永远垫底
+        if (isChangxiangName(ln[0])) return 0;                       // 畅享(白天用)
+        String tok = firstSegPlayable(ln[4]);
+        if (tok != null && tok.startsWith("ZY-anime_")) return 3;    // 动漫专线DMM
+        int off = VodLineResolver.officialNo(tok);
+        if (off > 0) return 10 + off;                                // 官方①–⑥
+        if (isBackup1Name(ln[0])) return 2;                          // 备用1
+        return 4;                                                    // 其余按序降级
     }
 
     /**
@@ -1316,6 +1367,136 @@ public final class RenYiBoVodSourceLoader {
         return out;
     }
 
+    // ------------------------------------------------------------------
+    // 【2026-10-24 筛选维度移植】交互式筛选（class / area / lang / year）
+    // ------------------------------------------------------------------
+
+    /** 筛选拉取回调（回调在<b>后台线程</b>触发，UI 侧自行 post 到主线程）。 */
+    public interface FilterCallback {
+        void onResult(boolean ok, List<String[]> items);
+    }
+
+    /**
+     * 筛选结果缓存条目。key = typeId|class|area|lang|year（空维度写空串）。
+     * TTL 30 分钟：与直播源 12h 不同 —— 筛选是「找片」场景，30 分钟内重选同组合直接命中，
+     * 过期后重新拉取也不至于像 12h 那样给服务端留下旧组合的长期缓存压力。
+     */
+    private static final long FILTER_CACHE_TTL_MS = 30L * 60L * 1000L;
+    private static final java.util.concurrent.ConcurrentHashMap<String, Object[]> FILTER_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** items 为 null 表示「该组合拉取失败」——失败结果也缓存（短 TTL），防止失败后无限重试打服务端。 */
+    private static final long FILTER_FAIL_TTL_MS = 5L * 60L * 1000L;
+    /** 每个筛选组合最多拉取页数（与分类骨架口径一致：21 条/页，3 页约 63 条）。 */
+    private static final int FILTER_FETCH_PAGES = 3;
+
+    /**
+     * 筛选拉取单飞执行器：<b>串行</b>（1 线程）。
+     * 红线口径：对 VOD 端点始终单请求串行、不并发；UI 连续改筛选条件时任务排队，
+     * 由「结果回投时校验 group 仍是当前分组 + 每组合缓存」收敛重复请求。
+     */
+    private static final java.util.concurrent.ExecutorService FILTER_EXECUTOR =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "ryb5-filter");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /**
+     * 按筛选组合异步拉取片单（class / area / lang / year / order 任意组合，空维度 = 不筛）。
+     *
+     * <p>链路复用既有 {@link #fetchCategoryPageReal} 加密管线（AES-128-CBC + IV 前置 +
+     * {@link VodResponse} 解密），只是把 area/lang/year/order 从恒定值放开为可选；
+     * 分页 1..{@link #FILTER_FETCH_PAGES} 串行翻页、按 vod_id 去重合并，与
+     * {@link #fetchCategoryPagesMerged} 同口径。命中缓存（30 分钟）时直接同步回投，
+     * <b>不发任何网络请求</b>；失败组合 5 分钟内也直接回投失败（不重试打服务端）。
+     *
+     * @param catName 分类名（电影/电视剧/…，须在 {@link RenYiBoVodCatalog#CATEGORIES} 内）
+     * @param order   排序（最新/最热/好评；空/null = 最热）
+     * @param cb      结果回调（后台线程）；ok=false 表示接口失败
+     */
+    public static void fetchFilteredAsync(String catName, String cls, String area,
+                                          String lang, String year, String order,
+                                          FilterCallback cb) {
+        final RenYiBoVodCatalog.Category cat = categoryByName(catName);
+        if (cat == null || cb == null) {
+            if (cb != null) cb.onResult(false, null);
+            return;
+        }
+        final String c = safeDim(cls), a = safeDim(area), l = safeDim(lang), y = safeDim(year);
+        final String o = (order == null || order.trim().isEmpty()) ? "最热" : order.trim();
+        final String key = cat.typeId + "|" + c + "|" + a + "|" + l + "|" + y + "|" + o;
+        Object[] hit = FILTER_CACHE.get(key);
+        long now = System.currentTimeMillis();
+        if (hit != null) {
+            long at = (Long) hit[0];
+            boolean failed = hit[1] == null;
+            long ttl = failed ? FILTER_FAIL_TTL_MS : FILTER_CACHE_TTL_MS;
+            if (now - at < ttl) {
+                LogBridge.i(TAG, "源5筛选：命中缓存 " + key
+                        + (failed ? "（失败冷却）" : " 共 " + ((List<String[]>) hit[1]).size() + " 条"));
+                cb.onResult(!failed, failed ? null : (List<String[]>) hit[1]);
+                return;
+            }
+            FILTER_CACHE.remove(key);
+        }
+        FILTER_EXECUTOR.execute(() -> {
+            Map<String, String[]> dedup = new LinkedHashMap<>();
+            boolean ok = true;
+            for (int page = 1; page <= FILTER_FETCH_PAGES && ok; page++) {
+                List<String[]> pageList = fetchCategoryPageReal(cat.typeId, page, c, a, l, y, o);
+                if (pageList == null) {
+                    // 第 1 页就失败 = 接口失败；后续页失败视为「页已尽」（与骨架口径不同：
+                    // 骨架把任何 null 当停页，这里第 1 页 null 必须报失败，否则 UI 无法区分空结果与失败）
+                    if (page == 1) ok = false;
+                    LogBridge.w(TAG, "源5筛选：" + key + " 第" + page + "页失败/无页"
+                            + (page == 1 ? "（判定接口失败）" : "（停止翻页）"));
+                    break;
+                }
+                if (pageList.isEmpty()) break;   // 该组合页已尽
+                for (String[] v : pageList) {
+                    if (v == null) continue;
+                    String id = (v[0] == null ? "" : v[0]).trim();
+                    if (id.isEmpty() || v[1] == null || v[1].isEmpty()) continue;
+                    if (!dedup.containsKey(id)) dedup.put(id, v);
+                }
+            }
+            List<String[]> merged = ok ? new ArrayList<>(dedup.values()) : null;
+            FILTER_CACHE.put(key, new Object[]{System.currentTimeMillis(), merged});
+            LogBridge.i(TAG, "源5筛选：" + key + " → "
+                    + (ok ? ("成功 共 " + merged.size() + " 条") : "失败"));
+            cb.onResult(ok, merged);
+        });
+    }
+
+    /** 维度值归一：null/「全部」/空白 → 空串（空串 = 不筛该维度）。 */
+    private static String safeDim(String v) {
+        if (v == null) return "";
+        v = v.trim();
+        if (v.isEmpty() || "全部".equals(v)) return "";
+        return v;
+    }
+
+    /** 分类名 → Category（含恐怖/科幻/灾难等 class 派生分组）；未找到返回 null。 */
+    public static RenYiBoVodCatalog.Category categoryByName(String name) {
+        if (name == null || name.isEmpty()) return null;
+        for (RenYiBoVodCatalog.Category c : RenYiBoVodCatalog.CATEGORIES) {
+            if (c.name.equals(name)) return c;
+        }
+        return null;
+    }
+
+    /**
+     * 某分组某维度的候选值（如 电影+area → 大陆/香港/…）；少儿 lang 为空表返回空数组。
+     * 「全部」由 UI 侧自行补在首位，不在服务端维度值里。
+     */
+    public static String[] filterDimensionValues(String catName, String dimKey) {
+        RenYiBoVodCatalog.Category c = categoryByName(catName);
+        if (c == null) return new String[0];
+        String v = c.filterValues(dimKey);
+        if (v == null || v.isEmpty()) return new String[0];
+        return v.split(",");
+    }
+
     private static int parseIntSafe(String s, int def) {
         try {
             return Integer.parseInt(s.trim());
@@ -1341,7 +1522,11 @@ public final class RenYiBoVodSourceLoader {
     }
 
     // ------------------------------------------------------------------
-    // 【2026-10-16 源5 CDN测速自动切源】
+    // 【2026-10-16 源5 CDN测速自动切源 → 2026-10-24 已禁用】
+    // 测速选线 / 测速自动换线（selectBestLineBySpeed）已按用户要求移除：
+    // 官方路线优先，起播固定采用选中线路，不再因测速结果甩到第三方 CDN。
+    // probeSpeed 仅保留给「播放彻底失败」的失效换线（tryNextVodLineAuto）
+    // 做可达性探测（speed>0 即可达，不按速度排序选线）。
     // ------------------------------------------------------------------
 
     /** 探测超时：建连2.5秒，读取2.5秒（死线路的表现是建连挂死）。 */
@@ -1396,45 +1581,6 @@ public final class RenYiBoVodSourceLoader {
     /** 兼容旧调用：探测是否可达（速度 > 0 即视为可达）。 */
     private static boolean probePlayable(String url) {
         return probeSpeed(url) > 0;
-    }
-
-    /** 最低可接受速度（KB/s），低于此值判定为慢线路。 */
-    private static final long MIN_ACCEPTABLE_SPEED_KBPS = 200;
-
-    /**
-     * 测速选择传输速度最快的线路。
-     *
-     * <p>遍历所有线路，下载前100KB计算实际带宽，返回速度最快的线路下标。
-     * 全部不可达或全部低于最低速度返回 -1。</p>
-     */
-    private static int selectBestLineBySpeed(List<String[]> lines) {
-        if (lines == null || lines.isEmpty()) return -1;
-        int bestIdx = -1;
-        long bestSpeed = -1;
-        for (int i = 0; i < lines.size(); i++) {
-            String[] ln = lines.get(i);
-            if (ln == null || ln.length < 4) continue;
-            String url = ln[3];
-            // 【2026-10-16 增加线路】跳过解析页面线路（直链为空），不测速
-            if (url == null || url.isEmpty()) {
-                LogBridge.d(TAG, "源5点播：测速线路#" + i + " [" + ln[0] + "] 是解析页面，跳过测速");
-                continue;
-            }
-            long speed = probeSpeed(url);
-            if (speed > 0) {
-                LogBridge.i(TAG, "源5点播：测速线路#" + i + " [" + ln[0] + "] 速度=" + speed + "KB/s");
-                if (speed > bestSpeed) {
-                    bestSpeed = speed;
-                    bestIdx = i;
-                }
-            } else {
-                LogBridge.w(TAG, "源5点播：测速线路#" + i + " [" + ln[0] + "] 不可达");
-            }
-        }
-        if (bestIdx >= 0 && bestSpeed < MIN_ACCEPTABLE_SPEED_KBPS) {
-            LogBridge.w(TAG, "源5点播：最快线路速度仅 " + bestSpeed + "KB/s，低于最低阈值 " + MIN_ACCEPTABLE_SPEED_KBPS + "KB/s");
-        }
-        return bestIdx;
     }
 
     // ------------------------------------------------------------------

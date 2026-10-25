@@ -125,6 +125,67 @@ OBF_DEF(K_VODP_DMM,     "http://49.233.180.127:7788/dmm.php/?url=",             
 OBF_DEF(K_BUGLY_APP_ID, "4a23007223",                                            0x5d);
 
 
+// ------------------------------------------------------------------
+// 【2026-10-23 第五批】内置源9 橘汁（com.tv.live.juzhi）协议常量密文化。
+// 原为 JzProtocol 的 Java 常量（多为 public static final —— 编译期内联到每个使用点，
+// dex 里明文可见；safeCode/safeSecretKey/decryptKey 三把 AES 工作密钥同此）。
+// 现全部下沉本 .so，Java 侧只留惰性 getter（见 JzProtocol / SecurityCore.C_JZ_*）。
+// ⚠ 取值点必须在非主线程：secureString 首次会触发 SecurityCore.init() 的 loadLibrary。
+// ------------------------------------------------------------------
+/** id=28 · 橘汁 body 加密工作密钥（签名派生，双重 Base64 取前16+后16） */
+OBF_DEF(K_JZ_SAFE_CODE, "SGNWTJHSK05SU3NBSLJQSELXREFRPT0=", 0x14);
+/** id=29 · 橘汁 sig2/sig3 与 GET query 加密密钥 */
+OBF_DEF(K_JZ_SAFE_SECRET_KEY, "OC1A06E197EF10CF3F6058CA7A803B5E", 0x27);
+/** id=30 · 橘汁 firstLevelPublic 解密密钥（KEY1+KEY4+KEY6+MAX_ENCRYPTKEY+Md1khdaF） */
+OBF_DEF(K_JZ_DECRYPT_KEY, "AWSS@EAAA112U*YjgtUITB)FMd1khdaF", 0x38);
+/** id=31 · 橘汁域名引导 OSS①（cos.ap-guangzhou） */
+OBF_DEF(K_JZ_OSS_URL_1, "https://tv-1349250429.cos.ap-guangzhou.myqcloud.com/tv1.txt", 0x49);
+/** id=32 · 橘汁域名引导 OSS②（cos.ap-chengdu） */
+OBF_DEF(K_JZ_OSS_URL_2, "https://tv2-1349250429.cos.ap-chengdu.myqcloud.com/tv2.txt", 0x52);
+/** id=33 · 橘汁域名引导 OSS③（cos.ap-shanghai） */
+OBF_DEF(K_JZ_OSS_URL_3, "https://tv3-1349250429.cos.ap-shanghai.myqcloud.com/tv3.txt", 0x63);
+/** id=34 · 橘汁域名引导 OSS④（123pan tv4.txt） */
+OBF_DEF(K_JZ_OSS_URL_4, "https://vip.123pan.cn/1848463092/cct/tv4.txt", 0x71);
+/** id=35 · 橘汁域名引导 OSS⑤（123pan tv5.txt） */
+OBF_DEF(K_JZ_OSS_URL_5, "https://vip.123pan.cn/1848463092/cct/tv5.txt", 0x84);
+/** id=36 · 橘汁兜底 baseUrl（OSS 全不可达时） */
+OBF_DEF(K_JZ_FALLBACK_BASE, "https://gdsaj.hzhcbkj.cn", 0x95);
+/** id=37 · 橘汁 firstLevelPublic 密文（与 id=30 成对） */
+OBF_DEF(K_JZ_FLP_CIPHER, "IZqqsqXdVNmR9N/QzBr3mYxNdgMF8R3xj5y9zlyRPDcUO5k9dxnY3OXSxX1vRvH6mMTeOA7JFlkPA1I+ZlfEzLA5xknBP4AvUs3R4hQ6axvJIUief0sx4TR/3cxHlZdGHUHKX/ISqzuRP97T271Eu10FL6cFzAvxt28Rw5DIZ0si5X3GlPjiI68JwMlSi5f7bs8htWQlzatRhhu7wnclQW5+gMiZmw/ydRaaw5eotXkQdIGiXUY6Y6g60Qapw8Rdq25fIIK4SS6kwJJYk20e83zTLafR9GOAK27EpY74G/Y=", 0xa6);
+/** id=38 · 橘汁 secondLevelPublic 兜底 RSA 公钥（协商下发值的等价常量） */
+OBF_DEF(K_JZ_SLP_FALLBACK, "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCUkPmOD0LDjTcDZbhAEMD3r0oLO6ULdFAmekW9RsISj0SpHttVwSDehiYL4fBuqgRLpf8odkGfF4Fmyz/Z9IZxE4d6StO29+uYFGE1fJ1MWRt94C4lS2L/96/sUjbsOSzf5Uase+6FUD2DmFLrIhZyaZz7ZW3pYwEYtV1L71teywIDAQAB", 0xb7);
+/** id=39 · 橘汁 versionCode（服务端按它校 sig） */
+OBF_DEF(K_JZ_V_APP, "3026", 0xc8);
+/** id=40 · 橘汁 versionName */
+OBF_DEF(K_JZ_V_NAME, "3.0.2.6", 0xd9);
+/** id=41 · 橘汁包名 com.exxammpea.a1 */
+OBF_DEF(K_JZ_PKG, "com.exxammpea.a1", 0xea);
+/** id=42 · 橘汁 App 名 */
+OBF_DEF(K_JZ_APP_NAME, "橘汁", 0xfb);
+/** id=43 · 橘汁点播搜索接口 */
+OBF_DEF(K_JZ_PATH_SEARCH, "/api/proto/v5/drama/search", 0x1c);
+/** id=44 · 橘汁详情/集数接口 */
+OBF_DEF(K_JZ_PATH_DETAIL, "/api/proto/v5/drama/getDetail", 0x2d);
+/** id=45 · 橘汁换直链接口 */
+OBF_DEF(K_JZ_PATH_PLAY_URL, "/api/proto/v5/videoUsableUrl", 0x3e);
+/** id=46 · 橘汁密钥协商端点（RSARequest 专用） */
+OBF_DEF(K_JZ_PATH_RSA_ZONE, "/api/v5/find/app/zone", 0x4f);
+/** id=47 · 橘汁直播分组接口 */
+OBF_DEF(K_JZ_PATH_CATEGORY, "/api/proto/v5/drama/category", 0x60);
+/** id=48 · 橘汁直播分组卡/频道列表（GET ?query=） */
+OBF_DEF(K_JZ_PATH_LIVE_LIST, "/api/ex/v3/security/drama/list", 0x81);
+/** id=49 · 橘汁 tab 列表（GET ?query=） */
+OBF_DEF(K_JZ_PATH_TAG_LIST, "/api/ex/v3/security/tag/list", 0x92);
+/**
+ * id=50 · 虎牙第三条线路（任意播）huya.php 端点前缀。
+ * 与 id=5 live.php 同源同服务器（110.42.52.180:6688），token 同源轮换
+ * （2026-10-24 抓包实证现行 token=0oujsAM7）。轮换后改本行即可。
+ * 协议：GET <本前缀><roomId> → {"code":200,"url":"<flv>"} / {"code":404,"msg":"主播休息了"}。
+ */
+OBF_DEF(K_HUYA_PHP,
+        "http://110.42.52.180:6688/live/huya.php?token=0oujsAM7&type=json&id=huya-",
+        0xa1);
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id) {
     char buf[320];
@@ -156,6 +217,29 @@ Java_com_tv_live_security_SecurityCore_nativeConst(JNIEnv* env, jclass, jint id)
         case 25: obf::decode_to(K_VODP_YKTX,    buf, sizeof(buf)); break;
         case 26: obf::decode_to(K_VODP_DMM,     buf, sizeof(buf)); break;
         case 27: obf::decode_to(K_BUGLY_APP_ID, buf, sizeof(buf)); break;
+        case 28: obf::decode_to(K_JZ_SAFE_CODE, buf, sizeof(buf)); break;
+        case 29: obf::decode_to(K_JZ_SAFE_SECRET_KEY, buf, sizeof(buf)); break;
+        case 30: obf::decode_to(K_JZ_DECRYPT_KEY, buf, sizeof(buf)); break;
+        case 31: obf::decode_to(K_JZ_OSS_URL_1, buf, sizeof(buf)); break;
+        case 32: obf::decode_to(K_JZ_OSS_URL_2, buf, sizeof(buf)); break;
+        case 33: obf::decode_to(K_JZ_OSS_URL_3, buf, sizeof(buf)); break;
+        case 34: obf::decode_to(K_JZ_OSS_URL_4, buf, sizeof(buf)); break;
+        case 35: obf::decode_to(K_JZ_OSS_URL_5, buf, sizeof(buf)); break;
+        case 36: obf::decode_to(K_JZ_FALLBACK_BASE, buf, sizeof(buf)); break;
+        case 37: obf::decode_to(K_JZ_FLP_CIPHER, buf, sizeof(buf)); break;
+        case 38: obf::decode_to(K_JZ_SLP_FALLBACK, buf, sizeof(buf)); break;
+        case 39: obf::decode_to(K_JZ_V_APP, buf, sizeof(buf)); break;
+        case 40: obf::decode_to(K_JZ_V_NAME, buf, sizeof(buf)); break;
+        case 41: obf::decode_to(K_JZ_PKG, buf, sizeof(buf)); break;
+        case 42: obf::decode_to(K_JZ_APP_NAME, buf, sizeof(buf)); break;
+        case 43: obf::decode_to(K_JZ_PATH_SEARCH, buf, sizeof(buf)); break;
+        case 44: obf::decode_to(K_JZ_PATH_DETAIL, buf, sizeof(buf)); break;
+        case 45: obf::decode_to(K_JZ_PATH_PLAY_URL, buf, sizeof(buf)); break;
+        case 46: obf::decode_to(K_JZ_PATH_RSA_ZONE, buf, sizeof(buf)); break;
+        case 47: obf::decode_to(K_JZ_PATH_CATEGORY, buf, sizeof(buf)); break;
+        case 48: obf::decode_to(K_JZ_PATH_LIVE_LIST, buf, sizeof(buf)); break;
+        case 49: obf::decode_to(K_JZ_PATH_TAG_LIST, buf, sizeof(buf)); break;
+        case 50: obf::decode_to(K_HUYA_PHP,      buf, sizeof(buf)); break;
         default: return nullptr;
     }
     // 【2026-10-22 I1-07】签名不匹配 → 把常量就地搅乱再返回：

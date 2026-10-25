@@ -41,6 +41,7 @@ public final class UrlConfig {
     public static volatile String LIVE_URL_6_RAW = "";
     public static volatile String LIVE_URL_7_RAW = "";
     public static volatile String LIVE_URL_8_RAW = "";
+    public static volatile String LIVE_URL_9_RAW = "";
     public static volatile String EPG_URL_1_RAW  = "";
     public static volatile String EPG_URL_2_RAW  = "";
 
@@ -112,6 +113,12 @@ public final class UrlConfig {
      * {@code PLAY_SOURCES}（线路 + 集数 + 直链）拿真实 m3u8。
      */
     public static String LIVE_URL_8 = "ryb://all";
+    /**
+     * 内置源9：橘汁点播（协议层见 {@code com.tv.live.juzhi}）。
+     * baseUrl 由 OSS 域名池动态下发；内容接口为 RSA/AES 加密 protobuf。
+     * M3U 地址写作 {@code juzhi://<vodId>}，起播时惰性换 m3u8。
+     */
+    public static String LIVE_URL_9 = "juzhi://all";
     public static String EPG_URL    = "";
     public static String EPG_URL_2  = "";
 
@@ -148,6 +155,7 @@ public final class UrlConfig {
 
         // 【2026-10-19】源8 已换为 renyibo.com（原 4kvm 站点全站 404，kvm4 代码已移除）。
         if (TextUtils.isEmpty(LIVE_URL_8_RAW)) LIVE_URL_8_RAW = LIVE_URL_8;
+        if (TextUtils.isEmpty(LIVE_URL_9_RAW)) LIVE_URL_9_RAW = LIVE_URL_9;
 
         String e1 = getEpgUrl();   if (e1 != null) { if (TextUtils.isEmpty(EPG_URL)) EPG_URL = e1; if (TextUtils.isEmpty(EPG_URL_1_RAW)) EPG_URL_1_RAW = e1; }
         String e2 = getEpgUrl2();  if (e2 != null) { if (TextUtils.isEmpty(EPG_URL_2)) EPG_URL_2 = e2; if (TextUtils.isEmpty(EPG_URL_2_RAW)) EPG_URL_2_RAW = e2; }

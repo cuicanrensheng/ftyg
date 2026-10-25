@@ -160,9 +160,11 @@ public class LiveSourceLoader {
                 final boolean isMigu = url.startsWith("migu://");
                 final boolean isAfhgrj = url.startsWith("afhgrj://");
                 final boolean isRyb = url.startsWith("ryb://");
+                // 【2026-10-23】源9：橘汁点播（加密 protobuf API，baseUrl 走 OSS 域名池）
+                final boolean isJz = url.startsWith(com.tv.live.juzhi.JzProtocol.SCHEME);
                 // 【2026-10-21】源2（内置源2，外链 M3U）：加载出口追加 4K影视 4 个点播分组
                 final boolean isSource2 = isSource2Url(url);
-                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isRyb) ? url : getAcceleratedUrl(url);
+                String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isRyb || isJz) ? url : getAcceleratedUrl(url);
                 LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 开始加载：" + acceleratedUrl);
                 LogBridge.d(TAG, "LOAD: source #" + (i+1) + " downloading: " + acceleratedUrl);
                 try {
@@ -186,6 +188,9 @@ public class LiveSourceLoader {
                     } else if (isRyb) {
                         LogBridge.i(TAG, "【源8 renyibo】走内置源8分支，抓 8 个分组生成 M3U（地址为 ryb:// 惰性解析）");
                         rawContent = com.tv.live.ryb.RybSourceLoader.loadAllLiveAsM3u(context);
+                    } else if (isJz) {
+                        LogBridge.i(TAG, "【源9 橘汁】走内置源9分支，按关键词搜片生成 M3U（地址为 juzhi:// 惰性解析）");
+                        rawContent = com.tv.live.juzhi.JzSourceLoader.loadM3u(context);
                     } else {
                         rawContent = downloadRawContent(acceleratedUrl);
                     }

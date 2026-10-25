@@ -42,6 +42,7 @@ import com.tv.live.widget.GroupListManager;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -99,6 +100,33 @@ public class OttHomeActivity extends AppCompatActivity {
     private HorizontalScrollView svSubGroup;
     private LinearLayout llSubGroup;
     private final List<TextView> subGroupChipViews = new ArrayList<>();
+
+    // ==================== 【2026-10-24 源5点播·筛选维度移植】 ====================
+    // 爱其意 App 的筛选维度（class/area/lang/year，见 RenYiBoVodCatalog.Category.filters）
+    // 落成可交互筛选：源5点播分组页顶部出「类型/地区/语言/年份」胶囊条（与虎牙子分组
+    // 胶囊条同一套控件与交互模型），选中值经既有加密 video_list 接口串行拉片单进网格。
+    /** 源5点播筛选四个维度：键与服务端 video_list 字段名一致，值为 UI 标签。 */
+    private static final String[] RYB_FILTER_DIM_KEYS = {"class", "area", "lang", "year"};
+    private static final String[] RYB_FILTER_DIM_LABELS = {"类型", "地区", "语言", "年份"};
+    /** 每个源5点播分组的筛选状态（进分组即恢复上次的筛选条件与结果，进程内记忆）。 */
+    private static final class RybVodFilterState {
+        String cls = "", area = "", lang = "", year = "";
+        /** 【2026-10-24 用户要求】排序维度：最新/最热/好评，默认最热（无「全部」） */
+        String order = "最热";
+        List<Channel> results = new ArrayList<>();
+        boolean loading;
+        boolean fetchFailed;
+        /** 最后聚焦的维度胶囊下标（网格按「上」回到该胶囊；重建胶囊后按此定位） */
+        int lastChipIdx = 0;
+        /** 【2026-10-24 用户方案】筛选栏展开态：默认收起（不占网格空间），点 Tab 条「筛选」按钮展开 */
+        boolean expanded;
+    }
+    private final java.util.HashMap<String, RybVodFilterState> rybVodFilters = new java.util.HashMap<>();
+    /**
+     * 【2026-10-24 用户方案】二级分组 Tab 条末尾的「筛选」按钮：
+     * 点击展开/收起该分组的筛选栏（默认收起，网格拿回全部空间）；筛选启用时按钮高亮 + 「筛选 ●」。
+     */
+    private TextView rybFilterTab;
     private TextView tvNowChannel;
     private TextView tvNowProgram;
     /** 【2026-09-29 方案 A 电信 IPTV 风格】左面板「节目单 + 元数据」 */
@@ -657,6 +685,8 @@ public class OttHomeActivity extends AppCompatActivity {
      */
     private void buildSubGroupChips() {
         if (llSubGroup == null) return;
+        // 【2026-10-24】源5筛选会把本容器切成竖排多行，虎牙重建时必须切回横排
+        llSubGroup.setOrientation(LinearLayout.HORIZONTAL);
         // 【2026-10-17】重建前记住焦点所在胶囊：removeAllViews 会连焦点所有者一起删掉，
         // 焦点就会掉到控制栏「‹ 上一频道」。重建后按文案找回同一个胶囊。
         final String keepChip = focusedChildText(llSubGroup);
@@ -1349,6 +1379,9 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【2026-10-21 源2 追加 4K影视】nbm:// 与源7/源8 同为「频道即一部影片」的点播形态。
         //   漏这一条 → 4K影视频道被当成直播频道：落到「直播」板块、左栏走直播节目单通路。
         if (com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(c) != null) return true;
+        // 【2026-10-23 源9 橘汁】juzhi:// 同样是「频道即一部影片」的点播形态。
+        //   漏这一条 → 橘汁频道落到「直播」板块，上下键变成切台而非切集。
+        if (com.tv.live.juzhi.JzUrlResolver.vodIdOf(c.getMainPlayUrl()) != null) return true;
         // 【2026-10-22 源6 咪咕】剧场/片库分组（央视大剧/热播剧集/经典韩剧/儿童动画/电影/
         //   综艺/少儿/人文记录/春晚）=「频道即一部剧/片」，与源5/7/8/2 同口径：
         //   归到点播板块，并用**点播控制栏**（上下集/进度条/倍速/选集），不是直播控制栏。
@@ -1383,6 +1416,7 @@ public class OttHomeActivity extends AppCompatActivity {
         if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(c) != null) return "源7";
         if (com.tv.live.ryb.RybUrlResolver.vodIdOf(c) != null) return "源8";
         if (com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(c) != null) return "源2(4K影视)";
+        if (com.tv.live.juzhi.JzUrlResolver.vodIdOf(c.getMainPlayUrl()) != null) return "源9(橘汁)";
         if (!TextUtils.isEmpty(
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(c.getChannelId()))) {
             return "源5";
@@ -1644,6 +1678,7 @@ public class OttHomeActivity extends AppCompatActivity {
         final String keepTab = focusedChildText(llCategory);
         llCategory.removeAllViews();
         tabViews.clear();
+        rybFilterTab = null;   // 重建后仅在点播板块重新挂「筛选」按钮
 
         for (String cat : cats) {
             TextView tab = new TextView(this);
@@ -1685,6 +1720,39 @@ public class OttHomeActivity extends AppCompatActivity {
             tab.setSelected(cat.equals(currentGroup));
             llCategory.addView(tab);
             tabViews.add(tab);
+        }
+
+        // 【2026-10-24 用户方案】点播板块 Tab 条末尾挂「筛选」按钮：
+        // 默认收起（不占网格空间），点击展开/收起当前源5点播分组的筛选栏；
+        // 文案随状态切换（筛选 / 筛选 ● / 收起筛选），见 updateRybFilterTab。
+        if (topSection == SECTION_VOD) {
+            TextView ft = new TextView(this);
+            ft.setId(View.generateViewId());
+            ft.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            ft.setTextColor(Color.WHITE);
+            ft.setBackgroundResource(R.drawable.ott_tab_item_bg);
+            ft.setGravity(Gravity.CENTER);
+            ft.setSingleLine(true);
+            ft.setFocusable(true);
+            ft.setClickable(true);
+            ft.setPadding(dp(18), dp(7), dp(18), dp(7));
+            ft.setNextFocusDownId(R.id.gv_ott_channel);
+            if (!topNavViews.isEmpty() && topSection < topNavViews.size()) {
+                ft.setNextFocusUpId(topNavViews.get(topSection).getId());
+            }
+            LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            flp.setMarginEnd(dp(10));
+            ft.setLayoutParams(flp);
+            ft.setOnClickListener(v -> rybToggleFilterBar());
+            ft.setOnFocusChangeListener((v, hasFocus) -> {
+                v.setScaleX(hasFocus ? 1.06f : 1f);
+                v.setScaleY(hasFocus ? 1.06f : 1f);
+                if (hasFocus) scrollChildIntoView(svCategoryBar, v);
+            });
+            ft.setVisibility(View.GONE);   // 初始隐藏，applyFilter 按当前分组显隐
+            llCategory.addView(ft);
+            rybFilterTab = ft;
         }
 
         syncGridFocusUp();
@@ -1792,15 +1860,43 @@ public class OttHomeActivity extends AppCompatActivity {
         }
         if (cur == null && !tabViews.isEmpty()) cur = tabViews.get(0);
         if (cur == null) return;
-        View chip = currentSubGroupChip();
-        boolean withStrip = isHuyaTab() && svSubGroup != null
+        View chip;
+        if (isHuyaTab()) {
+            // 虎牙页：焦点对应「当前生效子分组」胶囊（焦点浏览即切数据）
+            chip = currentSubGroupChip();
+        } else if (isRybVodFilterGroup(currentGroup)
+                && svSubGroup != null && svSubGroup.getVisibility() == View.VISIBLE) {
+            // 【2026-10-24 源5筛选】最后聚焦的维度胶囊（焦点浏览不切数据）
+            chip = rybFocusedChip();
+        } else {
+            chip = null;
+        }
+        boolean withStrip = svSubGroup != null
                 && svSubGroup.getVisibility() == View.VISIBLE && chip != null;
         // 【2026-09-29 子分组焦点】进出胶囊条都直接对接具体胶囊，
         // 不让 sv_ott_subgroup 当中间站（它无可视焦点指示，会让人以为按键失灵）
         cur.setNextFocusDownId(withStrip ? chip.getId() : R.id.gv_ott_channel);
         gvChannel.setNextFocusUpId(withStrip ? chip.getId() : cur.getId());
-        for (View c : subGroupChipViews) {
-            if (c != null) c.setNextFocusUpId(cur.getId());
+        // 【2026-10-24 用户反馈】源5筛选栏展开时：**所有**分组 Tab 按「下」先进筛选栏
+        //（最后聚焦的值胶囊），不直接落到网格频道；收起时恢复 Tab→网格。
+        // （只改 cur 一颗不够——焦点浏览到别的 Tab 再按下，仍会按 Tab 构建时的
+        //   nextFocusDownId=gv_ott_channel 直落网格。）
+        if (isRybVodFilterGroup(currentGroup)) {
+            for (TextView tab : tabViews) {
+                if (tab != null) {
+                    tab.setNextFocusDownId(withStrip ? chip.getId() : R.id.gv_ott_channel);
+                }
+            }
+        }
+        // 虎牙胶囊：上 → 当前分组 Tab（原口径）。
+        // 【2026-10-24 用户反馈】源5筛选栏的胶囊**不能**在这里改上方向——
+        // buildRybFilterBar 已设置显式行间映射（行 i 上=行 i-1，首行上=「收起筛选」），
+        // 本循环在其后执行会把全部胶囊的上方向覆盖成分组 Tab（= 用户实测
+        // "弹窗里所有内容按上都跳到分组按钮"的根因），故源5分组跳过本循环。
+        if (!isRybVodFilterGroup(currentGroup)) {
+            for (View c : subGroupChipViews) {
+                if (c != null) c.setNextFocusUpId(cur.getId());
+            }
         }
     }
 
@@ -1817,6 +1913,11 @@ public class OttHomeActivity extends AppCompatActivity {
     }
 
     private void applyFilter() {
+        // 【2026-10-24 用户方案】「筛选」按钮仅源5点播分类分组显示（切到其它分组自动隐藏）
+        if (rybFilterTab != null) {
+            rybFilterTab.setVisibility(isRybVodFilterGroup(currentGroup)
+                    ? View.VISIBLE : View.GONE);
+        }
         // 先校正遥控焦点链：虎牙页要经过胶囊条，其它页直连网格
         syncGridFocusUp();
 
@@ -1826,6 +1927,14 @@ public class OttHomeActivity extends AppCompatActivity {
         }
 
         huyaSubGroup = null;
+
+        // 【2026-10-24 源5点播·筛选维度】源5点播分类分组走筛选分支：
+        // 顶部出「类型/地区/语言/年份」胶囊条，网格展示筛选结果（未启用筛选时展示普通分组内容）。
+        if (isRybVodFilterGroup(currentGroup)) {
+            applyRybVodFilter();
+            return;
+        }
+
         setBreadcrumbText(null);
         setSubGroupStripVisible(false);
         shownChannels.clear();
@@ -1894,10 +2003,19 @@ public class OttHomeActivity extends AppCompatActivity {
 
     /** 虎牙子分组胶囊条显隐：仅「虎牙频道」页展示；固定单行高度，分组再多也占 1 行 */
     private void setSubGroupStripVisible(boolean visible) {
+        setSubGroupStripVisible(visible, subGroupStripHeight());
+    }
+
+    /**
+     * 【2026-10-24 源5筛选】高度可变重载：源5点播的筛选栏是「顶部多行展示」（优酷/腾讯
+     * 视频范式：每行一个维度、行内横向滚动、选完立即看到下方结果），4~5 行 ≈ 155~190dp，
+     * 与虎牙单行 38dp 共用同一个容器（svSubGroup/llSubGroup，两者互斥显示）。
+     */
+    private void setSubGroupStripVisible(boolean visible, int heightDp) {
         if (svSubGroup == null) return;
         if (visible) {
             ViewGroup.LayoutParams lp = svSubGroup.getLayoutParams();
-            int h = subGroupStripHeight();
+            int h = dp(heightDp);
             if (lp != null && lp.height != h) {
                 lp.height = h;
                 svSubGroup.setLayoutParams(lp);
@@ -2017,6 +2135,531 @@ public class OttHomeActivity extends AppCompatActivity {
     private static boolean isHuyaTailGroup(String name) {
         return name.contains("动漫") || name.contains("动画")
                 || name.contains("综艺") || name.contains("娱乐");
+    }
+
+    // ==================== 【2026-10-24 源5点播·筛选维度】 ====================
+    //
+    // 交互模型（对齐虎牙子分组胶囊条，同类控件同一套交互）：
+    //   源5点播分类分组（电影/电视剧/综艺/动漫/纪录/少儿）顶部出胶囊条：
+    //   [类型:全部] [地区:全部] [语言:全部] [年份:全部] [清除筛选]
+    //   · OK/点击胶囊 → 右侧抽屉（CapsuleChoicePanel，与清晰度面板同形态）选维度值；
+    //   · 任一维度非「全部」即触发 video_list(class/area/lang/year) 串行拉取，结果进网格；
+    //   · 全部回到「全部」→ 恢复该分组普通内容（最热片单）。
+    // 面板形态：0.6 抽屉（340dp），不新建面板类，完全复用 showCapsulePanel 栈管理。
+
+    /** 分组是否为「可筛选的源5点播分类」：在目录 CATEGORIES 内且该分组确实有源5点播频道。 */
+    private boolean isRybVodFilterGroup(String group) {
+        if (TextUtils.isEmpty(group)) return false;
+        if (com.tv.live.renyibo.RenYiBoVodSourceLoader.categoryByName(group) == null) return false;
+        for (Channel c : allChannels) {
+            if (c != null && group.equals(c.getGroup()) && isRenyiboVodChannel(c)) return true;
+        }
+        return false;
+    }
+
+    /** 筛选是否启用（任一维度 ≠ 全部）。 */
+    private static boolean rybFilterActive(RybVodFilterState st) {
+        return !st.cls.isEmpty() || !st.area.isEmpty() || !st.lang.isEmpty() || !st.year.isEmpty();
+    }
+
+    /** 面包屑摘要：「喜剧 · 大陆 · 全部 · 2024」样式。 */
+    private static String rybFilterSummary(RybVodFilterState st) {
+        return st.cls.isEmpty() ? "全部" : st.cls
+                + " · " + (st.area.isEmpty() ? "全部" : st.area)
+                + " · " + (st.lang.isEmpty() ? "全部" : st.lang)
+                + " · " + (st.year.isEmpty() ? "全部" : st.year);
+    }
+
+    /**
+     * 源5点播分组渲染入口（applyFilter 的筛选分支）：
+     * 建胶囊条 → 有启用筛选/已有结果时展示筛选结果，否则回普通分组内容。
+     */
+    private void applyRybVodFilter() {
+        RybVodFilterState st = rybVodFilters.get(currentGroup);
+        if (st == null) {
+            st = new RybVodFilterState();
+            rybVodFilters.put(currentGroup, st);
+        }
+        // 【2026-10-24 用户方案】展开态才建筛选栏；收起态整条隐藏，网格拿回全部空间
+        //（筛选已启用时结果仍显示在网格里，由下方分支渲染）。
+        if (st.expanded) {
+            buildRybFilterBar(st);
+            setSubGroupStripVisible(true, rybFilterBarHeightDp(st));
+        } else {
+            setSubGroupStripVisible(false);
+        }
+        updateRybFilterTab(st);
+        // 筛选栏此时才建好，必须重接焦点链（同 applyHuyaFilter 口径；收起时 chip=null 直连 Tab↔网格）
+        syncGridFocusUp();
+
+        if (rybFilterActive(st) || !"最热".equals(st.order)
+                || st.loading || !st.results.isEmpty()) {
+            renderRybFilterResults(st);
+            return;
+        }
+
+        // 未启用筛选：普通分组内容（与默认过滤同口径，点播板块只收影视片）
+        setBreadcrumbText(null);
+        shownChannels.clear();
+        for (Channel c : allChannels) {
+            if (c == null || !inVodSection(c)) continue;
+            if (currentGroup.equals(GroupListManager.getNormalizedGroup(c))) {
+                shownChannels.add(c);
+            }
+        }
+        if (gvChannel.getAdapter() != channelAdapter) gvChannel.setAdapter(channelAdapter);
+        keepGridFocusDuring(() -> {
+            if (channelAdapter != null) channelAdapter.notifyDataSetChanged();
+        });
+        updateEmptyTip(shownChannels.isEmpty(), getString(R.string.ott_vod_empty));
+    }
+
+    /** 网格渲染筛选结果（旧结果保留在 state 里，拉取期间不闪空）。 */
+    private void renderRybFilterResults(RybVodFilterState st) {
+        shownChannels.clear();
+        shownChannels.addAll(st.results);
+        if (gvChannel.getAdapter() != channelAdapter) gvChannel.setAdapter(channelAdapter);
+        keepGridFocusDuring(() -> {
+            if (channelAdapter != null) channelAdapter.notifyDataSetChanged();
+        });
+        gvChannel.setSelection(0);
+        String state = st.loading ? "筛选加载中…"
+                : (st.fetchFailed && shownChannels.isEmpty() ? "筛选拉取失败" : rybFilterSummary(st));
+        setBreadcrumbText(currentGroup + " · " + state);
+        updateEmptyTip(shownChannels.isEmpty() && !st.loading, getString(R.string.ott_vod_empty));
+    }
+
+    /**
+     * 【2026-10-24 v2 顶部多行筛选栏】参照优酷/腾讯视频的筛选范式（设计共识：
+     * 视频类 App 筛选 = 「顶部多行展示」——每行一个类别、行内横向滚动、
+     * 选完立即看到下方结果），替代 v1 的「单行维度胶囊 + 右侧抽屉弹窗」
+     * （用户实测反馈：弹窗丑、一次只能调一个维度）。
+     *
+     * <p>结构：复用虎牙胶囊条容器（svSubGroup/llSubGroup，与虎牙页互斥显示），
+     * 竖排 4 行（启用筛选时追加第 5 行「清除筛选」）：
+     * <pre>
+     *   类型   [全部] [喜剧] [爱情] [恐怖] …   ← 行内横向滚动，选中值实心蓝
+     *   地区   [全部] [大陆] [香港] …
+     *   语言   [全部] [国语] [英语] …
+     *   年份   [全部] [2026] [2025] …
+     * </pre>
+     * 交互：OK/点击值 = 立即应用并刷新下方网格（无弹层、面板不关，可连续调多个维度；
+     * 再点已选中的值 = 取消该维度）；上下键跨行、左右键行内选值；网格按「上」回到
+     * 最后聚焦的值。视觉复用 ott_tab_item_bg（焦点蓝底白框 / 选中实心蓝），与应用一致。
+     */
+    private void buildRybFilterBar(final RybVodFilterState st) {
+        if (llSubGroup == null) return;
+        llSubGroup.setOrientation(LinearLayout.VERTICAL);
+        // 焦点保持按扁平下标找回（「全部」在多行重名，按文案找回会串行）；
+        // 重建只发生在 OK 应用后，行 0~3 的扁平下标稳定不变
+        int keepIdx = -1;
+        for (int i = 0; i < subGroupChipViews.size(); i++) {
+            if (subGroupChipViews.get(i).isFocused()) { keepIdx = i; break; }
+        }
+        llSubGroup.removeAllViews();
+        subGroupChipViews.clear();
+
+        String[] cur = {st.cls, st.area, st.lang, st.year};
+        final List<LinearLayout> rybRows = new ArrayList<>();
+        // ── 排序行（类型行上方，用户要求）：最新/最热/好评，无「全部」，默认最热 ──
+        LinearLayout sortRow = new LinearLayout(this);
+        sortRow.setOrientation(LinearLayout.HORIZONTAL);
+        sortRow.setGravity(Gravity.CENTER_VERTICAL);
+        sortRow.addView(makeRybFilterRowLabel("排序"));
+        for (final String o : new String[]{"最新", "最热", "好评"}) {
+            TextView pill = makeRybFilterPill(o, o.equals(st.order));
+            pill.setOnClickListener(v -> {
+                final String group = currentGroup;
+                st.order = o;
+                LogBridge.i(TAG, "【源5筛选】" + group + " 排序=" + o);
+                rybFetchFiltered(group, st);   // 改排序必拉取（即使无其它筛选条件）
+                applyRybVodFilter();
+            });
+            pill.setOnFocusChangeListener((v, hasFocus) -> {
+                if (!hasFocus) return;
+                st.lastChipIdx = subGroupChipViews.indexOf(v);
+                rybScrollPillIntoView(v);
+            });
+            sortRow.addView(pill);
+            subGroupChipViews.add(pill);
+        }
+        llSubGroup.addView(sortRow);
+        rybRows.add(sortRow);
+        for (int i = 0; i < RYB_FILTER_DIM_KEYS.length; i++) {
+            final int dimIdx = i;
+            // 【2026-10-24 用户反馈】行标签 + 「全部」钉死在左侧（不随值滚动），
+            // 只有值列表行内横向滚动（优酷同款）。
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.addView(makeRybFilterRowLabel(RYB_FILTER_DIM_LABELS[i]));
+            addRybFilterPill(row, st, dimIdx, "全部", cur[i].isEmpty());
+            String[] vals = com.tv.live.renyibo.RenYiBoVodSourceLoader
+                    .filterDimensionValues(currentGroup, RYB_FILTER_DIM_KEYS[dimIdx]);
+            HorizontalScrollView valueScroll = new HorizontalScrollView(this);
+            valueScroll.setHorizontalScrollBarEnabled(false);
+            valueScroll.setVerticalScrollBarEnabled(false);
+            LinearLayout valueRow = new LinearLayout(this);
+            valueRow.setOrientation(LinearLayout.HORIZONTAL);
+            valueRow.setGravity(Gravity.CENTER_VERTICAL);
+            for (String v : vals) {
+                addRybFilterPill(valueRow, st, dimIdx, v, v.equals(cur[i]));
+            }
+            valueScroll.addView(valueRow);
+            LinearLayout.LayoutParams vsLp = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);   // weight=1 吃掉行内剩余宽度
+            valueScroll.setLayoutParams(vsLp);
+            row.addView(valueScroll);
+            llSubGroup.addView(row);
+            rybRows.add(row);
+        }
+        if (rybFilterActive(st) || !"最热".equals(st.order)) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.addView(makeRybFilterRowLabel("操作"));
+            TextView clear = makeRybFilterPill("清除筛选", false);
+            clear.setOnClickListener(v -> {
+                st.cls = st.area = st.lang = st.year = "";
+                st.order = "最热";
+                st.results.clear();
+                st.fetchFailed = false;
+                LogBridge.i(TAG, "【源5筛选】清除筛选：" + currentGroup);
+                applyRybVodFilter();
+                gvChannel.post(() -> {
+                    gvChannel.setSelection(0);
+                    gvChannel.requestFocus();
+                });
+            });
+            row.addView(clear);
+            subGroupChipViews.add(clear);
+            llSubGroup.addView(row);
+            rybRows.add(row);
+        }
+        // 【2026-10-24 用户反馈】焦点锁在筛选栏内：
+        //  · 上下 = **显式列对齐映射**（行 i 第 j 颗 → 上/下行第 min(j, len-1) 颗）——
+        //    Android 官方 TV 导航指引：胶囊宽度不一的布局几何搜索会算错，必须显式
+        //    nextFocusUp/Down 指定（优酷/腾讯 TV 筛选行的做法：确定性网格导航）；
+        //  · 首行按「上」→ 只到「收起筛选」按钮（栏的组成部分，不外溢到一级导航/分组 Tab）；
+        //  · 左右到行首/行尾 → 吃掉按键（几何搜索会跳到预览窗/控制栏等栏外控件）；
+        //  · 末行（操作行）按「下」吃掉，不放焦点出栏。
+        final List<List<TextView>> rybRowPills = new ArrayList<>();
+        for (int i = 0; i < rybRows.size(); i++) {
+            rybRowPills.add(rybCollectRowPills(rybRows.get(i)));
+        }
+        for (int i = 0; i < rybRowPills.size(); i++) {
+            List<TextView> curRow = rybRowPills.get(i);
+            if (i > 0) {
+                List<TextView> upRow = rybRowPills.get(i - 1);
+                for (int j = 0; j < curRow.size(); j++) {
+                    curRow.get(j).setNextFocusUpId(
+                            upRow.get(Math.min(j, upRow.size() - 1)).getId());
+                }
+            } else if (rybFilterTab != null) {
+                for (TextView p : curRow) {
+                    p.setNextFocusUpId(rybFilterTab.getId());
+                }
+            }
+            if (i < rybRowPills.size() - 1) {
+                List<TextView> downRow = rybRowPills.get(i + 1);
+                for (int j = 0; j < curRow.size(); j++) {
+                    curRow.get(j).setNextFocusDownId(
+                            downRow.get(Math.min(j, downRow.size() - 1)).getId());
+                }
+            }
+            rybClampRowFocus(curRow, i == rybRowPills.size() - 1);
+        }
+        // 【2026-10-24 v4 修正】HorizontalScrollView 对子代是无界测量（UNSPECIFIED），
+        // MATCH_PARENT 的行会被量成内容宽 → llSubGroup 超出屏宽 → 外层跟着滚、标签列被滚走。
+        // 布局完成后把每行宽度锁成视口宽，外层从此无内容可滚（标签列真正钉死）。
+        svSubGroup.post(() -> {
+            try {
+                int w = svSubGroup.getWidth();
+                if (w <= 0) return;
+                for (LinearLayout r : rybRows) {
+                    r.getLayoutParams().width = w;
+                }
+                llSubGroup.requestLayout();
+                svSubGroup.scrollTo(0, 0);
+            } catch (Throwable ignored) {
+            }
+        });
+        if (keepIdx >= 0 && keepIdx < subGroupChipViews.size()) {
+            final TextView keep = subGroupChipViews.get(keepIdx);
+            keep.post(() -> {
+                if (keep.isShown()) keep.requestFocus();
+            });
+        }
+    }
+
+    /** 行首维度标签（灰 14sp，宽同 2 字对齐各行）。 */
+    private TextView makeRybFilterRowLabel(String text) {
+        TextView label = new TextView(this);
+        label.setText(text);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        label.setTextColor(0xFF7E93A8);
+        label.setSingleLine(true);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMarginEnd(dp(10));
+        label.setLayoutParams(lp);
+        return label;
+    }
+
+    /**
+     * 筛选值胶囊：15sp，复用 ott_tab_item_bg（焦点蓝底白框/选中实心蓝/默认半透明）。
+     * ⚠️ 不设 nextFocusDownId —— 竖排多行时「下」要在行间移动，交给默认焦点搜索；
+     * 最后一行按「下」自然落到频道网格。
+     */
+    private TextView makeRybFilterPill(String text, boolean selected) {
+        TextView pill = new TextView(this);
+        pill.setId(View.generateViewId());
+        pill.setText(text);
+        pill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        pill.setTextColor(selected ? Color.WHITE : 0xFFC6D2E0);
+        pill.setBackgroundResource(R.drawable.ott_tab_item_bg);
+        pill.setGravity(Gravity.CENTER);
+        pill.setSingleLine(true);
+        pill.setFocusable(true);
+        pill.setClickable(true);
+        pill.setPadding(dp(14), dp(5), dp(14), dp(5));
+        pill.setSelected(selected);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMarginEnd(dp(10));
+        lp.bottomMargin = dp(3);
+        pill.setLayoutParams(lp);
+        return pill;
+    }
+
+    /**
+     * 往行里加一个值胶囊。点击 = 应用该值（再点已选中的值 = 取消该维度回「全部」），
+     * 立即拉取并重渲染；焦点 = 记扁平下标 + 行内滚动跟随。
+     */
+    private void addRybFilterPill(final LinearLayout row, final RybVodFilterState st,
+                                  final int dimIdx, final String value, final boolean selected) {
+        final TextView pill = makeRybFilterPill(value, selected);
+        pill.setOnClickListener(v -> {
+            final String group = currentGroup;
+            final String pick = selected ? "" : value;
+            rybSetDimValue(st, dimIdx, pick);
+            LogBridge.i(TAG, "【源5筛选】" + group + " "
+                    + RYB_FILTER_DIM_LABELS[dimIdx] + "=" + (pick.isEmpty() ? "全部" : pick));
+            if (rybFilterActive(st)) {
+                rybFetchFiltered(group, st);
+            } else {
+                st.results.clear();
+                st.fetchFailed = false;
+            }
+            applyRybVodFilter();
+        });
+        pill.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) return;
+            st.lastChipIdx = subGroupChipViews.indexOf(v);
+            rybScrollPillIntoView(v);
+        });
+        row.addView(pill);
+        subGroupChipViews.add(pill);
+    }
+
+    /** 筛选栏总高（dp）：行高≈32（15sp+5dp 内距×2）+ 行距 3，取 35/行，含容器上边距 8。
+     *  【2026-10-24】行 = 排序 + 4 维度 +（启用筛选或改过排序时的「操作」行）。 */
+    private int rybFilterBarHeightDp(RybVodFilterState st) {
+        boolean engaged = rybFilterActive(st) || !"最热".equals(st.order);
+        int rows = 1 + RYB_FILTER_DIM_KEYS.length + (engaged ? 1 : 0);
+        return rows * 35 + 8;
+    }
+
+    /**
+     * 【2026-10-24 用户方案】「筛选」按钮点击：展开/收起当前分组的筛选栏。
+     * 展开 → 焦点进栏（最后聚焦的值，默认首值）；收起 → 焦点回「筛选」按钮。
+     */
+    private void rybToggleFilterBar() {
+        RybVodFilterState st = rybVodFilters.get(currentGroup);
+        if (st == null) {
+            st = new RybVodFilterState();
+            rybVodFilters.put(currentGroup, st);
+        }
+        st.expanded = !st.expanded;
+        LogBridge.i(TAG, "【源5筛选】" + (st.expanded ? "展开" : "收起") + "筛选栏：" + currentGroup);
+        applyRybVodFilter();
+        final RybVodFilterState fst = st;
+        gvChannel.post(() -> {
+            if (fst.expanded) {
+                View chip = rybFocusedChip();
+                if (chip != null) chip.requestFocus();
+            } else if (rybFilterTab != null) {
+                rybFilterTab.requestFocus();
+            }
+        });
+    }
+
+    /**
+     * 「筛选」按钮状态：收起+未启用 = 「筛选」；筛选启用 = 「筛选 ●」高亮；
+     * 展开 = 「收起筛选」。展开时按「下」进入栏内最后聚焦的值，收起时直接下到网格。
+     */
+    private void updateRybFilterTab(RybVodFilterState st) {
+        if (rybFilterTab == null) return;
+        if (st.expanded) {
+            rybFilterTab.setText("收起筛选");
+            rybFilterTab.setSelected(true);
+        } else if (rybFilterActive(st)) {
+            rybFilterTab.setText("筛选 ●");
+            rybFilterTab.setSelected(true);
+        } else {
+            rybFilterTab.setText("筛选");
+            rybFilterTab.setSelected(false);
+        }
+        View chip = st.expanded ? rybFocusedChip() : null;
+        rybFilterTab.setNextFocusDownId(chip != null ? chip.getId() : R.id.gv_ott_channel);
+    }
+
+    /** 行内横向滚动跟随：值胶囊获焦时把所在位置滚进可视区（留出行标签宽度）。 */
+    private void rybScrollPillIntoView(View pill) {
+        if (pill == null) return;
+        try {
+            // 【2026-10-24】值列表已拆成行内独立 HorizontalScrollView（行标签+「全部」钉死在左，
+            // 不随值滚动）。值胶囊获焦 → 滚它所在行的 HSV；「全部」/操作行胶囊祖父不是 HSV → 不滚。
+            android.view.ViewParent row = pill.getParent();
+            android.view.ViewParent scroll = (row != null) ? row.getParent() : null;
+            if (scroll instanceof HorizontalScrollView) {
+                int target = Math.max(0, pill.getLeft() - dp(30));
+                ((HorizontalScrollView) scroll).smoothScrollTo(target, 0);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 收集一行里的全部可聚焦胶囊（行标签无焦点自动排除；值胶囊嵌在行内滚动容器里，
+     * 【2026-10-24 修正】必须递归下探——值胶囊在 行→HSV→内部LinearLayout→胶囊 第三层，
+     * 只扫两层会漏掉全部值胶囊 → 行列表只剩「全部」一颗 → 左右钳制把它左右全吃死）。
+     */
+    private List<TextView> rybCollectRowPills(ViewGroup row) {
+        List<TextView> out = new ArrayList<>();
+        rybCollectPillsRecursive(row, out);
+        return out;
+    }
+
+    private void rybCollectPillsRecursive(ViewGroup g, List<TextView> out) {
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View c = g.getChildAt(i);
+            if (c instanceof TextView && c.isFocusable()) {
+                out.add((TextView) c);
+            } else if (c instanceof ViewGroup) {
+                rybCollectPillsRecursive((ViewGroup) c, out);
+            }
+        }
+    }
+
+    /**
+     * 【2026-10-24 用户反馈】行内左右边界钳制：行首按「左」/行尾按「右」吃掉按键，
+     * 不让几何焦点搜索跳出筛选栏（栏外左侧是预览窗/EPG 面板，右侧/下方是网格）。
+     *
+     * @param clampDown true = 本行是末行，按「下」也吃掉（焦点不出栏；出栏走「收起筛选」或返回键）
+     */
+    private void rybClampRowFocus(final List<TextView> pills, final boolean clampDown) {
+        final int n = pills.size();
+        if (n == 0) return;
+        for (int i = 0; i < n; i++) {
+            final int idx = i;
+            pills.get(i).setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return idx == 0;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return idx == n - 1;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return clampDown;
+                return false;
+            });
+        }
+    }
+
+    private static String rybDimValue(RybVodFilterState st, int dimIdx) {
+        switch (dimIdx) {
+            case 0: return st.cls;
+            case 1: return st.area;
+            case 2: return st.lang;
+            default: return st.year;
+        }
+    }
+
+    private static void rybSetDimValue(RybVodFilterState st, int dimIdx, String v) {
+        switch (dimIdx) {
+            case 0: st.cls = v; break;
+            case 1: st.area = v; break;
+            case 2: st.lang = v; break;
+            default: st.year = v; break;
+        }
+    }
+
+    /**
+     * 触发筛选拉取（异步；结果回投主线程）。拉取期间面包屑显示「筛选加载中…」，
+     * 旧结果保留不闪空；回投时校验「分组未变 + 筛选条件未变」，防止慢结果覆盖新选择。
+     */
+    private void rybFetchFiltered(final String group, final RybVodFilterState st) {
+        final String cls = st.cls, area = st.area, lang = st.lang, year = st.year, order = st.order;
+        st.loading = true;
+        st.fetchFailed = false;
+        if (group.equals(currentGroup)) renderRybFilterResults(st);
+        com.tv.live.renyibo.RenYiBoVodSourceLoader
+                .fetchFilteredAsync(group, cls, area, lang, year, order,
+                (ok, items) -> mainHandler.post(() -> {
+                    st.loading = false;
+                    // 条件已变 / 已清除筛选 / 已切分组：本轮结果作废（条件变了会有新一轮回投）
+                    if (!group.equals(currentGroup)
+                            || !cls.equals(st.cls) || !area.equals(st.area)
+                            || !lang.equals(st.lang) || !year.equals(st.year)
+                            || !order.equals(st.order)) {
+                        LogBridge.i(TAG, "【源5筛选】丢弃过期结果：" + group + " " + cls + "/" + area);
+                        return;
+                    }
+                    if (!ok) {
+                        st.fetchFailed = true;
+                        Toast.makeText(this, "筛选拉取失败，请稍后再试", Toast.LENGTH_SHORT).show();
+                        LogBridge.w(TAG, "【源5筛选】拉取失败：" + group + " " + rybFilterSummary(st));
+                    } else {
+                        st.fetchFailed = false;
+                        st.results = buildRybFilterChannels(group, items);
+                        LogBridge.i(TAG, "【源5筛选】" + group + " " + rybFilterSummary(st)
+                                + " → " + st.results.size() + " 条");
+                    }
+                    if (group.equals(currentGroup)) applyRybVodFilter();
+                }));
+    }
+
+    /** 筛选结果 → 播放用 Channel（协议串/前缀与 M3U 通路完全一致：renyibo-vod://<typeId>:<vodId>）。 */
+    private List<Channel> buildRybFilterChannels(String group, List<String[]> items) {
+        List<Channel> out = new ArrayList<>();
+        if (items == null || items.isEmpty()) return out;
+        com.tv.live.renyibo.RenYiBoVodCatalog.Category cat =
+                com.tv.live.renyibo.RenYiBoVodSourceLoader.categoryByName(group);
+        String defTypeId = (cat == null) ? "0" : String.valueOf(cat.typeId);
+        HashSet<String> seen = new HashSet<>();
+        for (String[] v : items) {
+            if (v == null) continue;
+            String vodId = (v[0] == null ? "" : v[0]).trim();
+            String name = (v[1] == null ? "" : v[1]).trim();
+            if (vodId.isEmpty() || name.isEmpty()) continue;
+            if (!seen.add(vodId)) continue;
+            String typeId = (v.length > 3 && v[3] != null && !v[3].trim().isEmpty())
+                    ? v[3].trim() : defTypeId;
+            Channel ch = new Channel(name,
+                    "renyibo-vod://" + typeId + ":" + vodId,
+                    group, "renyibo-vod:" + typeId + ":" + vodId);
+            String pic = (v.length > 2 && v[2] != null) ? v[2].trim() : "";
+            if (!pic.isEmpty()) ch.setLogoUrl(pic);   // 竖版海报 → 网格自动走 centerCrop 满铺
+            out.add(ch);
+        }
+        return out;
+    }
+
+    /** 源5筛选胶囊条焦点定位：网格按「上」回到最后聚焦的维度胶囊。 */
+    private View rybFocusedChip() {
+        View f = getCurrentFocus();
+        if (f instanceof TextView && llSubGroup != null && isDescendantOf(llSubGroup, f)) return f;
+        int idx = rybVodFilters.containsKey(currentGroup)
+                ? rybVodFilters.get(currentGroup).lastChipIdx : 0;
+        if (idx < 0 || idx >= subGroupChipViews.size()) idx = 0;
+        return subGroupChipViews.isEmpty() ? null : subGroupChipViews.get(idx);
     }
 
     private void setBreadcrumbText(String text) {
@@ -2666,6 +3309,9 @@ public class OttHomeActivity extends AppCompatActivity {
         com.tv.live.renyibo.RenYiBoVodSourceLoader.setForegroundVodId(
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(
                         ch.getChannelId()));
+        // 【2026-10-23】源9（橘汁）同理：标记「用户正在查看」，EPG 预取闸门放行
+        com.tv.live.juzhi.JzUrlResolver.setForegroundVodId(
+                com.tv.live.juzhi.JzUrlResolver.vodIdOf(ch));
         // 【2026-10-21 日志修复】源标签按频道实际来源动态标注：此前硬编码「源8」，
         //   源5/源7/源2 的详情页也打这条，排查时误以为源8 在活动（实测零请求）。
         LogBridge.i(TAG, "【详情页】打开：" + ch.getName()
@@ -3882,10 +4528,10 @@ public class OttHomeActivity extends AppCompatActivity {
         }
     }
 
-    /** 直播形态允许的源（用户口径：直播界面的清晰度/线路接 源1/2/3/5/6） */
-    private static final int[] SRC_LIVE = {1, 2, 3, 5, 6};
+    /** 直播形态允许的源（用户口径：直播界面的清晰度/线路接 源1/2/3/5/6/9） */
+    private static final int[] SRC_LIVE = {1, 2, 3, 5, 6, 9};
     /** 点播形态允许的源（用户口径：点播界面的清晰度/线路接 源4/5/6/7/8） */
-    private static final int[] SRC_VOD = {4, 5, 6, 7, 8};
+    private static final int[] SRC_VOD = {4, 5, 6, 7, 8, 9};
     /** 每个源最近一次真实观测到的清晰度档位（切源后轨道未就绪时用它占位，避免串档） */
     private final java.util.HashMap<Integer, java.util.List<Integer>> mHeightsBySrc =
             new java.util.HashMap<>();
@@ -3900,6 +4546,9 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【2026-10-21】4K影视（nbmovie）点播形态
         if (!TextUtils.isEmpty(
                 com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(ch))) return true;
+        // 【2026-10-23】源9 橘汁点播形态
+        if (!TextUtils.isEmpty(
+                com.tv.live.juzhi.JzUrlResolver.vodIdOf(ch.getMainPlayUrl()))) return true;
         return !TextUtils.isEmpty(
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId()));
     }
@@ -4258,6 +4907,40 @@ public class OttHomeActivity extends AppCompatActivity {
             }
         }
 
+        // ①.3.5 【2026-10-23 源9（橘汁）】线路 = getDetail 的 source 线路
+        final String jzVodIdStr = com.tv.live.juzhi.JzUrlResolver.vodIdOf(ch);
+        if (!TextUtils.isEmpty(jzVodIdStr)) {
+            final int jzVodId = Integer.parseInt(jzVodIdStr);
+            final int jzEp = com.tv.live.juzhi.JzUrlResolver.episodeOf(ch.getMainPlayUrl());
+            final java.util.List<String> jzLines =
+                    com.tv.live.juzhi.JzUrlResolver.lineNames(jzVodId, jzEp);
+            if (jzLines.isEmpty()) {
+                Toast.makeText(this, "线路解析中，请稍后再试", Toast.LENGTH_SHORT).show();
+                new Thread(() -> {
+                    com.tv.live.juzhi.JzUrlResolver.fetchEpisodes(jzVodIdStr);
+                    mainHandler.postDelayed(() -> {
+                        if (!isFinishing() && playingChannel != null) showLinePanel();
+                    }, 250);
+                }, "Jz-LineWarm").start();
+            } else {
+                final int curLine = com.tv.live.juzhi.JzUrlResolver.getSelectedLine(jzVodId, jzEp);
+                for (int i = 0; i < jzLines.size(); i++) {
+                    final int idx = i;
+                    boolean sel = (curLine == i);
+                    opts.add(new LineOption(
+                            CapsuleChoicePanel.Item.line(jzLines.get(i), "",
+                                    sel ? "当前" : "可用", sel, false, true),
+                            () -> {
+                                com.tv.live.juzhi.JzUrlResolver.setSelectedLine(jzVodId, jzEp, idx);
+                                LogBridge.i(TAG, "【线路】源9 切到第" + (idx + 1) + "条 ["
+                                        + jzLines.get(idx) + "] → 重播");
+                                if (playingChannel != null) playChannel(playingChannel, true);
+                                enterFullscreenImmediately();
+                            }));
+                }
+            }
+        }
+
         // ①.4 【2026-10-21】4K影视（nbmovie）：线路 = 详情接口 play_urls 的条目
         if (!TextUtils.isEmpty(nbmVodId)) {
             final java.util.List<String> nbmLines =
@@ -4436,6 +5119,8 @@ public class OttHomeActivity extends AppCompatActivity {
         if (id.startsWith("afhgrj:") || url.startsWith("afhgrj://")) return 7;
         if (id.startsWith("renyibo-vod:") || id.startsWith("renyibo:")
                 || url.startsWith("renyibo-vod://") || url.startsWith("renyibo://")) return 5;
+        // 【2026-10-23 源9（橘汁）】id 前缀 juzhi:、地址 juzhi://
+        if (id.startsWith("juzhi:") || url.startsWith("juzhi://")) return 9;
         if (id.startsWith("nowtv:") || id.startsWith("miguhd") || id.startsWith("tvnow")
                 || url.startsWith("miguhd://") || url.startsWith("tvnow://")
                 || url.startsWith("nowtv://")) return 6;
@@ -6591,6 +7276,18 @@ public class OttHomeActivity extends AppCompatActivity {
             }
             return false;
         }
+        // 【2026-10-24 源5筛选】筛选栏展开且焦点在栏内：返回 → 收起栏（焦点回「筛选」按钮），
+        // 不做页面级返回；焦点不在栏内时按原返回逻辑走。
+        if (keyCode == KeyEvent.KEYCODE_BACK && rybFilterTab != null && rybFilterTab.isShown()) {
+            RybVodFilterState rybSt = rybVodFilters.get(currentGroup);
+            View rybFocus = getCurrentFocus();
+            if (rybSt != null && rybSt.expanded && rybFocus != null
+                    && llSubGroup != null && isDescendantOf(llSubGroup, rybFocus)) {
+                LogBridge.i(TAG, "【按键】返回 → 收起源5筛选栏");
+                rybToggleFilterBar();
+                return true;
+            }
+        }
         // 【2026-09-29 数字键输号跳台】全屏/非全屏都支持（口径同直播模式）
         if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
             handleNumberKey(keyCode);
@@ -6880,7 +7577,9 @@ public class OttHomeActivity extends AppCompatActivity {
             final boolean posterStyle = channel.isTogetherWatch() || channel.isHuyaSdkTogetherWatch()
                     || isAfhgrjChannel(channel) || isRenyiboVodChannel(channel)
                     || com.tv.live.ryb.RybUrlResolver.vodIdOf(channel) != null
-                    || com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(channel) != null;
+                    || com.tv.live.nbmovie.NbMovieUrlResolver.vodIdOf(channel) != null
+                    // 【2026-10-23 源9 橘汁】竖版海报，同点播形态
+                    || com.tv.live.juzhi.JzUrlResolver.vodIdOf(channel.getMainPlayUrl()) != null;
             if (posterStyle) {
                 holder.logo.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 holder.logo.setLayoutParams(new FrameLayout.LayoutParams(

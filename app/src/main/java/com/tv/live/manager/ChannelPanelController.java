@@ -411,7 +411,14 @@ public class ChannelPanelController {
             mergeHuyaChannelsIntoSource(keptHuya);
         }
 
-        groupListManager.setFixedGroups(HuyaTogetherWatchGroupManager.GROUP_NAMES);
+        // 【2026-10-24】固定分组 = 第二路 5 组 + 第三条线路「任意播」（HuyaRenYiBoLineManager）。
+        // 第三条线路完全独立：仅注册分组名用于面板展示，其频道数据由本类独立加载渲染，
+        // 不并入 channelSourceList 共享池（与第一/二路互不污染）。
+        String[] line2Fixed = HuyaTogetherWatchGroupManager.GROUP_NAMES;
+        String[] allFixed = new String[line2Fixed.length + 1];
+        System.arraycopy(line2Fixed, 0, allFixed, 0, line2Fixed.length);
+        allFixed[line2Fixed.length] = HuyaRenYiBoLineManager.GROUP_NAME;
+        groupListManager.setFixedGroups(allFixed);
 
         groupListManager.setPresetGroups(HuyaTogetherWatchManager.HTTP_API_GROUP_NAMES);
         loadedFixedGroups.clear();
@@ -793,6 +800,14 @@ public class ChannelPanelController {
     private void loadFixedGroupChannels(final String groupName) {
         if (channelSourceList == null) return;
 
+        // 【2026-10-24】虎牙第三条线路「任意播」独立加载分支：
+        // 数据来自 HuyaRenYiBoLineManager 本地静态清单（零网络请求），独立渲染，
+        // 不并入 channelSourceList 共享池、不走 roomId 去重 —— 与第一/二路互不污染。
+        if (HuyaRenYiBoLineManager.GROUP_NAME.equals(groupName)) {
+            loadRenYiBoFixedGroup(groupName);
+            return;
+        }
+
         if (loadedFixedGroups.contains(groupName)) {
             // 【2026-10-03 方案C·固定分组独立数据源】快路径同样改为「直接用本组自己的频道」，
             // 不再从 channelSourceList 里按 group 过滤（原因见下方 loadFixedGroupChannels 注释）。
@@ -911,6 +926,39 @@ public class ChannelPanelController {
     }
 
     // ==================== 【2026-10-03 方案C】固定分组独立数据源 ====================
+
+    /**
+     * 【2026-10-24 新增】虎牙第三条线路「任意播」分组加载（完全独立）。
+     *
+     * <p>频道清单为 {@link HuyaRenYiBoLineManager} 内置静态数据（91 个存活频道），
+     * 本地瞬时返回、零网络请求；播放地址由 TVPlayerManager 在起播时经
+     * {@code rybhuya://} 协议独立解析（直连任意播 huya.php，跳过自研解析器）。</p>
+     *
+     * <p>独立性保证：只写入自己的 fixedGroupCache 槽位、独立渲染本组列表，
+     * 不并入 channelSourceList 共享池（不参与第一/二路的 roomId 去重）、
+     * 不触发 HuyaSDKParser.preloadRooms（不占用两路的探活缓存）。</p>
+     */
+    private void loadRenYiBoFixedGroup(final String groupName) {
+        List<Channel> channels;
+        try {
+            channels = HuyaRenYiBoLineManager.getInstance().getChannels();
+        } catch (Throwable t) {
+            LogBridge.w("ChannelPanel", "任意播分组加载异常: " + t.getMessage());
+            channels = null;
+        }
+        if (channels == null || channels.isEmpty()) {
+            LogBridge.w("ChannelPanel", "任意播分组无频道");
+            channelListManager.setFilteredChannels(new ArrayList<Channel>(), null);
+            return;
+        }
+        loadedFixedGroups.add(groupName);
+        cacheFixedGroupChannels(groupName, channels);
+        currentGroupChannelList.clear();
+        currentGroupChannelList.addAll(channels);
+        LogBridge.d("ChannelPanel", "【调试】固定分组[" + groupName + "]渲染(第三条线路·独立源)="
+                + channels.size() + " 条");
+        channelListManager.setFilteredChannels(channels, getPlayingChannelName());
+    }
 
     /** 固定分组自己的频道列表（按组名缓存），与 channelSourceList 的 roomId 去重互不干扰 */
     private final java.util.Map<String, List<Channel>> fixedGroupCache = new java.util.HashMap<>();

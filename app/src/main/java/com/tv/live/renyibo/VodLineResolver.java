@@ -80,6 +80,41 @@ public final class VodLineResolver {
                 || looksLikeYktxB64(s);
     }
 
+    /**
+     * 官方路线编号：1=①BBA / 2=②NBY / 3=③ZY / 4=④YKTX / 5=⑤co / 6=⑥yzx；
+     * 非官方路线（含 {@code ZY-anime_} 动漫专线DMM、{@code Ace_Net-}、4kvm 解析页）返回 0。
+     *
+     * <p>与 {@link #typeName} 的官方命名同口径，供线路表按「官方①–⑥」排序。</p>
+     */
+    public static int officialNo(String s) {
+        if (s == null || s.isEmpty()) return 0;
+        if (s.startsWith("deja-")) return 1;          // 官方①BBA
+        if (s.startsWith("NBY-")) return 2;           // 官方②NBY
+        if (s.startsWith("ZY-anime_")) return 0;      // 动漫专线DMM：不占官方编号
+        if (s.startsWith("ZY-")) return 3;            // 官方③ZY
+        if (s.startsWith("co_")) return 5;            // 官方⑤co
+        if (s.startsWith("yzx-")) return 6;           // 官方⑥yzx
+        if (looksLikeYktxB64(s)) return 4;            // 官方④YKTX
+        return 0;
+    }
+
+    /**
+     * 该 token 是否属于「官方解析」路线（官方①BBA / ②NBY / ③ZY / ④YKTX / ⑤co / ⑥yzx）。
+     *
+     * <p>与 {@link #typeName} 的官方命名同口径；<b>不含</b> {@code Ace_Net-}（第三方 Ace）
+     * 与 {@code 4kvm.top} 解析页（高清①4kys）—— 这两类不属于爱其意官方自有解析路线。
+     * {@code ZY-anime_}（动漫专线DMM）以 {@code ZY-} 前缀计入官方③ZY 同族。</p>
+     */
+    public static boolean isOfficialToken(String s) {
+        if (s == null || s.isEmpty()) return false;
+        return s.startsWith("deja-")
+                || s.startsWith("ZY-")
+                || s.startsWith("yzx-")
+                || s.startsWith("NBY-")
+                || s.startsWith("co_")
+                || looksLikeYktxB64(s);
+    }
+
     /** YKTX 线 token = 标准 Base64 48 字节（64 字符，字符集 A-Za-z0-9+/=）。 */
     private static boolean looksLikeYktxB64(String s) {
         if (s == null || s.length() != 64) return false;

@@ -814,6 +814,47 @@ public class EpgManager {
             return new ArrayList<>();
         }
 
+        // 【2026-10-23】内置源9（橘汁）：频道即一部影片，EPG 面板改为「集数列表」，
+        //   集数来自 getDetail protobuf 接口（DramaVideoBean.videos），纯 HTTP。
+        //   只读内存缓存；未命中后台抓一次，完成后通知面板重渲染（与源8 完全同构）。
+        String juzhiVodId = com.tv.live.juzhi.JzUrlResolver.vodIdOf(channel);
+        if (!TextUtils.isEmpty(juzhiVodId)) {
+            List<Channel.EpgItem> episodes =
+                    com.tv.live.juzhi.JzUrlResolver.getEpisodes(juzhiVodId);
+            if (episodes != null && !episodes.isEmpty()) {
+                return episodes;
+            }
+            // ⚠️ 只对**当前正在播放**的频道联网预取（网格/信息条会对每个频道调 getEpg，
+            //   不加闸会对站点形成批量请求）。同时放行「用户正在查看」的那一部。
+            final Channel cur = com.tv.live.TVPlayerManager.getInstance(context)
+                    .getCurrentChannel();
+            String curVodId = cur == null ? null
+                    : com.tv.live.juzhi.JzUrlResolver.vodIdOf(cur);
+            if (!juzhiVodId.equals(curVodId)
+                    && !com.tv.live.juzhi.JzUrlResolver.isForeground(juzhiVodId)) {
+                return new ArrayList<>();
+            }
+            // 单飞：同一部片同时只允许一个预取任务
+            if (!com.tv.live.juzhi.JzUrlResolver.beginFetch(juzhiVodId)) {
+                return new ArrayList<>();
+            }
+            final String vid = juzhiVodId;
+            AppExecutors.io(() -> {
+                try {
+                    List<Channel.EpgItem> l =
+                            com.tv.live.juzhi.JzUrlResolver.fetchEpisodes(vid);
+                    if (l != null && !l.isEmpty()) {
+                        LogBridge.i("EpgManager", "【EPG·源9】集数列表就绪 vodId=" + vid
+                                + " 共 " + l.size() + " 集");
+                        notifyEpgDataReady();
+                    }
+                } finally {
+                    com.tv.live.juzhi.JzUrlResolver.endFetch(vid);
+                }
+            });
+            return new ArrayList<>();
+        }
+
 
         // 【2026-10-12】内置源5（aiqiyi）VOD 频道：EPG 面板改为「选集列表」（参照源7 模式）。
         //   只依赖 channelId 前缀 renyibo-vod: 判定，源1~7 其它频道行为零变化。

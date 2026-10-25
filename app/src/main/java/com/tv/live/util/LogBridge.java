@@ -1660,9 +1660,35 @@ public final class LogBridge {
             }
 
             List<LogCollector.LogEntry> structuredLogs = LogCollector.getInstance().getStructuredLogs();
+
+            // 【2026-10-25】支持 limit / since —— 原来这两个参数被完全忽略，
+            //   每次轮询都得回传整个缓冲（2000 条 ≈ 300KB），局域网弱 WiFi 下容易超时
+            //   被工具判定为离线。现在：
+            //     limit=N  只回最新 N 条（环形缓冲是倒序，index 0 = 最新）
+            //     since=T  只回 timestamp >= T 的条目（工具端拿上一轮最大 timestamp 做增量）
+            //   两者缺省 = 旧行为（全量），对老版工具完全兼容；参数非法/空值一律按缺省处理，
+            //   绝不因为一个坏参数就 500。
+            //   注：since 用 >= 而非 >，同毫秒多条日志不会漏；重复由工具端按指纹去重。
+            int limit = parseIntDef(queryParam(request, "limit", null), 0);
+            long since = parseLongDef(queryParam(request, "since", null), 0L);
+
+            List<LogCollector.LogEntry> selected = structuredLogs;
+            if (since > 0L) {
+                // 倒序数组：从新到旧扫，遇到第一条「比 since 还老」的就可以停
+                int i = 0;
+                int n = structuredLogs.size();
+                while (i < n && structuredLogs.get(i).timestamp >= since) i++;
+                selected = structuredLogs.subList(0, i);
+            }
+            if (limit > 0 && selected.size() > limit) {
+                selected = selected.subList(0, limit);
+            }
+
             Map<String, Object> result = new HashMap<>();
-            result.put("logs", structuredLogs);
-            result.put("count", structuredLogs.size());
+            result.put("logs", selected);
+            result.put("count", selected.size());
+            // total = 环形缓冲当前总量（未做 limit/since 过滤），供工具端判断积压与是否触顶
+            result.put("total", structuredLogs.size());
             result.put("timestamp", System.currentTimeMillis());
             sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(result));
         }
@@ -1988,6 +2014,10 @@ public final class LogBridge {
                     "        </div>\n" +
                     "        <div class=\"info\">\n" +
                     "            <h3>Token</h3>\n" +
+                    // 【2026-10-25】给一个稳定的机器可读锚点 data-token：局域网工具靠抓这个页面拿
+                    //   token（/api/token 仅回环可取），原来只能用正则匹配 <p><code>，页面一改版
+                    //   就全 403 且无从自查。保留下面那行明文，老版工具继续可用。
+                    "            <p style=\"display:none\" data-token=\"" + token + "\"></p>\n" +
                     "            <p><code>" + token + "</code></p>\n" +
                     "            <p style=\"color: #666; font-size: 12px;\">Use this token to connect from desktop client</p>\n" +
                     "        </div>\n" +
@@ -2247,6 +2277,32 @@ public final class LogBridge {
                 }
             } catch (Throwable ignored) {}
             return def;
+        }
+
+        /** 【2026-10-25】宽松整数解析：空/非法/负数一律回落默认值，不抛异常（query 参数不可信）。 */
+        private int parseIntDef(String v, int def) {
+            if (v == null) return def;
+            String s = v.trim();
+            if (s.isEmpty()) return def;
+            try {
+                int n = Integer.parseInt(s);
+                return n > 0 ? n : def;
+            } catch (Throwable t) {
+                return def;
+            }
+        }
+
+        /** 【2026-10-25】宽松 long 解析（给 since=timestamp 用），口径同 parseIntDef。 */
+        private long parseLongDef(String v, long def) {
+            if (v == null) return def;
+            String s = v.trim();
+            if (s.isEmpty()) return def;
+            try {
+                long n = Long.parseLong(s);
+                return n > 0L ? n : def;
+            } catch (Throwable t) {
+                return def;
+            }
         }
 
         private String extractHeader(String request, String headerName) {

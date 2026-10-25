@@ -77,6 +77,134 @@ public class M3u8AdStripper {
     private static final int ULTRA_SHORT_DURATION = 6; // 秒
 
     // ========================================================================
+    // 【2026-10-23 十进制编码 m3u8 解码器】
+    // 某些 CDN（如 qsvip.hxx2023.cc）返回的不是标准 m3u8 文本，
+    // 而是十进制字节编码：每行一个 0-255 的十进制数字，解码后为标准 HLS 清单。
+    // ========================================================================
+
+    /**
+     * 检测并解码十进制编码的 m3u8。
+     *
+     * <p>检测规则：每行是 1-3 位纯数字（0-255），且不含 #EXTM3U 头。
+     * 解码规则：每行数字转为 byte，拼接后按 UTF-8 解码。
+     *
+     * @param content 原始响应内容
+     * @return 解码后的标准 m3u8；非十进制编码格式则原样返回
+     */
+    public static String decodeDecimalM3u8(String content) {
+        if (content == null || content.isEmpty()) return content;
+        // 如果已经包含 #EXTM3U，直接返回（已是标准格式）
+        if (content.contains("#EXTM3U")) return content;
+
+        String[] lines = content.split("\\r?\\n");
+        // 至少需要 10 行才可能是十进制编码
+        if (lines.length < 10) return content;
+
+        // 检查前 20 行是否都是纯数字（0-255）
+        int checkCount = Math.min(20, lines.length);
+        for (int i = 0; i < checkCount; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) return content;
+            if (!line.matches("\\d{1,3}")) return content;
+            int val;
+            try {
+                val = Integer.parseInt(line);
+            } catch (NumberFormatException e) {
+                return content;
+            }
+            if (val < 0 || val > 255) return content;
+        }
+
+        // 确认是十进制编码，开始解码
+        try {
+            byte[] data = new byte[lines.length];
+            for (int i = 0; i < lines.length; i++) {
+                data[i] = (byte) Integer.parseInt(lines[i].trim());
+            }
+            String decoded = new String(data, "UTF-8");
+            if (decoded.contains("#EXTM3U")) {
+                LogBridge.i(TAG, "十进制 m3u8 解码成功：" + lines.length
+                        + " 行 → " + decoded.length() + " 字节");
+                return decoded;
+            }
+            LogBridge.w(TAG, "十进制解码后仍无 #EXTM3U，放弃解码");
+        } catch (Exception e) {
+            LogBridge.w(TAG, "十进制 m3u8 解码失败: " + e.getMessage());
+        }
+        return content;
+    }
+
+    // ========================================================================
+    // 【2026-10-23 共享下载工具】测速与广告剥离代理共用同一套 HTTP 下载逻辑
+    // ========================================================================
+
+    /** 测速下载超时 */
+    public static final int DOWNLOAD_CONNECT_TIMEOUT_MS = 2500;
+    public static final int DOWNLOAD_READ_TIMEOUT_MS = 2500;
+
+    /**
+     * 下载 URL 内容（最多 maxBytes 字节），返回原始字符串。
+     * 测速（probeSpeed）与广告剥离代理（downloadM3u8）共用此方法，
+     * 避免重复的 HttpURLConnection 代码。
+     *
+     * @param url      目标 URL
+     * @param maxBytes 最大下载字节数（-1 = 不限，下载完整内容）
+     * @param referer  Referer 头（防盗链 CDN 需要，可传 null）
+     * @return 下载内容；失败返回 null
+     */
+    public static String downloadContent(String url, int maxBytes, String referer) {
+        return downloadContent(url, maxBytes, referer, null);
+    }
+
+    /**
+     * 【2026-10-23 修复5】同上，另支持自定义 User-Agent。
+     * 为空时用默认 Mozilla UA（历史行为），非空时透传（源9 videoUsableUrl 下发的防盗链表）。
+     */
+    public static String downloadContent(String url, int maxBytes, String referer, String userAgent) {
+        if (url == null || url.isEmpty()) return null;
+        java.net.HttpURLConnection conn = null;
+        try {
+            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setConnectTimeout(DOWNLOAD_CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(DOWNLOAD_READ_TIMEOUT_MS);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent",
+                    (userAgent != null && !userAgent.isEmpty())
+                            ? userAgent : "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36");
+            if (referer != null && !referer.isEmpty()) {
+                conn.setRequestProperty("Referer", referer);
+            }
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                LogBridge.w(TAG, "下载失败: HTTP " + code + " url="
+                        + url.substring(0, Math.min(80, url.length())));
+                return null;
+            }
+            java.io.InputStream is = conn.getInputStream();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int read;
+            while ((read = is.read(buf)) != -1) {
+                if (maxBytes > 0 && out.size() >= maxBytes) break;
+                int toCopy = (maxBytes > 0)
+                        ? Math.min(read, maxBytes - out.size()) : read;
+                out.write(buf, 0, toCopy);
+            }
+            try { is.close(); } catch (Throwable ignored) {}
+            return new String(out.toByteArray(), "UTF-8");
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "下载异常 " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage() + " url="
+                    + (url != null ? url.substring(0, Math.min(80, url.length())) : "null"));
+            return null;
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    // ========================================================================
     // 主入口：剥离 m3u8 中的广告
     // ========================================================================
 
@@ -657,6 +785,29 @@ public class M3u8AdStripper {
      * 5. 多数决反转：广告 > 正片 → 取反
      * 6. 熔断：拟剔除 > 100 分片 → 返回原文
      */
+    /**
+     * 【2026-10-23】等长分块存储判定（广告误杀保护）。
+     *
+     * <p>Telegram / 网盘分文件托管的视频把正片切成等长块（每块 20~30 秒），块边界必然
+     * 带 {@code #EXT-X-DISCONTINUITY} 且文件名不连续。这类清单不具备「广告插播」特征，
+     * 若按文件名不连续评分会把整块正片删掉。
+     *
+     * @return true 表示判定为分块存储，应跳过剥离
+     */
+    private static boolean isUniformChunkedStorage(int[] blockSegCounts, BigDecimal[] blockDurations) {
+        int total = 0;
+        int uniform = 0;
+        for (int i = 0; i < blockDurations.length; i++) {
+            if (blockSegCounts[i] <= 0 || blockDurations[i] == null) continue;
+            total++;
+            // 首尾块常被截断（片头/片尾），不计入一致性统计
+            if (i == 0 || i == blockDurations.length - 1) continue;
+            double d = blockDurations[i].doubleValue();
+            if (d >= 18.0 && d <= 32.0) uniform++;
+        }
+        return total >= 20 && uniform >= total * 0.9;
+    }
+
     private static String stripByDiscontinuity(String content) {
         String[] blocks = content.split("#EXT-X-DISCONTINUITY");
 
@@ -711,6 +862,19 @@ public class M3u8AdStripper {
             avgSegCount /= validBlockCount;
             avgDuration = avgDuration.divide(new BigDecimal(validBlockCount), 2, RoundingMode.HALF_UP);
 
+        }
+
+        // 【2026-10-23 源9 误杀修复】等长分块存储保护
+        //   现象：橘汁走 Telegram 分文件托管，正片被切成几十个 ~24s 的等长块，块间必然
+        //   #EXT-X-DISCONTINUITY 且文件名不连续 → 维度3（文件名不连续）天然 +1，
+        //   再叠加任一弱信号就 ≥2 分 → 整块正片被当广告删。
+        //   实测《仙逆》：63 块 / 每块 21~27s / 总长 24.61 分钟（正常单集时长），
+        //   却被剔除 68/369 片 ≈ 4.5 分钟正片（用户报障「内容缺失」）。
+        //   判据：有效块 ≥ 20 且「除首尾外时长 18~32s」占 ≥90% → 视为分块存储，跳过剥离。
+        if (isUniformChunkedStorage(blockSegCounts, blockDurations)) {
+            LogBridge.i(TAG, "【算法选择①】判定为等长分块存储（" + blocks.length
+                    + " 块等长，非广告插播），跳过剥离以保护正片");
+            return content;
         }
 
         // 【2026-10-16 优化】全局URL长度聚类：广告块URL长度常与正片不同（样本7/8广告URL长度=105）

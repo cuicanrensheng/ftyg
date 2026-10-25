@@ -498,7 +498,8 @@ public class HuyaStreamPlayer {
                 LogBridge.d(TAG, "【普通源】解析主播放列表: " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
 
                 URL url = new URL(masterUrl);
-                connection = (HttpURLConnection) url.openConnection();
+                // 【2026-10-25 代理坑修复】绕过系统代理（失效代理会让预取超时，拖垮清晰度菜单）
+                connection = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(5000);
                 connection.setReadTimeout(5000);
@@ -557,7 +558,8 @@ public class HuyaStreamPlayer {
                 LogBridge.d(TAG, "【虎牙源】解析主播放列表: " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
 
                 URL url = new URL(masterUrl);
-                connection = (HttpURLConnection) url.openConnection();
+                // 【2026-10-25 代理坑修复】绕过系统代理（失效代理会让虎牙主清单预取超时）
+                connection = (HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(5000);
                 connection.setReadTimeout(5000);
@@ -960,6 +962,11 @@ public class HuyaStreamPlayer {
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .retryOnConnectionFailure(true)
+                // 【2026-10-25 代理坑修复】显式绕过系统代理：设备挂着失效代理时（实测案例：按模拟器
+                //   抓包教程设的 10.0.2.2:8899，真机上不可达），OkHttp 默认走系统代理 → mp API 与
+                //   PC 网页全部 6s 超时 → 虎牙解析全失败（且异常被 collectFromMpApi 的 .d 日志吞掉，
+                //   release 包看不到，极难排查）。对齐 NetUtil/RybHttp/NbMovieHttp/JzApi 的既有惯例。
+                .proxy(java.net.Proxy.NO_PROXY)
                 .build();
 
         /**

@@ -92,12 +92,30 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
      * "thread interrupted"）不算网络失败，立即上抛，避免把取消误当失败再空等一轮。
      */
     private static final int TIMEOUT_RETRY_MAX = 2;
-    /** 逐次退避（ms），下标即第几次重试；总最坏等待约 5+0.3+5+1.2 ≈ 11.5s < STUCK_TIMEOUT(20s) */
+    /**
+     * 逐次退避（ms），下标即第几次重试。
+     * ⚠️ 2026-10-23 注：直连 CDN 路径总最坏等待约 5+0.3+5+1.2 ≈ 11.5s < STUCK_TIMEOUT(20s)；
+     * 本地代理路径读超时已放宽至 60s（见 {@link #LOCAL_PROXY_READ_TIMEOUT_MS}），
+     * 该路径不适用此不等式——慢速分片在途期间由「网络字节进展」豁免看门狗
+     * （{@code WebServerManager.isNetProgressing()}），真正 stall 由上游 30s 读超时先暴露。
+     */
     private static final long[] TIMEOUT_RETRY_DELAYS = {300L, 1200L};
 
     private int maxRedirects = 5;
     private int connectTimeout = 10000;
     private int readTimeout = 15000;
+
+    /**
+     * 【2026-10-23 源9 慢速 CDN 专项】本地代理地址（127.0.0.1 / localhost）的读超时。
+     * 代理流式转发慢速 CDN 分片时，单次读「不活动」上限 60s：分片在途即不算卡死。
+     */
+    private static final int LOCAL_PROXY_READ_TIMEOUT_MS = 60000;
+
+    /** 是否为本地代理地址（WebServerManager 的 /m3u8、/ts 等） */
+    private static boolean isLocalProxyUrl(String url) {
+        if (url == null) return false;
+        return url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:");
+    }
     private final Map<String, String> defaultRequestProperties;
     private final boolean allowCrossProtocolRedirects;
     private final boolean allowCrossDomainRedirects;
@@ -442,7 +460,11 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
                                                    boolean firstHop) throws IOException {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setConnectTimeout(connectTimeout);
-        conn.setReadTimeout(readTimeout);
+        // 【2026-10-23 源9 慢速 CDN 专项】本地代理地址（127.0.0.1:<port>）动态放宽读超时：
+        //   代理侧已改为流式转发（边下边播），慢速 CDN 下一个大分片需 25~45s，
+        //   播放器 4s 读超时会把「正在途上」的数据误判成卡死并取消加载（实测源9 24s 重试风暴）。
+        //   直连 CDN 路径保持 4s 不动——虎牙分片 TTFB<300ms 的调优（见 Factory 处注释）不能破。
+        conn.setReadTimeout(isLocalProxyUrl(url) ? LOCAL_PROXY_READ_TIMEOUT_MS : readTimeout);
         conn.setDoInput(true);
         conn.setInstanceFollowRedirects(false);
         conn.setUseCaches(false);
@@ -637,6 +659,9 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             }
             bytesRead += readSize;
             bytesTransferred(readSize);
+            // 【2026-10-23】网络字节交付打点：卡住检测看门狗据此把「慢速但活着」的
+            //   直连读取（源9 点播直连 CDN 等）视为有进展，不误判卡死（见 WebServerManager）。
+            WebServerManager.markNetProgress();
             return readSize;
         } catch (IOException e) {
             throw new HttpDataSource.HttpDataSourceException(e,

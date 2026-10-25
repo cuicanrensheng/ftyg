@@ -32,8 +32,8 @@ android {
         applicationId "com.tv.live"
         minSdk 21
         targetSdk 36
-        versionCode 238
-        versionName "2.0.238"
+        versionCode 243
+        versionName "2.0.243"
         resConfigs "zh"
         multiDexEnabled true
 
@@ -472,4 +472,45 @@ configurations.all {
     exclude group: 'com.squareup.picasso'
     exclude group: 'com.github.bumptech.glide'
     // 【2026-10-08 去SDK化】原 com.huya.berry 系列模块 exclude 已无对象（libs 已删），保留无意义，删除
+}
+
+// ============================================================
+// 【2026-10-25 文件锁自愈】根治 shrinkReleaseRes 的 resources.txt「拒绝访问」
+// ------------------------------------------------------------
+// 现象（高频复发，全量构建或改资源后的重建都可能中）：
+//   Execution failed for task ':app:shrinkReleaseRes'.
+//   > A failure occurred while executing ShrinkProtoResourcesAction
+//      > ...\app\build\outputs\mapping\release\resources.txt (拒绝访问。)
+// 实测归因（2026-10-25 用 Restart Manager 抓句柄）：
+//   ① 该文件是 shrinkReleaseRes 自己的产出（内容为 "Marking xxx reachable" 资源报告），
+//      不是 R8 的输入，删掉后任务会自行重建 —— 所以「任务前预删」安全；
+//   ② 构建结束后 Gradle 守护进程（java.exe）仍持有该文件句柄约 12 秒才释放，
+//      紧接着的下一次构建去写同名文件 → Access Denied。
+// 旧解法靠人工「gradlew --stop + 删文件 + 重跑」，现在改为任务内自愈：
+//   任务真正要执行时先清只读位并重试删除（最长 15s，覆盖句柄释放窗口），随后任务重建该文件。
+//   无锁时首次删除即成功，零额外耗时；任务若 UP-TO-DATE 则本钩子根本不执行。
+// ============================================================
+def mappingReleaseDirAtConfig = new File(project.layout.buildDirectory.get().asFile, 'outputs/mapping/release')
+tasks.matching { it.name == 'shrinkReleaseRes' }.configureEach {
+    doFirst {
+        File f = new File(mappingReleaseDirAtConfig, 'resources.txt')
+        if (f.exists()) {
+            try { f.setWritable(true) } catch (Throwable ignored) { }
+            long t0 = System.currentTimeMillis()
+            boolean ok = f.delete()
+            while (!ok && (System.currentTimeMillis() - t0) < 15000L) {
+                Thread.sleep(500L)
+                ok = f.delete()
+            }
+            long waited = System.currentTimeMillis() - t0
+            if (ok) {
+                if (waited >= 500L) {
+                    logger.lifecycle("[lock-fix] resources.txt 被残留句柄占用，等待 ${waited}ms 后已预删（任务将重建）")
+                }
+            } else {
+                logger.lifecycle("[lock-fix] resources.txt 等待 ${waited}ms 仍无法删除（非 Gradle 残留句柄），" +
+                        "请执行 gradlew --stop 后重试，或用 _who_locks.ps1 查持有进程")
+            }
+        }
+    }
 }

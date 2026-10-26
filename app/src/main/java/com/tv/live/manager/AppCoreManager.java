@@ -598,6 +598,13 @@ public class AppCoreManager {
      *  配合 7 天策略：7 天内启动始终能读本地缓存快速显示。 */
     private String readLiveSourceCacheRaw() {
         try {
+            // 【2026-10-26 缓存归属】先校验这份缓存是不是当前源的：
+            //   不校验时"切源后加载未完成就退出"会留下旧源内容，配合 7 天不刷新策略，
+            //   冷启动最长 7 天都显示旧源频道（实测 SP=默认源1 却加载了源9 的 343 个频道）。
+            if (!AppConfig.getInstance(context).isLiveSourceCacheOwnedByCurrent()) {
+                log("【缓存】缓存不属于当前源，丢弃并改走网络加载");
+                return null;
+            }
             java.io.File f = cacheManager.getCacheFile("live_source");
             if (f == null || !f.exists() || f.length() <= 0) {
                 log("【直播源】readLiveSourceCacheRaw 未命中：f=" + (f == null ? "null" : f.getAbsolutePath())
@@ -621,6 +628,10 @@ public class AppCoreManager {
     /** 【2026-10-05】直播源缓存是否仍在 7 天有效期内（文件存在且 lastModified < 7 天）。 */
     private boolean isLiveSourceCacheFresh() {
         try {
+            // 【2026-10-26 缓存归属】7 天不刷新策略必须建立在「缓存就是当前源的」前提上，
+            //   否则旧源内容会被当成新源一直沿用（readLiveSourceCacheRaw 在同一次流程里已先判过，
+            //   这里再判一次，防止外部把 cacheHit 置 true 绕过第一道闸）。
+            if (!AppConfig.getInstance(context).isLiveSourceCacheOwnedByCurrent()) return false;
             java.io.File f = cacheManager.getCacheFile("live_source");
             if (f == null || !f.exists()) return false;
             long age = System.currentTimeMillis() - f.lastModified();

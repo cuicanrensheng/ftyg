@@ -58,9 +58,30 @@ public final class UrlSourceParser {
      * 内部自动初始化 JS 引擎，可在后台线程调用。
      */
     public static void parse(final Context ctx, final String url, final Callback cb) {
+        parse(ctx, url, cb, true);
+    }
+
+    /**
+     * 解析入口。
+     *
+     * @param allowWebFilter 是否允许走「网页解析过滤器」（原版 {@code web_parse_filter.json}
+     *                       + WebView 拦截）。拦截到的真实接口 URL 再次进入本方法时
+     *                       传 false，避免 filter 递归。
+     */
+    public static void parse(final Context ctx, final String url, final Callback cb,
+                             final boolean allowWebFilter) {
         if (ctx == null || TextUtils.isEmpty(url)) {
             cb.onError("illegal argument");
             return;
+        }
+        // 【2026-10-26】1:1 复刻原版 Parser.parse(viewGroup,url,cb)：
+        //   先查 web_parse_filter.json，命中就改走 WebView 拦截解析（优酷等 SPA 站点必须如此）。
+        if (allowWebFilter) {
+            WebParseFilter.Conf conf = WebParseFilter.match(ctx, url);
+            if (conf != null) {
+                WebParseFilter.parseWithWebView(ctx, conf, url, cb);
+                return;
+            }
         }
         JsEngine engine = JsEngine.get();
         engine.init(ctx);
@@ -75,7 +96,11 @@ public final class UrlSourceParser {
             cb.onError("no root js");
             return;
         }
-        String code1 = rootJs + ";getParser('" + escapeJs(url) + "');";
+        // 【2026-10-26 暴露 JS 异常】只把**最后那一次调用**包进 try/catch，
+        //   插件/root 的函数声明仍留在顶层作用域（否则 window[methodName] 取不到插件函数）。
+        //   异常以 __JSERR__ 前缀回传，JsEngine 识别后转成 onError，日志可见。
+        String code1 = rootJs + ";try{__JZ_RES__=getParser('" + escapeJs(url)
+                + "')}catch(e){__JZ_RES__='__JSERR__'+((e&&e.message)?e.message:String(e))}";
         engine.evaluate(code1, new JsEngine.ResultCallback() {
             @Override
             public void onResult(String routeResult) {
@@ -96,7 +121,8 @@ public final class UrlSourceParser {
                     return;
                 }
                 String code2 = pluginJs
-                        + ";getParseResult('" + escapeJs(fnName) + "','" + escapeJs(url) + "');";
+                        + ";try{__JZ_RES__=getParseResult('" + escapeJs(fnName) + "','" + escapeJs(url)
+                        + "')}catch(e){__JZ_RES__='__JSERR__'+((e&&e.message)?e.message:String(e))}";
                 JsEngine.get().evaluate(code2, new JsEngine.ResultCallback() {
                     @Override
                     public void onResult(String result) {
@@ -113,6 +139,9 @@ public final class UrlSourceParser {
 
                     @Override
                     public void onError(String message) {
+                        // 【2026-10-26】把失败原因打出来（原来只有"结果为空"，
+                        //   看不到是 JS 抛异常、请求失败还是路由缺失）
+                        LogBridge.w(TAG, "插件执行失败(" + pluginName + "): " + message);
                         cb.onError(message);
                     }
                 });
@@ -120,6 +149,11 @@ public final class UrlSourceParser {
 
             @Override
             public void onError(String message) {
+                // 【2026-10-26 补日志】原来这里只有 cb.onError(message)，
+                //   上层 parseSync 收到 onError 只 countDown，不打任何日志 →
+                //   整条 JS 插件链路（路由步骤）失败时**一条日志都没有**，
+                //   只能看到「web 解析失败，判不可达」，无法定位是引擎未就绪还是路由缺函数。
+                LogBridge.w(TAG, "路由步骤失败：" + url + " → " + message);
                 cb.onError(message);
             }
         });
@@ -147,6 +181,8 @@ public final class UrlSourceParser {
 
             @Override
             public void onError(String message) {
+                // 【2026-10-26 补日志】原来这里只 countDown，失败原因被吞掉
+                LogBridge.w(TAG, "同步解析失败：" + url + " → " + message);
                 latch.countDown();
             }
         });

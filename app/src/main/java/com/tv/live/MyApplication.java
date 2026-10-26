@@ -115,6 +115,8 @@ public class MyApplication extends Application {
         // 【2026-10-22 I1-07】尽早把 Application context 交给 SecurityCore：
         //   绑定签名哈希要用 PackageManager，而 SecurityCore.init() 是无参静态方法。
         try { SecurityCore.setAppContext(this); } catch (Throwable ignored) {}
+        // 【2026-10-26 源9 网页线路】网页播放页解析（咪咕 JS 插件 / WebView）需要 Context。
+        try { com.tv.live.juzhi.JzUrlResolver.initContext(this); } catch (Throwable ignored) {}
         // 双保险：attachBaseContext 已设 IPv4 优先，这里再设一次（幂等、无副作用）。
         try {
             System.setProperty("java.net.preferIPv4Stack", "true");

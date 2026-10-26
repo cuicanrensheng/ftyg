@@ -45,6 +45,45 @@ public class AppConfig {
         return appSp.getString("custom_epg_url", null);
     }
 
+    // ==================== 【2026-10-26 缓存归属】直播源缓存绑定源标识 ====================
+    // 背景：live_source 缓存不记所属源，而 AppCoreManager 有「7 天内跳过网络刷新」策略。
+    //   "切源后加载还没完成就退出"会留下上一个源的缓存，之后最长 7 天冷却启动都显示旧源频道，
+    //   与 SP 里选的源完全不一致（实测切回默认源1 仍加载源9 的 343 个频道）。
+    // 做法：写缓存时打标当前源标识，冷启动读缓存前校验，不一致直接当无缓存走网络。
+    private static final String KEY_LIVE_CACHE_SRC = "live_source_cache_src";
+
+    /** 当前生效的直播源标识：自定义源优先，否则视为内置默认源 {@code default}。 */
+    public String getLiveSourceKey() {
+        String v;
+        try {
+            v = getCustomLiveUrl();
+        } catch (Exception e) {
+            v = null;
+        }
+        if (v == null || v.trim().isEmpty()) return "default";
+        return v.trim();
+    }
+
+    /** 写缓存后打标：记录这份 live_source 缓存属于哪个源。 */
+    public void markLiveSourceCacheOwner() {
+        appSp.edit().putString(KEY_LIVE_CACHE_SRC, getLiveSourceKey()).apply();
+    }
+
+    /**
+     * 缓存是否属于当前源。老版本写入的缓存没有标记（空串）→ 返回 false，
+     * 让本次冷启动走一次网络刷新，代价可控且方向安全（宁多拉一次也不显示错源）。
+     */
+    public boolean isLiveSourceCacheOwnedByCurrent() {
+        String owner = appSp.getString(KEY_LIVE_CACHE_SRC, "");
+        String current = getLiveSourceKey();
+        boolean same = current.equals(owner);
+        if (!same) {
+            LogBridge.i("AppConfig", "【缓存归属】不一致：缓存属于=" + (owner.isEmpty() ? "(未标记)" : owner)
+                    + "，当前源=" + current + " → 本次不使用缓存");
+        }
+        return same;
+    }
+
     public void setCustomUrls(String liveUrl, String epgUrl) {
         SharedPreferences.Editor editor = appSp.edit();
         if (liveUrl != null) editor.putString("custom_live_url", liveUrl);

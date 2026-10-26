@@ -36,6 +36,18 @@ public final class JzUrlResolver {
 
     private static final String TAG = "JzUrlResolver";
 
+    /**
+     * 【2026-10-26 网页线路】WebView 解析网页播放页需要 Application Context。
+     * 由 MyApplication.onCreate 注入；未注入时网页线路只走轻量正则提取。
+     */
+    private static volatile android.content.Context sAppContext;
+
+    public static void initContext(android.content.Context ctx) {
+        if (ctx != null && sAppContext == null) {
+            sAppContext = ctx.getApplicationContext();
+        }
+    }
+
     /** 直播地址前缀（{@code juzhi://live/<source>/<path>}） */
     private static final String LIVE_PREFIX = "live/";
     /** tvg-id 前缀（M3U 里写作 juzhi:<vodId>，与 SCHEME 不同） */
@@ -156,6 +168,11 @@ public final class JzUrlResolver {
      */
     private static boolean isPlayableM3u8(String url) {
         if (url == null || url.isEmpty()) return false;
+        // 【2026-10-26 直链媒体】非清单类直链（B 站 durl 的 mp4、m4s 等）没有 #EXTM3U 头，
+        //   做清单校验只会白下载一次并必然判负 → 直接视为可播。
+        if (!looksLikePlaylist(url) && looksLikeDirectMedia(url)) {
+            return true;
+        }
         try {
             String sample = M3u8AdStripper.downloadContent(
                     url, FORMAT_CHECK_BYTES, "https://www.shenhua7.vip/");
@@ -223,10 +240,18 @@ public final class JzUrlResolver {
     private static final class PlayResult {
         final String url;
         final java.util.Map<String, String> headers;
+        /** 【2026-10-26】该直链对应的线路 source 名（失败时可据此判死线路并换线） */
+        final String source;
+
         PlayResult(String url, java.util.Map<String, String> headers) {
+            this(url, headers, "");
+        }
+
+        PlayResult(String url, java.util.Map<String, String> headers, String source) {
             this.url = url;
             this.headers = (headers == null || headers.isEmpty())
                     ? java.util.Collections.emptyMap() : headers;
+            this.source = source;
         }
     }
 
@@ -245,7 +270,7 @@ public final class JzUrlResolver {
                 ? JzApi.postFast(JzProtocol.pathPlayUrl(), params)
                 : JzApi.post(JzProtocol.pathPlayUrl(), params);
         if (data == null || data.length == 0) return null;
-        return new PlayResult(JzProtocol.str(data, 1), JzProtocol.mapStr(data, 6));
+        return new PlayResult(JzProtocol.str(data, 1), JzProtocol.mapStr(data, 6), v.source);
     }
 
     private static PlayResult fetchPlayUrlEx(Video v) {
@@ -286,23 +311,49 @@ public final class JzUrlResolver {
         }
 
         // ② 【2026-10-23 晚 用户口径】测速选线：并发探测全部候选线路，取最快
-        PlayResult picked = pickFastestLine(vodId, wantEp, epVideos);
+        //   【2026-10-26】跳过已判死的线路，避免反复选到同一条失效地址
+        List<Video> alive = new java.util.ArrayList<>();
+        for (Video v : epVideos) {
+            if (isLineDead(vodId, v.source)) {
+                LogBridge.i(TAG, "跳过已判死线路[" + v.source + "] vodId=" + vodId);
+                continue;
+            }
+            alive.add(v);
+        }
+        if (alive.isEmpty()) {
+            // 全部线路都判死 → 清空黑名单重来一次（可能只是源临时抽风）
+            LogBridge.w(TAG, "全部线路均已判死，清空黑名单重新选线 vodId=" + vodId);
+            clearDeadLines(vodId);
+            alive = epVideos;
+        }
+        PlayResult picked = pickFastestLine(vodId, wantEp, alive);
         if (picked != null && !TextUtils.isEmpty(picked.url)) {
             if (!picked.headers.isEmpty()) {
                 sPlayHeaders = picked.headers;
             }
+            rememberPickedLine(vodId, picked.source);
             LogBridge.i(TAG, "使用测速最快线路 vodId=" + vodId + " ep=" + wantEp
                     + " → " + picked.url.substring(0, Math.min(80, picked.url.length())));
             return picked.url;
         }
 
         // ③ 测速全失败 → 服务端第一条顺序降级（跳过不可播的，避免选到 iqiyi 网页 URL 导致黑屏）
-        for (int i = 0; i < epVideos.size(); i++) {
-            Video v = epVideos.get(i);
+        for (int i = 0; i < alive.size(); i++) {
+            Video v = alive.get(i);
             String m3u8 = fetchPlayUrl(v);
             if (TextUtils.isEmpty(m3u8)) {
                 LogBridge.w(TAG, "线路[" + v.source + "] 直链获取失败，试下一条");
                 continue;
+            }
+            // 【2026-10-26 网页线路】下发的是 HTML 播放页 → 走 web 解析拿真实 m3u8
+            if (!looksLikeM3u8(m3u8)) {
+                LogBridge.w(TAG, "线路[" + v.source + "] 是网页播放页，走 web 解析: " + brief(m3u8));
+                String web = resolveWebLineUrl(m3u8, null);
+                if (TextUtils.isEmpty(web)) {
+                    LogBridge.w(TAG, "线路[" + v.source + "] web 解析失败，试下一条");
+                    continue;
+                }
+                m3u8 = web;
             }
             if (!isPlayableM3u8(m3u8)) {
                 LogBridge.w(TAG, "线路[" + v.source + "] 非标准 m3u8，试下一条");
@@ -310,10 +361,233 @@ public final class JzUrlResolver {
             }
             LogBridge.i(TAG, "使用服务端第" + (i + 1) + "条线路[" + v.source + "("
                     + v.sourceCn + ")] vodId=" + vodId + " ep=" + wantEp);
+            rememberPickedLine(vodId, v.source);
             return m3u8;
         }
         LogBridge.w(TAG, "全部线路不可播 vodId=" + vodId + " ep=" + wantEp);
         return null;
+    }
+
+    /** 网页播放页里内嵌 m3u8 的匹配（很多播放页把直链写在 HTML/JS 变量里）。 */
+    private static final java.util.regex.Pattern M3U8_IN_WEB_PAGE =
+            java.util.regex.Pattern.compile(
+                    "https?://[^\"'\\s<>]+\\.m3u8[^\"'\\s<>]*");
+
+    /**
+     * 网页线路走咪咕 JS 插件解析的整体超时。
+     * 【2026-10-26 下调 15→10】插件依赖的上游服务大量失效（api.okjx.cc:666 实测不可达），
+     * 死线路要快速失败才好换下一条；JS 桥内部单次调用已降到 6s。
+     */
+    private static final long JS_PARSE_TIMEOUT_MS = 10000L;
+
+    /** 网页轻量探测的下载上限（网页动辄几百 KB，全量下载会吃掉整个解析预算）。 */
+    private static final int WEB_PAGE_PROBE_BYTES = 64 * 1024;
+
+    /** 限长小文件下载（超量即截断），带防盗链表与十进制解码。 */
+    private static String downloadSmallLimited(String url, java.util.Map<String, String> headers, int maxBytes) {
+        String c = M3u8AdStripper.downloadContent(url, maxBytes,
+                headerValue(headers, "referer"), headerValue(headers, "user-agent"));
+        if (c == null || c.isEmpty()) return null;
+        return M3u8AdStripper.decodeDecimalM3u8(c);
+    }
+
+    /**
+     * 【2026-10-26 网页线路解析】网页播放页 → 真实 m3u8，三级兜底：
+     * <ol>
+     *   <li>轻量正则：页面 HTML 里直接内嵌 m3u8（毫秒级，多数情况命中）；</li>
+     *   <li>咪咕 JS 插件：{@code UrlSourceParser.parseSync} 按站点路由到 assets/js 里的
+     *       24 个插件（含 mgtv_vod.js / iqy / qq / letv / sohu / bili…），覆盖主流视频站；</li>
+     *   <li>WebView 解析：{@code WebVideoResolver} 加载页面等播放器起流取 video.currentSrc
+     *       （最慢，30s 级，仅前两级都失败时用）。</li>
+     * </ol>
+     * 背景：源9 的 videoUsableUrl 对部分源下发的是 HTML 播放页
+     * （实测 https://www.mgtv.com/b/825667/24500844.html），这类地址直接交给播放器必然播不出。
+     */
+    private static String resolveWebLineUrl(String pageUrl, java.util.Map<String, String> headers) {
+        PlayResult pr = resolveWebLineResult(pageUrl, headers);
+        return (pr == null) ? null : pr.url;
+    }
+
+    /**
+     * 【2026-10-26】网页线路解析（带回播放头）。
+     *
+     * <p>播放头（Referer / User-Agent）必须与地址一起传下去：
+     * JS 插件回传的 {@code url@@origin=..@@referer=..@@user-agent=..} 里，
+     * B 站 durl 直链缺 Referer 会被判 403 —— 既测不出速度，播放也起不来。
+     */
+    private static PlayResult resolveWebLineResult(String pageUrl, java.util.Map<String, String> headers) {
+        if (TextUtils.isEmpty(pageUrl)) return null;
+        final java.util.Map<String, String> outHeaders = new java.util.LinkedHashMap<>();
+        if (headers != null) outHeaders.putAll(headers);
+        // ① 轻量正则（限长下载：网页动辄几百 KB，全量下载会吃掉整个解析预算）
+        try {
+            String page = downloadSmallLimited(pageUrl, outHeaders, WEB_PAGE_PROBE_BYTES);
+            if (page != null && !page.isEmpty()) {
+                java.util.regex.Matcher m = M3U8_IN_WEB_PAGE.matcher(page);
+                while (m.find()) {
+                    String cand = m.group(0);
+                    if (isPlayableM3u8(cand)) {
+                        LogBridge.i(TAG, "网页线路：正则提取到内嵌 m3u8: " + brief(cand));
+                        return new PlayResult(cand, outHeaders, null);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        android.content.Context ctx = sAppContext;
+        if (ctx == null) {
+            LogBridge.w(TAG, "网页线路：未注入 Context，跳过 JS 插件/WebView 解析: " + brief(pageUrl));
+            return null;
+        }
+        // ② 咪咕 JS 插件
+        try {
+            String raw = com.tv.live.migu.js.UrlSourceParser.parseSync(ctx, pageUrl, JS_PARSE_TIMEOUT_MS);
+            if (!TextUtils.isEmpty(raw)) {
+                // 【2026-10-26】插件回传格式为「地址@@origin=…@@referer=…@@user-agent=…」，
+                //   必须拆出播放头，否则带着 @@尾巴去请求必然失败。
+                Object[] ph = splitPlayHeaders(raw);
+                String parsed = (String) ph[0];
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, String> hdrs = (java.util.Map<String, String>) ph[1];
+                if (!TextUtils.isEmpty(parsed) && looksLikeM3u8(parsed)) {
+                    if (!hdrs.isEmpty()) {
+                        sPlayHeaders = hdrs;
+                        outHeaders.putAll(hdrs);
+                        LogBridge.i(TAG, "网页线路：JS 插件解析成功（含播放头 " + hdrs.size()
+                                + " 项）: " + brief(parsed));
+                    } else {
+                        LogBridge.i(TAG, "网页线路：JS 插件解析成功: " + brief(parsed));
+                    }
+                    return new PlayResult(parsed, outHeaders, null);
+                }
+                LogBridge.w(TAG, "网页线路：JS 插件返回不可播地址: " + brief(raw));
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "网页线路：JS 插件解析异常 " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage());
+        }
+        // ③ WebView 解析（最慢兜底）
+        try {
+            String parsed = com.tv.live.renyibo.WebVideoResolver.get(ctx).resolve(pageUrl);
+            if (!TextUtils.isEmpty(parsed) && looksLikeM3u8(parsed)) {
+                LogBridge.i(TAG, "网页线路：WebView 解析成功: " + brief(parsed));
+                return new PlayResult(parsed, outHeaders, null);
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "网页线路：WebView 解析异常 " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 地址是否像 m3u8 清单（路径或 query 里带 .m3u8/.m3u 扩展名）。
+     *
+     * <p><b>【2026-10-26 扩展】</b>网页线路（爱奇艺/B站/腾讯/芒果）的 JS 插件解析出的
+     * 未必是 HLS —— B 站 {@code bili_vod.js} 给的是 <b>mp4 直链</b>（含鉴权参数）。
+     * 因此这里放宽为「可播媒体地址」：m3u8/m3u 或 mp4/m4s/mov/flv 都认。
+     * mp4 直链带 Range 请求即可边下边播，ExoPlayer 的渐进式源能处理。
+     */
+    private static boolean looksLikeM3u8(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String p = url.toLowerCase(java.util.Locale.ROOT);
+        return p.contains(".m3u8") || p.contains(".m3u")
+                || p.contains(".mp4") || p.contains(".m4s")
+                || p.contains(".mov") || p.contains(".flv");
+    }
+
+    /**
+     * 【2026-10-26】地址是否像 HLS 清单（只看路径/参数里的 .m3u8/.m3u）。
+     *
+     * <p>与 {@link #looksLikeM3u8} 的区别：后者是「可播地址」判定（含 mp4 等直链），
+     * 这里用于区分「要不要去清单里找分片」。
+     */
+    private static boolean looksLikePlaylist(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String p = url.toLowerCase(java.util.Locale.ROOT);
+        int q = p.indexOf('?');
+        if (q >= 0) p = p.substring(0, q);
+        return p.endsWith(".m3u8") || p.endsWith(".m3u");
+    }
+
+    /**
+     * 【2026-10-26】地址是否像直链媒体文件（mp4/m4s/flv/mov）。
+     *
+     * <p>这类地址（B 站 durl、腾讯直链等）没有清单结构，不能用「找分片」的方式测速，
+     * 直接对自身做 Range 探测即可。
+     */
+    private static boolean looksLikeDirectMedia(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String p = url.toLowerCase(java.util.Locale.ROOT);
+        int q = p.indexOf('?');
+        if (q >= 0) p = p.substring(0, q);
+        return p.endsWith(".mp4") || p.endsWith(".m4s")
+                || p.endsWith(".mov") || p.endsWith(".flv");
+    }
+
+    /**
+     * 【2026-10-26】剥掉 JS 插件附在地址尾部的清晰度标记（原版约定 {@code url#流畅}）。
+     *
+     * <p>原版 JS 插件统一用 {@code url#清晰度名} 表达档位（爱奇艺/优酷/芒果都有）。
+     * 注意 URL 本身也可能有 fragment（{@code #}），所以只在「{@code #} 之前是 http(s) 开头」
+     * 且「{@code #} 之后不含 {@code /}、{@code ?}」时才当作清晰度标记剥离。
+     */
+    private static String stripQualityTag(String url) {
+        if (url == null) return "";
+        String u = url.trim();
+        int h = u.indexOf('#');
+        if (h <= 0) return u;
+        String head = u.substring(0, h);
+        String tail = u.substring(h + 1);
+        if (!head.startsWith("http://") && !head.startsWith("https://")) return u;
+        if (tail.isEmpty() || tail.contains("/") || tail.contains("?") || tail.contains("&")) return u;
+        return head;
+    }
+
+    /**
+     * 【2026-10-26】解析 JS 插件返回的「地址@@播放头」格式。
+     *
+     * <p>原始畅享 App 的 JS 插件统一用这个格式回传播放所需的请求头：
+     * <pre>
+     *   https://.../x.mp4@@origin=https://www.bilibili.com@@referer=https://...@@user-agent=Mozilla/5.0
+     * </pre>
+     * 本移植版此前没有实现该解析 → 插件返回的地址被当成普通 URL 直接下发，
+     * 带着 {@code @@origin=...} 尾巴请求，必然失败（B 站/芒果/腾讯线路全挂）。
+     *
+     * @param raw 插件原始返回值
+     * @return [真实地址, 播放头 map]；无 {@code @@} 时第二个元素为空 map
+     */
+    private static Object[] splitPlayHeaders(String raw) {
+        java.util.Map<String, String> hdrs = new java.util.LinkedHashMap<>();
+        if (raw == null || raw.isEmpty()) return new Object[]{"", hdrs};
+        int idx = raw.indexOf("@@");
+        if (idx < 0) return new Object[]{stripQualityTag(raw), hdrs};
+        String url = stripQualityTag(raw.substring(0, idx).trim());
+        String tail = raw.substring(idx + 2);
+        for (String part : tail.split("@@")) {
+            if (part.isEmpty()) continue;
+            int eq = part.indexOf('=');
+            if (eq <= 0) continue;
+            String k = part.substring(0, eq).trim().toLowerCase(java.util.Locale.ROOT);
+            String v = part.substring(eq + 1).trim();
+            if (v.isEmpty()) continue;
+            if ("referer".equals(k) || "origin".equals(k)) {
+                // referer/origin 两者都写进 Referer 头（CDN 防盗链通常看 Referer）
+                hdrs.put("Referer", v);
+            } else if ("user-agent".equals(k)) {
+                hdrs.put("User-Agent", v);
+            } else if ("cookie".equals(k)) {
+                hdrs.put("Cookie", v);
+            }
+        }
+        return new Object[]{url, hdrs};
+    }
+
+    /** 日志用短地址 */
+    private static String brief(String url) {
+        if (url == null) return "(null)";
+        return url.length() <= 80 ? url : url.substring(0, 80) + "…";
     }
 
     // ------------------------------------------------------------------
@@ -323,6 +597,58 @@ public final class JzUrlResolver {
     /** 测速选线缓存：key="vodId" → [选中线路 source 名, 时间戳]（按片不按集，换集不重复测速） */
     private static final java.util.Map<String, Object[]> sSpeedPickCache =
             new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 【2026-10-26 失效线路黑名单】key = vodId + "|" + source → 判死时间戳。
+     *
+     * <p><b>背景（修"一直重复播放"）</b>：源9 同一部片有 5~13 条线路，服务端把失效线路
+     * 原样下发（如实测的 {@code PAN1(NS蓝光-1)} 指向已挂的 {@code 43.248.3.46:7788}）。
+     * 旧逻辑只做「重新解析取新直链」，而重新解析会命中测速缓存的<b>同一条</b>线路
+     * （{@code sSpeedPickCache} 按 vodId 缓存 source 名），于是拿到的还是那个死地址，
+     * 反复起播-失败-重解析，形成无限循环（实测 40 秒内起播 4 次仍在原地打转）。
+     *
+     * <p><b>修法</b>：某条线路被判死（非视频内容 / 重定向到占位图）时把它记入黑名单，
+     * 后续选线直接跳过它 → 自动换到该片的其他线路。这是与源5/源8/源2「失效自动换线」
+     * 同一思路，只是判死信息由播放层回传给解析层。
+     *
+     * <p>黑名单 10 分钟过期，避免源临时抽风后永久失去该线路。
+     */
+    private static final java.util.Map<String, Long> sDeadLines =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 失效线路黑名单有效期（毫秒） */
+    private static final long DEAD_LINE_TTL_MS = 10 * 60 * 1000L;
+
+    /** 记录某条线路已判死（播放层回调用） */
+    public static void markLineDead(int vodId, String source) {
+        if (TextUtils.isEmpty(source)) return;
+        String key = vodId + "|" + source;
+        sDeadLines.put(key, System.currentTimeMillis());
+        // 同时作废该片的测速缓存，否则下次选线还会命中这条死线路
+        sSpeedPickCache.remove(String.valueOf(vodId));
+        LogBridge.w(TAG, "线路[" + source + "] 已判死（vodId=" + vodId + "），后续选线将跳过");
+    }
+
+    /** 该线路是否已判死（且未过期） */
+    private static boolean isLineDead(int vodId, String source) {
+        if (TextUtils.isEmpty(source)) return false;
+        Long ts = sDeadLines.get(vodId + "|" + source);
+        if (ts == null) return false;
+        if (System.currentTimeMillis() - ts > DEAD_LINE_TTL_MS) {
+            sDeadLines.remove(vodId + "|" + source);
+            return false;
+        }
+        return true;
+    }
+
+    /** 清理某片全部判死记录（播放就绪时调用，新一轮稳定） */
+    public static void clearDeadLines(int vodId) {
+        String prefix = vodId + "|";
+        java.util.Iterator<java.util.Map.Entry<String, Long>> it = sDeadLines.entrySet().iterator();
+        while (it.hasNext()) {
+            if (it.next().getKey().startsWith(prefix)) it.remove();
+        }
+    }
 
     /** 单条线路测速结果：速度（KB/s，-1 不可达）+ 可达时的 m3u8/播放头 */
     private static final class ProbeOutcome {
@@ -349,16 +675,23 @@ public final class JzUrlResolver {
         Object[] cached = sSpeedPickCache.get(key);
         if (cached != null && System.currentTimeMillis() - (Long) cached[1] < SPEED_PICK_TTL_MS) {
             String src = (String) cached[0];
-            for (Video v : epVideos) {
-                if (src != null && src.equals(v.source)) {
-                    LogBridge.i(TAG, "测速选线命中缓存 → [" + src + "] vodId=" + vodId + " ep=" + wantEp);
-                    PlayResult r = fetchPlayUrlEx(v);
-                    if (r != null && !TextUtils.isEmpty(r.url)) return r;
-                    LogBridge.w(TAG, "缓存线路[" + src + "]当前集不可用，重新测速");
-                    break;
+            // 【2026-10-26】缓存线路若已判死（播放失败过）→ 不可复用，
+            //   否则会一次又一次拿回同一条死地址 → 起播失败 → 再来一次（一直重复播放）。
+            if (isLineDead(vodId, src)) {
+                LogBridge.i(TAG, "测速选线缓存命中但线路[" + src + "]已判死，重新选线 vodId=" + vodId);
+                sSpeedPickCache.remove(key);
+            } else {
+                for (Video v : epVideos) {
+                    if (src != null && src.equals(v.source)) {
+                        LogBridge.i(TAG, "测速选线命中缓存 → [" + src + "] vodId=" + vodId + " ep=" + wantEp);
+                        PlayResult r = fetchPlayUrlEx(v);
+                        if (r != null && !TextUtils.isEmpty(r.url)) return r;
+                        LogBridge.w(TAG, "缓存线路[" + src + "]当前集不可用，重新测速");
+                        break;
+                    }
                 }
+                sSpeedPickCache.remove(key);
             }
-            sSpeedPickCache.remove(key);
         }
 
         LogBridge.i(TAG, "测速选线开始：候选 " + epVideos.size() + " 条 vodId=" + vodId + " ep=" + wantEp);
@@ -428,8 +761,28 @@ public final class JzUrlResolver {
     private static ProbeOutcome probeLine(Video v) {
         PlayResult r = fetchPlayUrlEx(v, true);   // 短超时客户端：死线路快速失败
         if (r == null || TextUtils.isEmpty(r.url)) return new ProbeOutcome(-1, null);
-        String seg = firstSegmentUrl(r.url, r.headers);
-        if (TextUtils.isEmpty(seg)) return new ProbeOutcome(-1, null);
+        // 【2026-10-26 网页线路】下发的是 HTML 播放页 → 先 web 解析出真实 m3u8，再拿分片测速。
+        //   否则会把网页里随便一行 URL 当分片（下载又快）→ 网页被选成"最快线路"，落地必播不出。
+        if (!looksLikeM3u8(r.url)) {
+            LogBridge.w(TAG, "线路[" + v.source + "] 是网页播放页，测速前先 web 解析: " + brief(r.url));
+            PlayResult wr = resolveWebLineResult(r.url, r.headers);
+            if (wr == null || TextUtils.isEmpty(wr.url)) {
+                LogBridge.w(TAG, "线路[" + v.source + "] web 解析失败，判不可达");
+                return new ProbeOutcome(-1, null);
+            }
+            // 【2026-10-26】用带播放头的结果（B 站直链缺 Referer 会 403）
+            r = new PlayResult(wr.url, wr.headers, v.source);
+        }
+        // 【2026-10-26 直链媒体】B 站 durl 这类直链没有清单结构，
+        //   去「找分片」必然拿到空 → 会被误判成不可达，白丢一条能播的线路。
+        //   直接对直链自身做 Range 探测测速。
+        String seg;
+        if (looksLikePlaylist(r.url)) {
+            seg = firstSegmentUrl(r.url, r.headers);
+            if (TextUtils.isEmpty(seg)) return new ProbeOutcome(-1, null);
+        } else {
+            seg = r.url;
+        }
         return new ProbeOutcome(measureSpeed(seg, r.headers), r);
     }
 
@@ -489,6 +842,16 @@ public final class JzUrlResolver {
     private static String firstSegmentUrl(String m3u8Url, java.util.Map<String, String> headers) {
         String content = downloadSmall(m3u8Url, headers);
         if (content == null || content.isEmpty()) return null;
+        // 【2026-10-26 网页伪装成线路】videoUsableUrl 对部分源下发的是 **HTML 播放页**
+        //   （实测 https://www.mgtv.com/b/825667/24500844.html）。旧逻辑会走
+        //   firstMediaLine 把页面里任意一行 URL 当成分片，测速下载这种小网页又快 →
+        //   网页被选成"最快线路"，落地后播放器拿到的是网页，自然一直播不出来。
+        //   这里先校验是不是真清单（含 #EXTM3U），不是就判该线路不可用。
+        if (!content.contains("#EXTM3U")) {
+            LogBridge.w(TAG, "线路内容不是 m3u8 清单（疑似网页播放页），判该线路不可用: "
+                    + m3u8Url.substring(0, Math.min(80, m3u8Url.length())));
+            return null;
+        }
         if (content.contains("#EXT-X-STREAM-INF")) {
             for (String line : content.split("\\r?\\n")) {
                 String t = line.trim();
@@ -732,6 +1095,25 @@ public final class JzUrlResolver {
      * 避免上一条线路的头污染下一条。由 TVPlayerManager 合并进播放器请求头。
      */
     private static volatile Map<String, String> sPlayHeaders = java.util.Collections.emptyMap();
+
+    /**
+     * 【2026-10-26】本次解析选中的线路 source 名（vodId → source）。
+     * 播放失败时由播放层取回并 {@link #markLineDead}，实现"失败即换线"。
+     */
+    private static final java.util.Map<String, String> sPickedLine =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 记录本次选中线路 */
+    private static void rememberPickedLine(int vodId, String source) {
+        if (TextUtils.isEmpty(source)) return;
+        sPickedLine.put(String.valueOf(vodId), source);
+    }
+
+    /** 取回某片当前选中的线路 source（无记录返回空串） */
+    public static String pickedLineOf(int vodId) {
+        String s = sPickedLine.get(String.valueOf(vodId));
+        return s == null ? "" : s;
+    }
 
     /** 取当前线路的播放请求头（服务端未下发返回空 Map，调用方按空处理即可） */
     public static Map<String, String> playHeaders() {

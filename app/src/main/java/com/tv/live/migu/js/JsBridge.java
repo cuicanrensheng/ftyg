@@ -45,8 +45,29 @@ public final class JsBridge {
 
     private static final String TAG = "MiguJsBridge";
 
+    /**
+     * 【2026-10-26 默认 UA】JS 桥发请求时若插件没显式指定 User-Agent，就用这个。
+     *
+     * <p>背景：原版畅享TV 的 {@code native_layer.js → client.getUrlContent(url, "{}")}
+     * 走的是 App 自己的 HttpUtil，**默认带移动端 UA**。本移植版用 OkHttp 且不设 UA，
+     * 发出的是 {@code okhttp/4.x} —— 爱奇艺/优酷/B 站对 UA 敏感，会返回跳转页或空壳 HTML，
+     * 导致插件「取参数取不到」而误判成解析失败。
+     *
+     * <p>用 iPhone UA：这几个站点对该 UA 返回的是标准移动端页面（字段齐全）。
+     */
+    private static final String DEFAULT_UA =
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 "
+                    + "(KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1";
+
     /** 单次网络调用的整体超时（毫秒）——JS 会同步等待，故不宜过长 */
-    private static final long CALL_TIMEOUT_SEC = 20L;
+    /**
+     * 单次调用超时（秒）。
+     * 【2026-10-26 下调 20→6】插件依赖的第三方解析服务已大量失效
+     * （实测 api.okjx.cc:666 完全不可达，20s 才会失败），
+     * 死线路每条要空等 20s，网页线路解析整体被拖到 30s+。
+     * 快速失败后由上层换下一条线路，体验远好于干等。
+     */
+    private static final long CALL_TIMEOUT_SEC = 6L;
 
     private final Context appContext;
     private final OkHttpClient client;
@@ -132,6 +153,22 @@ public final class JsBridge {
     }
 
     private static void applyHeaders(Request.Builder rb, Map<String, String> headers) {
+        // 【2026-10-26】插件没给 UA 时补默认 UA（否则 okhttp/4.x 会被站点拒绝）
+        boolean hasUa = false;
+        if (headers != null) {
+            for (String k : headers.keySet()) {
+                if (k != null && "user-agent".equalsIgnoreCase(k.trim())) {
+                    hasUa = true;
+                    break;
+                }
+            }
+        }
+        if (!hasUa) {
+            try {
+                rb.header("User-Agent", DEFAULT_UA);
+            } catch (Throwable ignored) {
+            }
+        }
         if (headers == null || headers.isEmpty()) return;
         for (Map.Entry<String, String> e : headers.entrySet()) {
             String k = e.getKey();

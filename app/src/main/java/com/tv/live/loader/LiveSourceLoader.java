@@ -138,7 +138,7 @@ public class LiveSourceLoader {
                         try {
                             List<Channel> channels = PlaylistParser.parseContent(racedContent);
                             if (channels != null && !channels.isEmpty()) {
-                                cacheManager.saveFileCache("live_source", racedContent);
+                                saveLiveSourceCache(racedContent);
                                 if (channels.size() >= MIN_CHANNELS_FOR_FALLBACK) {
                                     saveFallback(racedContent);
                                 }
@@ -232,7 +232,7 @@ public class LiveSourceLoader {
                         applyNbmoviePosters(channels);
                     }
 
-                    cacheManager.saveFileCache("live_source", rawContent);
+                    saveLiveSourceCache(rawContent);
                     if (channels.size() >= MIN_CHANNELS_FOR_FALLBACK) {
                         saveFallback(rawContent);
                         LogBridge.d(TAG, "【网络】永久兜底已更新，频道数 " + channels.size());
@@ -671,7 +671,7 @@ public class LiveSourceLoader {
                         }
 
                         try {
-                            cacheManager.saveFileCache("live_source", content);
+                            saveLiveSourceCache(content);
                             if (parsed.size() >= MIN_CHANNELS_FOR_FALLBACK) {
                                 saveFallback(content);
                             }
@@ -862,6 +862,20 @@ public class LiveSourceLoader {
         }
         if (!sourceUrl.startsWith("afhgrj://") && !sourceUrl.startsWith("ryb://")) return m3u;
         return appendCctvAndWeishi(ctx, m3u);
+    }
+
+    /**
+     * 【2026-10-26 缓存归属】写 live_source 缓存，并把「这份缓存属于哪个源」记到 SP。
+     * <p>只写内容不打标时，AppCoreManager 的「7 天内跳过网络刷新」会拿旧源缓存当新源用
+     * （实测 SP 切回默认源1，冷启动仍加载源9 的 343 个频道）。所有写入缓存的位置都必须走这里。
+     */
+    private void saveLiveSourceCache(String content) {
+        cacheManager.saveFileCache("live_source", content);
+        try {
+            com.tv.live.config.AppConfig.getInstance(context).markLiveSourceCacheOwner();
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【缓存归属】写标记失败：" + t.getMessage());
+        }
     }
 
     private void saveFallback(String content) {

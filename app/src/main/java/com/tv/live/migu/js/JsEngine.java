@@ -52,6 +52,9 @@ public final class JsEngine {
 
     /** JS 求值整体超时（毫秒） */
     private static final long EVAL_TIMEOUT_MS = 25_000L;
+
+    /** 【2026-10-26】JS 异常回传前缀（evaluateJavascript 的返回值以它开头即表示脚本抛异常）。 */
+    private static final String JS_ERROR_PREFIX = "__JSERR__";
     /** 等待页面就绪超时（毫秒） */
     private static final long READY_TIMEOUT_MS = 8_000L;
     /** 就绪前最多排队多少个求值任务 */
@@ -180,6 +183,7 @@ public final class JsEngine {
         }
         main.post(() -> {
             if (unavailable) {
+                LogBridge.w(TAG, "求值失败：JS 引擎不可用");
                 cb.onError("js engine unavailable");
                 return;
             }
@@ -188,6 +192,7 @@ public final class JsEngine {
                 return;
             }
             if (pending.size() >= MAX_PENDING) {
+                LogBridge.w(TAG, "求值失败：JS 引擎忙（排队 " + pending.size() + " 条）");
                 cb.onError("js engine busy");
                 return;
             }
@@ -197,7 +202,12 @@ public final class JsEngine {
             };
             pending.add(task);
             main.postDelayed(() -> {
-                if (pending.remove(task)) cb.onError("js engine not ready");
+                if (pending.remove(task)) {
+                    // 【2026-10-26 补日志】原来是静默 onError，上层看不到「引擎没就绪」
+                    LogBridge.w(TAG, "求值失败：JS 引擎未就绪（等待 " + READY_TIMEOUT_MS
+                            + "ms 超时，pageReady=" + pageReady + "）");
+                    cb.onError("js engine not ready");
+                }
             }, READY_TIMEOUT_MS);
         });
     }
@@ -217,11 +227,24 @@ public final class JsEngine {
         }, EVAL_TIMEOUT_MS);
 
         try {
+            // 【2026-10-26 暴露 JS 异常】JS 一旦抛异常（如插件里的正则没匹配上 → TypeError），
+            //   WebView 只会回一个 "null"，上层只能看到"结果为空/超时"，看不到原因。
+            //   这里不做整体 IIFE 包装——插件的函数声明必须留在**顶层作用域**，
+            //   否则 native_layer.js 的 `window[methodName]` 取不到插件函数（实测 "fn is not a function"）。
+            //   异常捕获由调用方（UrlSourceParser）在最后那一次调用上自行包 try/catch，
+            //   结果以 __JSERR__ 前缀回传，这里识别并转成 onError。
             webView.evaluateJavascript(nativeLayerJs + code, value -> {
                 if (!finished.compareAndSet(false, true)) return;
                 String out = unwrap(value);
-                if (out == null) cb.onError("js returned null");
-                else cb.onResult(out);
+                if (out == null) {
+                    cb.onError("js returned null");
+                } else if (out.startsWith(JS_ERROR_PREFIX)) {
+                    String msg = out.substring(JS_ERROR_PREFIX.length());
+                    LogBridge.w(TAG, "JS 插件执行异常: " + msg);
+                    cb.onError("js exception: " + msg);
+                } else {
+                    cb.onResult(out);
+                }
             });
         } catch (Throwable t) {
             if (finished.compareAndSet(false, true)) {

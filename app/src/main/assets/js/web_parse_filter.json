@@ -1,13 +1,16 @@
-[{
-    "key": "v111.youku.com/v_show",
-    "filter": "ups.youku.com/ups/get.json",
-    "oldstr": ["v.youku.com/v_show"],
-    "newstr": ["m.youku.com/video"],
-    "ua": ""
-}, {
-    "key": "m1111.youku.com/video",
-    "filter": "ups.youku.com/ups/get.json",
-    "oldstr": [],
-    "newstr": [],
-    "ua": ""
-}]
+[
+    {
+        "key": "v.youku.com/v_show",
+        "filter": "ups.youku.com/ups/get.json",
+        "oldstr": ["v.youku.com/v_show"],
+        "newstr": ["m.youku.com/video"],
+        "ua": ""
+    },
+    {
+        "key": "m.youku.com/video",
+        "filter": "ups.youku.com/ups/get.json",
+        "oldstr": [],
+        "newstr": [],
+        "ua": ""
+    }
+]

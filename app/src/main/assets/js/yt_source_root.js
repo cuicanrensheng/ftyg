@@ -59,6 +59,21 @@ function RootFunction(url) {
   } else if (- 1 != url.indexOf('iqy_live://')) {
     arr.push("iqy_live.js");
     arr.push("iqyLiveParsePlay");
+  // 【2026-10-26 补回原版路由】原版畅享TV 的 root 有这两条，我方移植时漏了，
+  //   导致爱奇艺/优酷网页线路「路由失败：[]」——插件都没机会执行。
+  //   iqiyi_vod.js / yk_parse.js 已从原版移植过来。
+  } else if (- 1 != url.indexOf('www.iqiyi.com') || - 1 != url.indexOf('.iqiyi.com')) {
+    arr.push("iqiyi_vod.js");
+    arr.push("IqiyiVodParsePlay");
+  } else if (- 1 != url.indexOf('ups.youku.com')) {
+    // 【2026-10-26】WebView 拦截到的优酷真实取流接口 URL（ups.youku.com/ups/get.json?vid=..&utid=..&ckey=..）
+    //   走 ykVodParsePlay1 —— 它直接从 URL 里取 vid/utid/ckey 再调 ups 接口。
+    //   不能用 ykVodParsePlay：那个函数是去抓播放页的 showid/videoId 字段，现已失效。
+    arr.push("yk_parse.js");
+    arr.push("ykVodParsePlay1");
+  } else if (- 1 != url.indexOf('youku.com')) {
+    arr.push("yk_parse.js");
+    arr.push("ykVodParsePlay");
   } else if (- 1 != url.indexOf('.bilibili.com')) {
     if (-1 == url.indexOf('@referer=')) {　// iOS 要解析两次，这一步防止第二次重复解析
       if (-1 != url.indexOf('bangumi/play/')) {

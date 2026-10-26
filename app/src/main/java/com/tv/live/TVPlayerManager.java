@@ -275,6 +275,10 @@ public class TVPlayerManager {
     private int mRybLineSwitchCount = 0;
     /** 【2026-10-22 源2·失效自动换线】本播放会话触发计数，播放就绪清零，防循环 */
     private int mNbmLineSwitchCount = 0;
+    /** 【2026-10-26 源9·失效自动换线】本播放会话触发计数，播放就绪清零，防循环 */
+    private int mJzLineSwitchCount = 0;
+    /** 【2026-10-26 源9·失效自动换线】单会话最多换线条数 */
+    private static final int MAX_JZ_LINE_SWITCH = 4;
     /** 【2026-10-22 源8·失效自动换线】单会话最多换线条数（与源5 点播同值） */
     private static final int MAX_RYB_LINE_SWITCH = 4;
     /** 【2026-10-22 源2·失效自动换线】单会话最多换线条数（与源5 点播同值） */
@@ -1239,6 +1243,16 @@ public class TVPlayerManager {
                     // 【2026-10-22 源8/源2·失效自动换线】播放恢复 = 新一轮稳定：清零换线计数
                     mRybLineSwitchCount = 0;
                     mNbmLineSwitchCount = 0;
+                    // 【2026-10-26 源9·失效重解析与换线】播放恢复 = 新一轮稳定：清零计数与判死记录
+                    resetJzReResolveCounter();
+                    try {
+                        String jzVid = (currentChannel != null)
+                                ? com.tv.live.juzhi.JzUrlResolver.vodIdOf(currentChannel.getMainPlayUrl()) : null;
+                        if (!TextUtils.isEmpty(jzVid)) {
+                            com.tv.live.juzhi.JzUrlResolver.clearDeadLines(Integer.parseInt(jzVid));
+                        }
+                    } catch (Throwable ignored) {
+                    }
                     // 【2026-09-19 404 升级】播放就绪 = 当前线路已稳定，清零连续404计数
                     mHuya404Streak = 0;
                     startStuckDetection();
@@ -1708,6 +1722,56 @@ public class TVPlayerManager {
     private volatile String jzResolvingUrl = "";
 
     /**
+     * 【2026-10-26 源9 直链时效】源9 的直链（videoUsableUrl 下发的 m3u8）只有约 30s 级时效：
+     * 起播成功后过几十秒再拉同一地址，服务端返回 {@code {"code":400,"msg":"无效的文件名"}}
+     * 的 JSON 错误体，播放器报 "Input does not start with the #EXTM3U header"。
+     * 因此**重放旧直链必然失败**，必须重新走解析链取新直链。
+     *
+     * <p>为了防止"新直链又立刻过期"造成无限重解析，用时间窗限流：
+     * 同一 60s 窗口内最多重新解析 2 次，超出则按失效源处理（换源/跳台）。
+     */
+    private int jzReResolveCount = 0;
+    private long jzReResolveWindowStart = 0L;
+
+    /**
+     * 【2026-10-26 取消"重新解析取新直链"后的残留计数（已不再用于控制重解析）。
+     * 保留字段仅为兼容旧引用，换线次数改由 {@link #mJzLineSwitchCount} 控制。
+     */
+    private boolean allowJzReResolve() {
+        // 已废弃：不再对源9 发起「重新解析取新直链」（那会导致一直重复播放）
+        return false;
+    }
+
+    /**
+     * 【2026-10-26】把源9 当前使用的线路标记为判死。
+     *
+     * <p>背景：源9 同一部片有 5~13 条线路，服务端会把已失效的线路原样下发。
+     * 播放失败（内容非视频 / 重定向到占位图）说明这条线路的地址已死，
+     * 把它记入黑名单后，{@code JzUrlResolver} 的选线会跳过它 → 自动换到该片其他线路。
+     * 这是修「一直重复播放」的关键：不判死的话每次重试都拿回同一条死线路。
+     */
+    private void markJzCurrentLineDead(String jzChUrl) {
+        String jzVodIdStr = com.tv.live.juzhi.JzUrlResolver.vodIdOf(jzChUrl);
+        int jzVodId = -1;
+        try {
+            jzVodId = Integer.parseInt(jzVodIdStr);
+        } catch (Throwable ignored) {
+        }
+        if (jzVodId <= 0) return;
+        String deadLine = com.tv.live.juzhi.JzUrlResolver.pickedLineOf(jzVodId);
+        if (!TextUtils.isEmpty(deadLine)) {
+            com.tv.live.juzhi.JzUrlResolver.markLineDead(jzVodId, deadLine);
+        }
+    }
+
+    /** 【2026-10-26】播放就绪（新一轮稳定）时清零源9 换线计数 */
+    private void resetJzReResolveCounter() {
+        jzReResolveCount = 0;
+        jzReResolveWindowStart = 0L;
+        mJzLineSwitchCount = 0;
+    }
+
+    /**
      * 【2026-10-23 源9 橘汁】惰性解析并播放 —— 与 {@link #resolveRybAndPlay} 同构：
      * 起播这一刻调 getDetail 取集数 + videoUsableUrl 换真实 m3u8（RSA/AES 加密 protobuf）。
      *
@@ -1987,6 +2051,35 @@ public class TVPlayerManager {
             LogBridge.w(TAG, "【源8 换线】发起失败: " + t.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 【2026-10-26 源9·线路级失效兜底】当前频道是源9（{@code juzhi://<vodId>[@<ep>]}）
+     * 且直链被判死（内容非视频 / 重定向到占位图）时：把该线路标记判死并重新解析，
+     * 由解析层跳过黑名单线路自动换到该片的其他线路后重播。
+     *
+     * <p>与 {@link #trySwitchRybLine()} / {@link #trySwitchNbmLine()} 同机制（失效即换线），
+     * 差异在于源9 有测速选线层，换线由 {@code JzUrlResolver} 的黑名单机制完成，
+     * 本方法只负责触发一次重新解析。
+     *
+     * @return true = 已接管；false = 非源9或已超限，调用方继续兜底链
+     */
+    private boolean trySwitchJzLine() {
+        final Channel ch = currentChannel;
+        if (ch == null) return false;
+        final String url = ch.getMainPlayUrl();
+        if (!com.tv.live.juzhi.JzUrlResolver.isJzUrl(url)) return false;   // 非源9：不接管
+        if (mJzLineSwitchCount >= MAX_JZ_LINE_SWITCH) {
+            LogBridge.w(TAG, "【源9 换线】本会话触发已达上限(" + MAX_JZ_LINE_SWITCH + ")，转下一条兜底链");
+            return false;
+        }
+        mJzLineSwitchCount++;
+        final String chName = currentChannelName;
+        LogBridge.i(TAG, "【源9 换线】当前线路已判死 → 换线重播（第 "
+                + mJzLineSwitchCount + "/" + MAX_JZ_LINE_SWITCH + " 次）");
+        currentUrl = url;
+        resolveJzAndPlay(url, 0);
+        return true;
     }
 
     /**
@@ -3120,6 +3213,10 @@ public class TVPlayerManager {
         boolean isNetworkError = isNetworkError(cause) || (reason != null && (reason.contains("网络") || reason.contains("卡住")));
         int maxRetry = isNetworkError ? MAX_RETRY_COUNT_NETWORK : MAX_RETRY_COUNT;
 
+        // 【2026-10-26 源9·失效判死与换线】见下方 retryRunnable 内的处理：
+        //   源9 线路失效时判死该线路并换到该片其他线路；不在此处提前处理，
+        //   避免与 retryRunnable 里的换线逻辑重复触发（一次失败换两次线）。
+
         if (retryCount >= maxRetry) {
             logWarn("重试次数已达上限：" + maxRetry + "（" + (isNetworkError ? "网络错误" : "源错误") + "），判定为失效源");
 
@@ -3138,6 +3235,11 @@ public class TVPlayerManager {
                     }
                     // 【2026-10-22 源2·线路级兜底】4K影视当前线路失效 → 轮转其他线路重播
                     if (trySwitchNbmLine()) {
+                        return;
+                    }
+                    // 【2026-10-26 源9·线路级兜底】橘汁当前线路失效 → 跳过判死线路换线重播
+                    //   （不接这里的话，源9 会一路走到"切台冷却"，同一失效频道反复被重选）
+                    if (trySwitchJzLine()) {
                         return;
                     }
                     // 畅享源失效兜底：备线用尽前，先尝试实时重拉最新签名源重播
@@ -3181,6 +3283,26 @@ public class TVPlayerManager {
         retryRunnable = () -> {
             isRetrying = false;
             if (!TextUtils.isEmpty(currentUrl)) {
+                // 【2026-10-26 源9·失效判死与换线】源9 线路失效（直链过期回 JSON、
+                //   302 到占位图等）是**线路级**问题，不是网络抖动：重试多少次拿到的
+                //   都是同一个死地址。处理：判死当前线路 → 换到该片的其他线路重播
+                //   （与源5/源8/源2 同机制）。
+                //   【2026-10-26 取消"重新解析取新直链"】原实现是「重新解析取新直链」，
+                //   但重新解析会命中测速缓存的**同一条**线路 → 拿回同一个死地址 →
+                //   起播→失败→重解析→再起播，**一直重复播放**（实测 60 秒内起播 8 次）。
+                //   现在只做判死+换线，彻底不再对同一片重新解析。
+                Channel jzCh = getCurrentChannel();
+                String jzChUrl = (jzCh != null) ? jzCh.getMainPlayUrl() : null;
+                if (jzChUrl != null && com.tv.live.juzhi.JzUrlResolver.isJzUrl(jzChUrl)) {
+                    markJzCurrentLineDead(jzChUrl);
+                    if (trySwitchJzLine()) {
+                        retryRunnable = null;
+                        return;
+                    }
+                    // 换线次数用尽 → 不再重试，转下方跳台兜底
+                    retryRunnable = null;
+                    return;
+                }
 
                 if (currentUrl.contains(".huya.com") && mHuyaRoomId > 0) {
                     LogBridge.d(TAG, "【虎牙】重试：重新触发解析获取新签名, roomId=" + mHuyaRoomId);

@@ -4,6 +4,11 @@ import android.util.Log;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkInfo;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -323,7 +328,9 @@ public class WebServerManager {
     }
 
     public String getAccessUrl() {
-        return "http://" + getDeviceIPAddress() + ":" + port;
+        String ip = getDeviceIPAddress();
+        if (ip == null) return null; // 无网时不给出假地址（旧行为会拼出 http://0.0.0.0:10481）
+        return "http://" + ip + ":" + port;
     }
 
     public boolean isRunning() {
@@ -634,7 +641,6 @@ public class WebServerManager {
                 handler.post(() -> {
                     boolean hasUpdate = false;
                     SharedPreferences sp = context.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE);
-
                     if (liveUrl != null && !liveUrl.trim().isEmpty()) {
                         sp.edit().putString(KEY_CUSTOM_LIVE, liveUrl.trim()).apply();
                         addHistory("live_history", liveUrl.trim());
@@ -865,15 +871,129 @@ public class WebServerManager {
                 "</html>";
     }
 
+    /**
+     * 【2026-10-26 修二维码 IP 显示 0.0.0.0】取本机「同网段手机能访问到」的 IPv4。
+     *
+     * <p>旧实现只问 WifiManager：电视走有线（eth0）或 Wi-Fi 未连接时
+     * {@code WifiInfo.getIpAddress()} 返回 0，原样拼出来就是 {@code http://0.0.0.0:10481}，
+     * 手机扫码/手输都进不去。实机复现：创维 8N05_Q840，Wi-Fi DISCONNECTED、eth0 192.168.5.60。
+     *
+     * <p>兜底顺序：Wi-Fi 已连接地址 → ConnectivityManager 各已连网络 LinkProperties
+     * → 网卡枚举（wlan0、eth0 等）。取不到返回 null，由调用方提示，绝不返回 0.0.0.0。
+     */
     private String getDeviceIPAddress() {
+        String ip = pickUsableIpv4(readWifiIpv4());
+        if (ip == null) ip = pickUsableIpv4(readActiveNetworkIpv4());
+        if (ip == null) ip = pickUsableIpv4(scanNetworkInterfacesIpv4());
+        if (ip == null) {
+            LogBridge.w("WebServer", "【订阅地址】未取到局域网 IPv4（网线/Wi-Fi 均未连接？），二维码不给地址");
+        } else {
+            LogBridge.i("WebServer", "【订阅地址】本机局域网 IP = " + ip);
+        }
+        return ip;
+    }
+
+    /** Wi-Fi 已连接时的地址；未连接/未拿到 DHCP 返回 null（这正是原 0.0.0.0 的来源） */
+    private String readWifiIpv4() {
         try {
             WifiManager wm = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null || !wm.isWifiEnabled()) return null;
             WifiInfo info = wm.getConnectionInfo();
+            if (info == null) return null;
             int ip = info.getIpAddress();
+            if (ip == 0) return null;
             return (ip & 0xFF) + "." + ((ip >> 8) & 0xFF) + "." + ((ip >> 16) & 0xFF) + "." + ((ip >> 24) & 0xFF);
-        } catch (Exception e) {
-            return "192.168.1.100";
+        } catch (Throwable t) {
+            return null;
         }
+    }
+
+    /** 遍历 ConnectivityManager 已连接网络（有线/Wi-Fi/热点），优先 Wi-Fi，其次以太网 */
+    private String readActiveNetworkIpv4() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) context.getApplicationContext()
+                    .getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return null;
+            String wifi = null, ethernet = null, other = null;
+            for (Network network : cm.getAllNetworks()) {
+                NetworkInfo ni = cm.getNetworkInfo(network);
+                if (ni == null || !ni.isConnected()) continue;
+                LinkProperties lp = cm.getLinkProperties(network);
+                if (lp == null) continue;
+                for (LinkAddress la : lp.getLinkAddresses()) {
+                    java.net.InetAddress a = la.getAddress();
+                    if (a == null || !(a instanceof java.net.Inet4Address)) continue;
+                    if (a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                    String cand = a.getHostAddress();
+                    if (pickUsableIpv4(cand) == null) continue;
+                    if (ni.getType() == ConnectivityManager.TYPE_WIFI) {
+                        if (wifi == null) wifi = cand;
+                    } else if (ni.getType() == ConnectivityManager.TYPE_ETHERNET) {
+                        if (ethernet == null) ethernet = cand;
+                    } else if (other == null) {
+                        other = cand;
+                    }
+                }
+            }
+            return wifi != null ? wifi : (ethernet != null ? ethernet : other);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 最后兜底：直接枚举网卡（部分电视的 ConnectivityManager 不给有线网络信息） */
+    private String scanNetworkInterfacesIpv4() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> ifs = java.net.NetworkInterface.getNetworkInterfaces();
+            if (ifs == null) return null;
+            String wifi = null, ethernet = null, other = null;
+            while (ifs.hasMoreElements()) {
+                java.net.NetworkInterface nif = ifs.nextElement();
+                try {
+                    if (nif == null || !nif.isUp() || nif.isLoopback()) continue;
+                    String name = nif.getName() == null ? "" : nif.getName().toLowerCase(Locale.ROOT);
+                    if (name.startsWith("dummy") || name.startsWith("rmnet") || name.startsWith("p2p")) continue;
+                    java.util.Enumeration<java.net.InetAddress> addrs = nif.getInetAddresses();
+                    while (addrs.hasMoreElements()) {
+                        java.net.InetAddress a = addrs.nextElement();
+                        if (!(a instanceof java.net.Inet4Address)) continue;
+                        if (a.isLoopbackAddress() || a.isLinkLocalAddress()) continue;
+                        String cand = a.getHostAddress();
+                        if (pickUsableIpv4(cand) == null) continue;
+                        if (name.startsWith("wlan")) {
+                            if (wifi == null) wifi = cand;
+                        } else if (name.startsWith("eth")) {
+                            if (ethernet == null) ethernet = cand;
+                        } else if (other == null) {
+                            other = cand;
+                        }
+                    }
+                } catch (Exception ignore) {
+                }
+            }
+            return wifi != null ? wifi : (ethernet != null ? ethernet : other);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 合法性过滤：必须是 4 段数字，且排除 0.0.0.0 / 127.x / 169.254.x（链路本地） */
+    private static String pickUsableIpv4(String raw) {
+        if (raw == null) return null;
+        String ip = raw.trim();
+        if (ip.isEmpty()) return null;
+        String[] parts = ip.split("\\.");
+        if (parts.length != 4) return null;
+        for (String p : parts) {
+            try {
+                int v = Integer.parseInt(p);
+                if (v < 0 || v > 255) return null;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        if ("0.0.0.0".equals(ip) || ip.startsWith("127.") || ip.startsWith("169.254.")) return null;
+        return ip;
     }
 
     private void addHistory(String key, String url) {
@@ -1060,7 +1180,10 @@ public class WebServerManager {
             String curUrl = segUrl;
             int responseCode = -1;
             for (int redirect = 0; redirect < 3; redirect++) {
-                conn = (HttpURLConnection) new java.net.URL(curUrl).openConnection();
+                // 【2026-10-25 NO_PROXY】本地剥离代理拉 CDN 分片这一段也必须直连：
+                //   服务已在 127.0.0.1 上，再套一层系统代理既无意义又会把 CDN 请求转给代理。
+                conn = (HttpURLConnection) new java.net.URL(curUrl)
+                        .openConnection(java.net.Proxy.NO_PROXY);
                 conn.setRequestMethod("GET");
                 conn.setInstanceFollowRedirects(true);
                 conn.setConnectTimeout(5000);

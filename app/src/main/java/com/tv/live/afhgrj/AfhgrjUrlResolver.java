@@ -314,7 +314,9 @@ public final class AfhgrjUrlResolver {
         java.io.InputStream in = null;
         boolean ok = false;
         try {
-            conn = (java.net.HttpURLConnection) new java.net.URL(m3u8).openConnection();
+            // 【2026-10-25 NO_PROXY】播放链路统一绕开系统代理（见虎牙 6 处同口径注释）
+            conn = (java.net.HttpURLConnection) new java.net.URL(m3u8)
+                    .openConnection(java.net.Proxy.NO_PROXY);
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(VERIFY_CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(VERIFY_READ_TIMEOUT_MS);

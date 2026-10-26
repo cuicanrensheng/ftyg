@@ -2,6 +2,7 @@ package com.tv.live.util;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,6 +22,13 @@ public class AppExecutors {
     private static final ExecutorService SERIAL = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "AppSerial-" + SERIAL_THREAD_ID.getAndIncrement());
         t.setDaemon(true);
+        try {
+            // 【2026-10-26】EPG 解析全链路走此串行队列。降到后台优先级（nice 10），
+            // 弱 CPU（电视 A53@1.1GHz）下让出时间片给媒体解码/提取线程，
+            // 避免冷启动/起播期 EPG 解析抢核造成播放缓冲见底。
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+        } catch (Throwable ignored) {
+        }
         return t;
     });
 

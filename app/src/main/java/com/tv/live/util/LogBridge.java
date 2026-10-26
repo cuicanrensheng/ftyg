@@ -666,6 +666,9 @@ public final class LogBridge {
                     .retryOnConnectionFailure(true)
                     .connectTimeout(10, TimeUnit.SECONDS)
                     .readTimeout(30, TimeUnit.SECONDS)
+                    // 【2026-10-25 NO_PROXY】本 client 只连 ws://localhost:9527（自己），
+                    //   回环地址必须直连，不能被系统代理接管。
+                    .proxy(java.net.Proxy.NO_PROXY)
                     .build();
             this.gson = new GsonBuilder().serializeNulls().create();
             this.webSockets = new CopyOnWriteArrayList<>();

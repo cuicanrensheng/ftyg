@@ -22,8 +22,17 @@ import java.util.Map;
  * 只会无限刷新清单等待新分片，最终靠应用 20s 卡住看门狗循环重试。
  *
  * <p>本类在 HLS 媒体清单每次成功解析后（见 {@link LoggingHlsPlaylistParserFactory}）
- * 跟踪 MEDIA-SEQUENCE：直播清单（无 ENDLIST）连续多次刷新序号不前进，
+ * 跟踪 MEDIA-SEQUENCE：直播清单（无 ENDLIST）刷新序号持续不前进，
  * 判定为死流并通过 {@link Listener} 通知上层（TVPlayerManager 走既有 autoRetry 兜底链）。
+ *
+ * <p>【2026-10-25 计数制 → 时间窗口制】原实现按「连续 4 次刷新序号不前进」判定，
+ * 阈值是按 9-10s 轮询标定的（4 次 ≈ 40s）。当日上线
+ * {@link FastLivePlaylistTrackerFactory} 直播清单 2s 快轮询后，健康源每 10s 发布周期内
+ * 有 8-9 次未前进——旧计数制 4-5s 即触线，必然误杀。现改为<b>时间基准</b>：
+ * 序号不前进持续 {@value #DEAD_WINDOW_MS} ms 才判死流，与轮询快慢彻底解耦
+ * （2s 轮询 40s 触发 ≈ 原 10s 轮询 4 次触发的绝对时长，行为等价）。
+ * 真死流还有 30s 的 {@code PlaylistStuckException}（快轮询工厂卡死系数 15.0 × 2s）
+ * 与 20s 应用卡住看门狗兜底，三层互不依赖。
  *
  * <p>设计约束：
  * <ul>
@@ -39,11 +48,18 @@ public final class DeadStreamMonitor {
     private static final String TAG = "DeadStreamMnt";
 
     /**
-     * 连续多少次刷新 MEDIA-SEQUENCE 无前进即判定死流。
-     * 直播清单刷新间隔约为 targetDuration 量级（该源 9–10s），
-     * 4 次 ≈ 40s：短于 20s 的偶发停顿不误杀，长于此基本可判定源失效。
+     * 直播清单 MEDIA-SEQUENCE 持续多久不前进即判定死流（时间基准，与轮询快慢解耦）。
+     * 40s 与原计数制（10s 轮询 × 4 次）的绝对时长等价；
+     * 须大于实测最大发布尖刺 21s（约 30% 分片间隔超 11s），给慢发布源留足余量。
      */
-    private static final int DEAD_THRESHOLD = 4;
+    private static final long DEAD_WINDOW_MS = 40_000L;
+
+    /**
+     * 触发死流判定的最少「未前进」观察次数（配合 {@link #DEAD_WINDOW_MS}）。
+     * 防止 lastSeqChangeMs 陈旧的边角情形（如长时间无刷新后恢复）一击必杀：
+     * 至少看到 3 次连续未前进（2s 轮询 = 6s，10s 轮询 = 30s）才认账。
+     */
+    private static final int DEAD_MIN_SAME_COUNT = 3;
 
     /** 判定触发后的冷却时长：冷却期内同 URL 不再重复判定（避免风暴）。 */
     private static final long COOLDOWN_MS = 60_000L;
@@ -103,13 +119,16 @@ public final class DeadStreamMonitor {
             }
             if (s.lastSeq == seq) {
                 s.sameCount++;
-                if (s.sameCount >= DEAD_THRESHOLD) {
+                if (s.sameCount >= DEAD_MIN_SAME_COUNT
+                        && now - s.lastSeqChangeMs >= DEAD_WINDOW_MS) {
+                    final int sameCount = s.sameCount;
+                    final long stalledMs = now - s.lastSeqChangeMs;
                     s.sameCount = 0;
                     s.cooldownUntil = now + COOLDOWN_MS;
                     s.triggerCount++;
-                    LogBridge.w(TAG, "死流检测：清单连续 " + DEAD_THRESHOLD
-                            + " 次刷新 MEDIA-SEQUENCE 未前进（seq=" + seq
-                            + ", hasEndTag=false），判定固定窗口伪直播 -> " + url);
+                    LogBridge.w(TAG, "死流检测：直播清单 MEDIA-SEQUENCE 持续 " + (stalledMs / 1000)
+                            + "s 未前进（seq=" + seq + ", 未前进刷新 " + sameCount
+                            + " 次, hasEndTag=false），判定固定窗口伪直播 -> " + url);
                     final Listener l = listener;
                     if (l != null) {
                         try {
@@ -122,6 +141,7 @@ public final class DeadStreamMonitor {
             } else {
                 s.lastSeq = seq;
                 s.sameCount = 0;
+                s.lastSeqChangeMs = now;
             }
         }
     }
@@ -130,6 +150,8 @@ public final class DeadStreamMonitor {
     private static final class State {
         long lastSeq = -1L;
         int sameCount = 0;
+        /** 最近一次序号前进（或首次观察）的时刻，死流判定以此算「持续未前进」时长。 */
+        long lastSeqChangeMs = 0L;
         long cooldownUntil = 0L;
         /** 累计判死流次数（不随冷却清零），供上层决定是否走上限兜底。 */
         int triggerCount = 0;

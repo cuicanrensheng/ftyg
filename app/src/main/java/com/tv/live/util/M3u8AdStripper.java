@@ -164,7 +164,10 @@ public class M3u8AdStripper {
         if (url == null || url.isEmpty()) return null;
         java.net.HttpURLConnection conn = null;
         try {
-            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            // 【2026-10-25 NO_PROXY】清单下载是播放链路的起点，所有源共用。
+            //   设备配了 WiFi 代理时这里会走 ProxySelector，导致「列表能出、点进去播不动」。
+            conn = (java.net.HttpURLConnection) new java.net.URL(url)
+                    .openConnection(java.net.Proxy.NO_PROXY);
             conn.setConnectTimeout(DOWNLOAD_CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(DOWNLOAD_READ_TIMEOUT_MS);
             conn.setInstanceFollowRedirects(true);

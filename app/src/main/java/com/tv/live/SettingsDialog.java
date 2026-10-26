@@ -189,6 +189,15 @@ public class SettingsDialog extends android.app.Dialog {
 
         webServerManager.start();
         currentWebUrl = webServerManager.getAccessUrl();
+        // 【2026-10-26】底部提示原来写死「http://设备IP:10481」，改为填真实局域网地址
+        try {
+            TextView tvWebHint = findViewById(R.id.tv_web_settings_hint);
+            if (tvWebHint != null) {
+                tvWebHint.setText(currentWebUrl != null
+                        ? "网页设置：" + currentWebUrl
+                        : "网页设置：未获取到局域网地址，请检查网络");
+            }
+        } catch (Exception ignore) {}
 
         SourceManager liveManager = new SourceManager(getContext(), "live_history");
         if (liveManager.size() == 0) {
@@ -639,13 +648,29 @@ public class SettingsDialog extends android.app.Dialog {
                 MainActivity activity = MainActivity.getRunningInstance();
                 if (activity != null && !activity.isFinishing()) {
                     activity.switchingToOtt = true;
-                    Intent intent = new Intent(activity, OttHomeActivity.class);
-                    // 【2026-10-18 启动图】热切换：播放器还在播，不会再回调 onPlayReady，
-                    //   若不跳过启动图，覆盖层会一直挂到 9s 保底才放行
-                    intent.putExtra(OttHomeActivity.EXTRA_WARM_START, true);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    activity.startActivity(intent);
-                    activity.finish();
+                    // 【2026-10-26 修「切到 OTT 后应用直接退出」= ANR】
+                    //   实机日志：ANR in com.tv.live (.OttHomeActivity)，原因 Input dispatching timed out
+                    //   （no window has focus），随后 SIGQUIT 直接杀进程。
+                    //   成因：按确定键切模式时，这次按键的 ACTION_UP 还在输入队列里，
+                    //   而我们立刻 startActivity + finish() 把窗口全拆了 → UP 无处投递，
+                    //   InputDispatcher 等满 5s 判 ANR。加上 OTT 首页 onCreate 本身要 ~3.3s 才挂窗口，
+                    //   两个因素叠加必死。这里先延后 400ms 再切：让这次按键先落到仍在显示的设置面板上。
+                    activity.getWindow().getDecorView().postDelayed(() -> {
+                        try {
+                            MainActivity host = MainActivity.getRunningInstance();
+                            if (host == null || host.isFinishing() || host.isDestroyed()) return;
+                            Intent intent = new Intent(host, OttHomeActivity.class);
+                            // 【2026-10-18 启动图】热切换：播放器还在播，不会再回调 onPlayReady，
+                            //   若不跳过启动图，覆盖层会一直挂到 9s 保底才放行
+                            intent.putExtra(OttHomeActivity.EXTRA_WARM_START, true);
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            host.startActivity(intent);
+                            host.finish();
+                            LogBridge.i("Settings", "【模式切换】直播 → OTT（按键落地后延迟启动）");
+                        } catch (Exception e) {
+                            LogBridge.e("Settings", "切换 OTT 失败: " + e.getMessage(), e);
+                        }
+                    }, 400);
                 }
             }
         });
@@ -1794,13 +1819,24 @@ public class SettingsDialog extends android.app.Dialog {
      * 与参考包 showQrCapsule 一致：二维码 + 访问地址 + 「关闭」行，BACK 返回二级面板。
      */
     private void showSubscriptionDialog(String title) {
+        // 【2026-10-26】地址改为「每次打开时重取」：DHCP 续约 / 有线无线切换后 IP 会变，
+        //   沿用构造时的旧值会让二维码指向已经失效的地址（甚至 0.0.0.0）。
+        String webUrl = webServerManager.getAccessUrl();
+        currentWebUrl = webUrl;
         Bitmap qrBitmap = null;
-        try {
-            qrBitmap = qrCodeManager.createQR(currentWebUrl, 480);
-        } catch (Exception e) {
-            LogBridge.e("SUBSCRIPTION", "二维码生成失败: " + e.getMessage(), e);
+        if (webUrl != null && !webUrl.trim().isEmpty()) {
+            try {
+                qrBitmap = qrCodeManager.createQR(webUrl, 480);
+            } catch (Exception e) {
+                LogBridge.e("SUBSCRIPTION", "二维码生成失败: " + e.getMessage(), e);
+            }
+        } else {
+            LogBridge.w("SUBSCRIPTION", "【订阅地址】未取到局域网 IP，本次只显示提示、不生成二维码");
         }
-        openQrCapsule(title, qrBitmap, currentWebUrl);
+        openQrCapsule(title, qrBitmap,
+                webUrl != null && !webUrl.trim().isEmpty()
+                        ? webUrl
+                        : "未获取到局域网地址，请检查电视网络连接");
     }
 
     /** 叠出「二维码」三级胶囊；level1Root 指向当前二级胶囊，关闭后回到二级而不是一级 */

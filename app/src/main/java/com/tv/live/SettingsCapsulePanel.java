@@ -176,19 +176,20 @@ class SettingsCapsulePanel {
             qrLp.gravity = Gravity.CENTER_HORIZONTAL;
             qrLp.bottomMargin = Math.round(dm.density * 6f);
             root.addView(qrBox, qrLp);
+        }
 
-            if (qrAddress != null && !qrAddress.isEmpty()) {
-                TextView addr = new TextView(context);
-                addr.setText(qrAddress);
-                addr.setTextSize(13f);
-                addr.setTextColor(0xFFAAAAAA);
-                addr.setGravity(Gravity.CENTER);
-                addr.setSingleLine(true);
-                addr.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-                addr.setPadding(0, 0, 0, Math.round(dm.density * 8f));
-                root.addView(addr, new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-            }
+        // 访问地址：二维码生成失败（如未取到局域网 IP）时也要显示，否则整层只剩「关闭」无法自诊断
+        if (qrAddress != null && !qrAddress.isEmpty()) {
+            TextView addr = new TextView(context);
+            addr.setText(qrAddress);
+            addr.setTextSize(13f);
+            addr.setTextColor(0xFFAAAAAA);
+            addr.setGravity(Gravity.CENTER);
+            addr.setSingleLine(true);
+            addr.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            addr.setPadding(0, 0, 0, Math.round(dm.density * 8f));
+            root.addView(addr, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         }
 
         // 分隔线

@@ -321,6 +321,8 @@ public class HuyaSDKParser {
                                 .connectTimeout(PROBE_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                                 .readTimeout(PROBE_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                                 .retryOnConnectionFailure(false)
+                                // 【2026-10-25 NO_PROXY】与 HuyaStreamPlayer.sClient 同口径
+                                .proxy(java.net.Proxy.NO_PROXY)
                                 .build();
                         sClient = c;
                     }
@@ -428,6 +430,8 @@ public class HuyaSDKParser {
                     .connectTimeout(GRACE_CONNECT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     .readTimeout(GRACE_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
                     .retryOnConnectionFailure(false)
+                    // 【2026-10-25 NO_PROXY】与 HuyaStreamPlayer.sClient 同口径
+                    .proxy(java.net.Proxy.NO_PROXY)
                     .build();
             Response resp = null;
             try {

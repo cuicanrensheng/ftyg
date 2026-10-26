@@ -165,8 +165,14 @@ public class HuyaTogetherWatchGroupManager {
         return out;
     }
 
+    // 【2026-10-25 起播保护②】MIN_PRIORITY：与第一路 HuyaTogetherWatchManager 同理，
+    //   预加载线程不与解码器抢 CPU（默认优先级下实测造成 1~2s 连发微缓冲）。
     private final ExecutorService mExecutor =
-            Executors.newFixedThreadPool(CONCURRENCY);
+            Executors.newFixedThreadPool(CONCURRENCY, r -> {
+                Thread t = new Thread(r, "huya-grp-worker");
+                t.setPriority(Thread.MIN_PRIORITY);
+                return t;
+            });
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     // 【2026-10-03 提速】2135 列表「一次拉取、多分组共享」缓存。
@@ -377,7 +383,16 @@ public class HuyaTogetherWatchGroupManager {
         Map<String, List<Channel>> recommend = fetchRecommendGroupedBlocking();
         LogBridge.d(TAG, "⏱️【链路-自研线路】推荐列表(getLiveList) 阶段耗时 " + (System.currentTimeMillis() - tRec) + "ms");
 
-        ExecutorService groupPool = Executors.newFixedThreadPool(GROUP_NAMES.length);
+        // 【2026-10-25 起播保护】原来 5 个分组一把并发（GROUP_NAMES.length）。
+        //   叠加每条线路内部 2 并发 → 启动瞬间十几个请求同时压上来，把播放器的 5.3MB 分片挤到饥饿，
+        //   实测启动后 10s 内反复缓冲 83 次。改为一次只跑 2 个分组，总并发受控。
+        // 【2026-10-25 起播保护②】线程 MIN_PRIORITY：收尾阶段的 600 房间 JSON 解析/分类
+        //   仍在默认优先级上挤解码器，实测预加载发车后还有 1~2 波 0.2~0.3s 的顿挫。
+        ExecutorService groupPool = Executors.newFixedThreadPool(Math.min(2, GROUP_NAMES.length), r -> {
+            Thread t = new Thread(r, "huya-grp-group");
+            t.setPriority(Thread.MIN_PRIORITY);
+            return t;
+        });
         try {
             List<Future<Group>> groupFutures = new ArrayList<>();
             for (final String gName : GROUP_NAMES) {

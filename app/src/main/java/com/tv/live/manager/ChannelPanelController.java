@@ -104,9 +104,34 @@ public class ChannelPanelController {
     /** 固定分组预加载失败/未出结果时的最小补跑间隔，防止 setChannels 重复触发导致连拉两次 */
     private static final long SDK_PRELOAD_RETRY_MIN_INTERVAL_MS = 8000;
 
+    /**
+     * 【2026-10-25 起播保护】虎牙两路预加载的起播后延迟。
+     *
+     * <p>实测（debug 包 + 9527 日志，电视 192.168.5.60）：无缓存冷启动时，
+     * 「固定分组预加载立即发车 + 长尾预热抢先起跑」在首帧后 1s 就发出，
+     * 5 大分组 × 多子分类的并发请求 + 解析，把 5.3MB/10s 的直播分片挤到饥饿，
+     * 播放器在 15:24:09~15:24:19 这 10 秒里 **反复缓冲 83 次、累计停顿 7.7s**；
+     * 预加载一跑完（最后一条「翻页结束」15:24:19）卡顿立即消失。
+     * 虎牙分组只服务频道面板，早 10 秒晚 10 秒对用户无感，故统一延后到起播稳定后。
+     */
+    private static final long PRELOAD_AFTER_PLAYBACK_DELAY_MS = 12000;
+
     private long lastSdkPreloadAttemptAt = 0;
 
-    private final ExecutorService sdkPreloadExecutor = Executors.newSingleThreadExecutor();
+    // 【2026-10-25 起播保护②】MIN_PRIORITY：调度线程虽轻，但其下游 worker 池
+    //   （HuyaTogetherWatchManager/GroupManager）已统一降为 nice 19，这里保持一致。
+    private final ExecutorService sdkPreloadExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "sdk-preload-dispatch");
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
+
+    // 【2026-10-25 第二路降级】第二路（虎牙 5 大固定分组）改为兜底线路：
+    //   - line1HasData：第一路（HTTP 一起看）是否交付过频道（本地缓存或网络，任一即算「有效」）；
+    //   - line2FallbackEnabled：第二路是否已被兜底启用（tab 已注册显示）。
+    //   只有「缓存空 + 网络拉取失败/空」才启用第二路并显示分组（maybeFallbackLine1 → enableLine2Fallback）。
+    private volatile boolean line1HasData = false;
+    private volatile boolean line2FallbackEnabled = false;
 
     private boolean mIsFirstLaunch = true;
 
@@ -414,11 +439,11 @@ public class ChannelPanelController {
         // 【2026-10-24】固定分组 = 第二路 5 组 + 第三条线路「任意播」（HuyaRenYiBoLineManager）。
         // 第三条线路完全独立：仅注册分组名用于面板展示，其频道数据由本类独立加载渲染，
         // 不并入 channelSourceList 共享池（与第一/二路互不污染）。
-        String[] line2Fixed = HuyaTogetherWatchGroupManager.GROUP_NAMES;
-        String[] allFixed = new String[line2Fixed.length + 1];
-        System.arraycopy(line2Fixed, 0, allFixed, 0, line2Fixed.length);
-        allFixed[line2Fixed.length] = HuyaRenYiBoLineManager.GROUP_NAME;
-        groupListManager.setFixedGroups(allFixed);
+        // 【2026-10-25 第二路降级·兜底化】默认**只注册任意播**：
+        //   第二路 5 大固定分组（虎牙电影/电视剧/动漫/综艺/其他）不再默认显示、不再启动预加载，
+        //   仅当第一路（HTTP 一起看）失效（本地缓存空 + 网络拉取失败/空）时，
+        //   由 enableLine2Fallback() 注册显示并拉取 —— 见 line2FallbackEnabled / maybeFallbackLine1()。
+        groupListManager.setFixedGroups(new String[] { HuyaRenYiBoLineManager.GROUP_NAME });
 
         groupListManager.setPresetGroups(HuyaTogetherWatchManager.HTTP_API_GROUP_NAMES);
         loadedFixedGroups.clear();
@@ -504,44 +529,44 @@ public class ChannelPanelController {
         sdkPreloadExecutor.execute(new Runnable() {
             @Override public void run() {
                 final List<Channel> incoming = new ArrayList<>();
-                List<HuyaTogetherWatchGroupManager.Group> groups = null;
                 try {
                     List<Channel> cached = HuyaTogetherWatchManager.getInstance().loadCachedChannelsSync();
                     if (cached != null) incoming.addAll(cached);
                 } catch (Throwable ignored) {}
-                try {
-                    groups = HuyaTogetherWatchGroupManager.getInstance().loadCachedGroupsSync();
-                } catch (Throwable ignored) {}
-                final List<HuyaTogetherWatchGroupManager.Group> loadedGroups = groups;
+                // 【2026-10-25 第二路降级】启动期不再加载第二路缓存（原 loadCachedGroupsSync +
+                //   cacheFixedGroupChannels 预填已移除）：第二路 tab 默认不显示，
+                //   其缓存兜底改在 enableLine2Fallback() 里做。
 
                 if (panelLayout == null) return;
                 panelLayout.post(new Runnable() {
                     @Override public void run() {
                         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
-                        // 【2026-10-03 方案C】预填固定分组独立缓存：让冷启动/重开面板时
-                        // 点「虎牙电影」等分组能立刻用本组数据渲染，不依赖 roomId 去重后的残留。
-                        if (loadedGroups != null) {
-                            for (HuyaTogetherWatchGroupManager.Group g : loadedGroups) {
-                                if (g != null && g.name != null && g.channels != null
-                                        && !g.channels.isEmpty()) {
-                                    cacheFixedGroupChannels(g.name, g.channels);
-                                    incoming.addAll(g.channels);
-                                }
-                            }
-                        }
-
+                        // 【2026-10-25 第二路降级】原「方案C」第二路缓存预填已移除（tab 默认不显示，
+                        //   兜底启用时由 enableLine2Fallback() 补做）。sdkCacheEmpty 现在只反映第一路缓存。
                         sdkCacheEmpty = incoming.isEmpty();
                         if (sdkCacheEmpty) {
-                            LogBridge.d("ChannelPanel", "虎牙缓存为空，立即后台刷新");
-                            loadHuyaTogetherWatchChannels();
-                            preloadSdkFixedGroups();
+                            // 【2026-10-25 起播保护】原来这里「立即后台刷新」——正是无缓存冷启动
+                            //   （每次装新版都会命中）时把首帧后的播放打成一串缓冲的元凶。
+                            //   第一路（一起看/长尾预热）与第二路（5 大固定分组）都推迟到起播后。
+                            // 【2026-10-25 第二路降级】这里只排队第一路刷新；第二路不再预加载，
+                            //   若第一路拉取也失败/为空，由 maybeFallbackLine1() 启用兜底。
+                            LogBridge.d("ChannelPanel", "第一路缓存为空，排队：起播后 "
+                                    + PRELOAD_AFTER_PLAYBACK_DELAY_MS + "ms 再做后台刷新");
+                            mergeRefreshHandler.postDelayed(new Runnable() {
+                                @Override public void run() {
+                                    if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                                    loadHuyaTogetherWatchChannels();
+                                }
+                            }, PRELOAD_AFTER_PLAYBACK_DELAY_MS);
                             return;
                         }
                         // 与两条 HTTP 线路同一增量通道：去重合并 + 分组计数刷新 + 去抖增量刷新
                         // 【2026-10-17 启动提速】原为「立即合并」——608 条合并 + 分组刷新 + 通知刷新
                         //   恰好落在冷启动起播瞬间（首帧 0~2s 窗口），与播放器竞争主线程、并触发
                         //   3MB 级 GC（实测 786ms）。改为延迟 2 秒合并：基础列表先展示，虎牙分组稍后合入。
+                        // 【2026-10-25 第二路降级】缓存命中即说明第一路数据有效，标记后供兜底判定。
+                        line1HasData = true;
                         final java.util.List<Channel> mergePayload = incoming;
                         panelLayout.postDelayed(new Runnable() {
                             @Override public void run() {
@@ -551,14 +576,17 @@ public class ChannelPanelController {
                         }, 2000);
 
                             // 【2026-10-16】有缓存时延迟5秒后再后台刷新，避免与视频播放竞争带宽
-                            LogBridge.d("ChannelPanel", "虎牙缓存命中，延迟5秒后后台刷新");
+                            // 【2026-10-16】有缓存时延迟后台刷新，避免与视频播放竞争带宽。
+                            // 【2026-10-25】5s → 12s：5s 仍在起播缓冲窗口内，实测同样会挤播放。
+                            // 【2026-10-25 第二路降级】只刷第一路；第二路不再预加载。
+                            LogBridge.d("ChannelPanel", "虎牙缓存命中，延迟 "
+                                    + PRELOAD_AFTER_PLAYBACK_DELAY_MS + "ms 后后台刷新");
                             panelLayout.postDelayed(new Runnable() {
                                 @Override public void run() {
                                     if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
                                     loadHuyaTogetherWatchChannels();
-                                    preloadSdkFixedGroups();
                                 }
-                            }, 5000);
+                            }, PRELOAD_AFTER_PLAYBACK_DELAY_MS);
                     }
                 });
             }
@@ -682,6 +710,12 @@ public class ChannelPanelController {
     }
 
     private void preloadSdkFixedGroups() {
+        // 【2026-10-25 第二路降级】只有兜底启用后才允许预加载第二路；
+        //   启动路径已不再调用本方法。兜底触发时播放早已稳定，无需 12s 延后，立即发车。
+        if (!line2FallbackEnabled) {
+            LogBridge.d("ChannelPanel", "第二路未进入兜底状态（第一路有效），跳过固定分组预加载");
+            return;
+        }
         if (sdkGroupsPreloadStarted) {
             // 已经排过一次预加载：只有"固定分组确实一个都没加载出来"且距上次尝试
             // 超过最小间隔时才补跑。否则同一批 5 大分组会被拉两遍
@@ -698,12 +732,7 @@ public class ChannelPanelController {
         }
         sdkGroupsPreloadStarted = true;
         lastSdkPreloadAttemptAt = System.currentTimeMillis();
-
-        // 【2026-10-03 第九轮·与第一路对齐】去掉延后，改为立即发车。
-        // 与 setChannels 里的 loadHuyaTogetherWatchChannels()（第一路）完全一致：
-        // 都走自研 HTTP、都不碰 SDK，因此同样无需 isSDKAvailable 门控、无需错峰延迟。
-        // 立即丢到 sdkPreloadExecutor 执行，不阻塞主线程（与第一路同款异步语义）。
-        LogBridge.d("ChannelPanel", "固定分组预加载立即发车（无延迟，与第一路一致；自研线路无需等 SDK）");
+        LogBridge.d("ChannelPanel", "【第二路兜底】立即预加载虎牙 5 大固定分组");
         sdkPreloadExecutor.execute(new Runnable() {
             @Override public void run() {
                 doPreloadSdkFixedGroups();
@@ -769,6 +798,7 @@ public class ChannelPanelController {
                 // 【2026-09-24 提速】先展示后补齐：某个分类先完成即增量合并，
                 // 用户无需等到 4 个分类全部拉完（原先 ~30s）才能看到一起看频道
                 if (channels == null || channels.isEmpty()) return;
+                line1HasData = true;   // 【2026-10-25 第二路降级】第一路已交付频道
                 panelLayout.post(() -> {
                     if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
                     appendChannelsIncremental(channels, "虎牙一起看(增量)");
@@ -779,8 +809,11 @@ public class ChannelPanelController {
             public void onSuccess(List<Channel> channels) {
                 if (channels == null || channels.isEmpty()) {
                     LogBridge.d("ChannelPanel", "虎牙一起看: 未获取到频道");
+                    // 【2026-10-25 第二路降级】网络结果为空且此前也无任何第一路数据 → 兜底
+                    maybeFallbackLine1("拉取成功但返回空");
                     return;
                 }
+                line1HasData = true;   // 【2026-10-25 第二路降级】
                 panelLayout.post(() -> {
                     if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
@@ -793,8 +826,71 @@ public class ChannelPanelController {
             @Override
             public void onFailed(String errorMsg) {
                 LogBridge.d("ChannelPanel", "加载虎牙一起看失败: " + errorMsg);
+                // 【2026-10-25 第二路降级】拉取失败且此前也无任何第一路数据 → 兜底
+                maybeFallbackLine1("拉取失败: " + errorMsg);
             }
         });
+    }
+
+    /**
+     * 【2026-10-25 第二路降级】第一路失效判定入口。
+     * 只有「本地缓存空 + 网络拉取失败/空」（即 {@link #line1HasData} 仍为 false）时
+     * 才把第二路（5 大固定分组）作为兜底启用并显示分组；否则第二路保持隐藏。
+     * 可能从任意线程回调，统一 post 主线程执行。
+     */
+    private void maybeFallbackLine1(final String reason) {
+        if (line1HasData || line2FallbackEnabled) return;
+        if (panelLayout == null) return;
+        panelLayout.post(() -> {
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+            if (line1HasData || line2FallbackEnabled) return;
+            enableLine2Fallback(reason);
+        });
+    }
+
+    /**
+     * 【2026-10-25 第二路降级】启用第二路兜底：注册 5 大固定分组 tab 并立即拉取。
+     * 必须在主线程调用。流程：
+     * 1) setFixedGroups(第二路 5 组 + 任意播) 并刷新分组列表（tab 立即出现）；
+     * 2) 异步回填第二路本地缓存到 fixedGroupCache（点分组即有数据）；
+     * 3) 立即预加载最新分组数据（preloadSdkFixedGroups，此时播放已稳定）。
+     */
+    private void enableLine2Fallback(String reason) {
+        if (line2FallbackEnabled) return;
+        line2FallbackEnabled = true;
+        LogBridge.w("ChannelPanel", "【第二路兜底】第一路失效(" + reason
+                + ")，启用第二路固定分组显示");
+        String[] line2Fixed = HuyaTogetherWatchGroupManager.GROUP_NAMES;
+        String[] allFixed = new String[line2Fixed.length + 1];
+        System.arraycopy(line2Fixed, 0, allFixed, 0, line2Fixed.length);
+        allFixed[line2Fixed.length] = HuyaRenYiBoLineManager.GROUP_NAME;
+        groupListManager.setFixedGroups(allFixed);
+        groupListManager.setGroups(channelSourceList, false);
+        scheduleIncrementalRefresh();
+
+        // ② 本地缓存的第二路分组先回填（磁盘 IO 在 sdkPreloadExecutor，写内存回主线程）
+        sdkPreloadExecutor.execute(() -> {
+            List<HuyaTogetherWatchGroupManager.Group> cachedTmp = null;
+            try {
+                cachedTmp = HuyaTogetherWatchGroupManager.getInstance().loadCachedGroupsSync();
+            } catch (Throwable ignored) {}
+            if (cachedTmp == null || cachedTmp.isEmpty()) return;
+            final List<HuyaTogetherWatchGroupManager.Group> cached = cachedTmp;
+            panelLayout.post(() -> {
+                if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                for (HuyaTogetherWatchGroupManager.Group g : cached) {
+                    if (g != null && g.name != null && g.channels != null && !g.channels.isEmpty()) {
+                        cacheFixedGroupChannels(g.name, g.channels);
+                        loadedFixedGroups.add(g.name);
+                    }
+                }
+                LogBridge.d("ChannelPanel", "【第二路兜底】已回填 "
+                        + cached.size() + " 个本地缓存分组的独立数据");
+            });
+        });
+
+        // ③ 立即拉取最新分组数据
+        preloadSdkFixedGroups();
     }
 
     private void loadFixedGroupChannels(final String groupName) {
@@ -1851,6 +1947,9 @@ public class ChannelPanelController {
         }
 
         loadedFixedGroups.clear();
+        // 【2026-10-25 第二路降级】释放时重置兜底状态，重开面板按新会话判定
+        line1HasData = false;
+        line2FallbackEnabled = false;
         if (groupListManager != null) {
             groupListManager.release();
             groupListManager = null;

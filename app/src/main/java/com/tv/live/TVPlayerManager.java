@@ -67,8 +67,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -83,8 +81,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -157,6 +153,10 @@ public class TVPlayerManager {
     /** 播放器实例：由后台线程构建（冷启动优化），volatile 保证主线程可觑 */
     private volatile ExoPlayer player;
     private PlayerView playerView;
+    // 主播放器构建用的渲染器工厂与缓冲策略（initPlayer 内赋值，试过升为字段供第二播放器复用，
+    //   2026-10-26 双播放器实验移除后保留字段形态，避免改动 initPlayer 结构）
+    private DefaultRenderersFactory factory;
+    private DefaultLoadControl optimizedLoadControl;
 
     private Player.Listener playerListener;
     // 【2026-10-22 P2-05】currentUrl 由 IO/主线程多线程读写（open 回调在主线程、URL 派发在后台），
@@ -587,18 +587,23 @@ public class TVPlayerManager {
 
     private final Object variantListLock = new Object();
     private volatile List<Variant> variantList = new ArrayList<>();
-    private volatile boolean isParsingMasterPlaylist = false;
 
-    /** 【2026-10-24 冷启动优化①】延后的主清单预取地址：
-     *  播放器未就绪时 doPlayNormal 不立即预取（慢源场景会与 ExoPlayer 首帧抢同一台慢服务器），
-     *  改为挂到这里，首次 STATE_READY 且仍是当前地址时再解析（清晰度菜单只延后、首帧更快）。 */
-    private final Object mPendingMasterParseLock = new Object();
-    private String mPendingMasterParseUrl = null;
     /**
-     * 【2026-10-10】一次性抑制「普通源 master 重解析」：用户手选清晰度后重播该档地址时置位，
-     * 让 {@link #doPlayNormal} 跳过 {@code fetchAndParseMasterPlaylistNormal} —— 否则重播的
-     * 分片地址不是 master，解析不出 #EXT-X-STREAM-INF 会清空 {@link #variantList}，
-     * 导致设置里的「清晰度选择」变成空列表。
+     * 【2026-10-25 主清单预取已删除】普通源多码率档位改由<b>播放器自己解析出的主清单</b>回填
+     * （见 {@link LoggingHlsPlaylistParserFactory}），不再发独立 HTTP 请求。
+     * 这两个字段承载「出画后再恢复用户手选清晰度」的挂起数据：
+     * 主清单解析发生在 prepare 阶段（首帧前），若就地重播偏好档会二次 prepare、
+     * 反而拖慢起播，因此解析线程只落表，恢复动作延后到首次 STATE_READY。
+     */
+    private final Object mPendingNormalRestoreLock = new Object();
+    private List<Variant> mPendingNormalRestoreList = null;
+    private int mPendingNormalRestoreGen = 0;
+    /** 普通源起播代数：每次 doPlayNormal +1，用于丢弃换台后迟到的旧主清单回填 */
+    private volatile int mNormalPlayGeneration = 0;
+    /**
+     * 【2026-10-10】一次性抑制「普通源档位表清空」：用户手选清晰度后重播该档（子清单）地址时置位。
+     * 重播地址本身不是 master，播放器解析不出多码率清单，此时清空会让
+     * 「清晰度选择」列表变空，故重播本次保留 {@link #variantList}。
      */
     private volatile boolean mSuppressMasterParseOnce = false;
 
@@ -946,7 +951,7 @@ public class TVPlayerManager {
                 break;
         }
 
-        DefaultRenderersFactory factory = new DefaultRenderersFactory(context)
+        factory = new DefaultRenderersFactory(context)
                 .setEnableDecoderFallback(true)
                 .setMediaCodecSelector(createSmartSelector(preferSoftware))
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
@@ -978,7 +983,7 @@ public class TVPlayerManager {
         //      让播放中缓冲水位厚起来，扛住 TTFB 空窗与尖刺（不配 ABR，无 live offset
         //      副作用；固定画质下厚缓冲仅增加 CDN 波动容忍度，不拉长首帧——首帧由
         //      bufferForPlayback 单独控制）。
-        DefaultLoadControl optimizedLoadControl = new DefaultLoadControl.Builder()
+        optimizedLoadControl = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
                     12000,   // minBufferMs: 播放中水位（5000→12000，虎牙串行分片空窗下更抗耗）
                     60000,   // maxBufferMs（12000→60000，给足重建空间，参考原版默认 50s）
@@ -1183,17 +1188,21 @@ public class TVPlayerManager {
                     // 【2026-10-17 启动体验】记录就绪时刻（BUFFERING 提示的抑制窗口用）
                     lastPlayReadyAtMs = android.os.SystemClock.elapsedRealtime();
 
-                    // 【2026-10-24 冷启动优化①】出画后补跑延后的主清单预取（清晰度菜单数据）：
-                    //   仅当挂起地址仍是当前播放地址时才消费，换台/失败留下的陈旧挂起直接丢弃。
-                    String pendingMasterParse;
-                    synchronized (mPendingMasterParseLock) {
-                        pendingMasterParse = mPendingMasterParseUrl;
-                        mPendingMasterParseUrl = null;
+                    // 【2026-10-25 主清单预取已删除】档位表由播放器解析主清单时直接回填
+                    //   （LoggingHlsPlaylistParserFactory → onNormalMasterVariants，零额外请求）。
+                    //   用户此前手选过的清晰度偏好仍延后到出画后恢复，避免与首帧 prepare 叠加。
+                    List<Variant> pendingRestore = null;
+                    synchronized (mPendingNormalRestoreLock) {
+                        if (mPendingNormalRestoreList != null
+                                && mPendingNormalRestoreGen == mNormalPlayGeneration) {
+                            pendingRestore = mPendingNormalRestoreList;
+                        }
+                        mPendingNormalRestoreList = null;
+                        mPendingNormalRestoreGen = 0;
                     }
-                    if (pendingMasterParse != null && isHlsUrl(pendingMasterParse)
-                            && TextUtils.equals(currentUrl, pendingMasterParse)) {
-                        LogBridge.i(TAG, "【普通源】出画后补跑主清单预取（清晰度菜单）");
-                        fetchAndParseMasterPlaylistNormal(pendingMasterParse);
+                    if (pendingRestore != null) {
+                        LogBridge.i(TAG, "【普通源】出画后恢复用户手选清晰度（数据源=播放器解析的主清单）");
+                        maybeRestoreChannelResolution(pendingRestore);
                     }
 
                     // 【P0-B】首帧已出，此刻再初始化虎牙 SDK，避免与首帧抢 CPU/IO
@@ -2748,7 +2757,8 @@ public class TVPlayerManager {
         java.net.HttpURLConnection conn = null;
         try {
             java.net.URL base = new java.net.URL(m3u8);
-            conn = (java.net.HttpURLConnection) base.openConnection();
+            // 【2026-10-25 NO_PROXY】播放链路统一绕开系统代理（见虎牙 6 处同口径注释）
+            conn = (java.net.HttpURLConnection) base.openConnection(java.net.Proxy.NO_PROXY);
             conn.setInstanceFollowRedirects(false);
             conn.setConnectTimeout(4000);
             conn.setReadTimeout(4000);
@@ -3964,9 +3974,11 @@ public class TVPlayerManager {
         ViewGroup.LayoutParams layoutParams = playerView.getLayoutParams();
 
         int index = parent.indexOfChild(playerView);
-        int styleRes = useTexture ? R.style.PlayerView_Texture : R.style.PlayerView_Surface;
-        ContextThemeWrapper themedContext = new ContextThemeWrapper(context, styleRes);
-        PlayerView newPlayerView = new PlayerView(themedContext);
+        // 【2026-10-26】原实现用 ContextThemeWrapper(style) + new PlayerView(ctx) 动态造视图，
+        //   实测 surface_type 不生效（重建出来仍是 SurfaceView，dumpsys 复查确认）→ 改为显式 inflate
+        //   对应布局，渲染类型由 XML 的 app:surface_type 决定，确定生效。
+        PlayerView newPlayerView = (PlayerView) android.view.LayoutInflater.from(context).inflate(
+                useTexture ? R.layout.view_player_texture : R.layout.view_player_surface, parent, false);
         // 【2026-09-29 黑屏根因修复·第二轮】埋点：重建分支使用的 view 身份
         LogBridge.i(TAG, "switchRenderer 重建分支: useTexture=" + useTexture
                 + ", mCurrentUseTexture=" + mCurrentUseTexture
@@ -4084,6 +4096,21 @@ public class TVPlayerManager {
 
     private boolean surfaceCallbackBound = false;
 
+    // 【2026-10-26 重复回调修复】上一次 addCallback 的回调与它的 holder：
+    //   旧实现每次重绑都 addCallback 却从不 removeCallback，同一 SurfaceView 上会叠多份回调
+    //   （实测日志「Surface创建成功，播放器已绑定视图并持续播放」同一毫秒打印两次），
+    //   每份都会 setPlayer + play()，起播阶段额外触发解码器 flush → 画面一顿一顿。
+    private android.view.SurfaceHolder boundSurfaceHolder = null;
+    private android.view.SurfaceHolder.Callback boundSurfaceCallback = null;
+
+    // 【2026-10-26 起播卡顿修复】「本视图刚刚被显式 setPlayer 绑过」的时间戳与视图：
+    //   surfaceCreated 里真挂过一次，就说明视频输出已经指向当前 Surface，
+    //   retryResumeAfterSurface 不必再「摘 500ms 再挂」折腾一遍解码器。
+    //   只在真正调用 setPlayer 时记录 —— 复用同一个 PlayerView（旧输出 surface 已失效）的场景
+    //   不会记录，仍会走强制重绑那条黑屏修复路径。
+    private long mLastSurfaceAttachUptime = 0L;
+    private android.view.View mLastSurfaceAttachView = null;
+
     // 【2026-09-29 黑屏根因修复·第二轮】当前正在排队的 Surface 恢复重试轮询；
     //   重复启动前先取消旧的，避免多个轮询并发跑（实测 attachPlayerView 被调用两次时会并发两个轮询）。
     private Runnable pendingRetryRunnable;
@@ -4163,12 +4190,29 @@ public class TVPlayerManager {
     }
 
     /**
+     * 【2026-10-26 起播卡顿修复】解码器是否真的在往当前 Surface 出帧。
+     * 判据：已拿到视频尺寸（videoSize > 0）且状态不是 IDLE/ENDED。
+     * 用途：Surface 刚就绪时决定「要不要强制重绑」——有帧就别拆（拆一次解码器就 flush 一次，
+     * 起播阶段直接表现为连续重新缓冲/画面一顿一顿）；没帧才走黑屏兜底。
+     */
+    private boolean isVideoOutputHealthy() {
+        try {
+            if (player == null) return false;
+            androidx.media3.common.VideoSize vs = player.getVideoSize();
+            if (vs == null || vs.width <= 0 || vs.height <= 0) return false;
+            int st = player.getPlaybackState();
+            return st != Player.STATE_IDLE && st != Player.STATE_ENDED;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * 【2026-09-29 黑屏修复】校验 playerView 当前持有的 Surface 是否真的可用。
      * TextureView 模式无 SurfaceView，按 surfaceReady 处理；
      * SurfaceView 模式则以 SurfaceHolder 的 Surface.isValid() 为唯一事实来源。
      */
-    private boolean isSurfaceActuallyReady() {
-        try {
+    private boolean isSurfaceActuallyReady() {        try {
             if (playerView == null) return false;
             View videoSurfaceView = playerView.getVideoSurfaceView();
             // 【2026-09-29 黑屏根因修复】新建的 PlayerView 在布局完成前 getVideoSurfaceView() 可能为
@@ -4215,29 +4259,61 @@ public class TVPlayerManager {
                                     + ", 重试第" + retryCount[0] + "次");
                             if (surfaceOk) {
                                 surfaceReady = true;
-                                // 【2026-09-29 黑屏根因修复·第二轮】黑屏直接原因：PlayerView.getPlayer() 返回的是
-                                //   Java 层引用，相等并不代表 ExoPlayer 内部 videoOutput surface 仍有效。旧视图被
-                                //   移除时会把「共享 player」的视频输出 surface 清空，而新视图 getPlayer() 依旧
-                                //   == player，旧的「相等即跳过」判断导致永远不再重挂 → 永久黑屏。
-                                //   故此处无条件强制「先摘再挂」，让 ExoPlayer 重新走 setVideoSurface 流程。
-                                try {
-                                    // 【2026-10-14 花屏修复】surface 刚创建就立即重绑会花屏，
-                                    //   延迟 500ms 等 surface 完全准备好再重绑
-                                    playerView.setPlayer(null);
-        mHandler.postDelayed(() -> {
-                                        try {
-                                            playerView.setPlayer(player);
-                                            if (!player.isPlaying()) {
-                                                player.play();
-                                            }
-                                            LogBridge.i(TAG, "【花屏修复】延迟重绑 Surface 完成");
-                                        } catch (Exception e) {
-                                            LogBridge.w(TAG, "延迟重绑 Surface 失败: " + e.getMessage());
-                                        }
-                                    }, 500);
-                                } catch (Exception e) {
-                                    LogBridge.w(TAG, "强制重绑 Surface 失败: " + e.getMessage());
+                                // 【2026-10-26 修「进 OTT 预览起播后画面卡顿」】
+                                //   旧逻辑在 Surface 刚就绪的这一刻无条件「setPlayer(null) → 500ms → setPlayer(player)」，
+                                //   等于把解码器 flush 两遍。冷启动进 OTT 时刚好撞在起播中途，
+                                //   实测随后出现 1123ms / 316ms / 289ms 连续重新缓冲（13:40:47~13:40:51），
+                                //   肉眼就是画面一顿一顿。
+                                //   改法：不再立刻拆，先延迟 1.2s 复核解码器是否真的在出帧
+                                //   （videoSize>0 且非 IDLE）。正常起播此时早已出帧 → 什么都不做；
+                                //   只有确实无画面（旧视图被移除后输出 surface 失效的黑屏场景）才走强制重绑，
+                                //   09-29 那条黑屏修复仍然保留。
+                                if (playerView.getPlayer() == player && isVideoOutputHealthy()) {
+                                    pendingBindPlayer = false;
+                                    pendingRetryRunnable = null;
+                                    LogBridge.i(TAG, "Surface 已就绪且解码器在出帧，跳过强制重绑，避免起播卡顿");
+                                    return;
                                 }
+                                // 【2026-10-26 追加】播放器自己都还没准备好（IDLE/BUFFERING，含
+                                //   renyibo:// 这类源地址异步 302 解析的 3~4s 窗口）时绝不强拆：
+                                //   此时 videoSize 必然是 0，拆了只会把刚建好的解码器会话又 flush 一次，
+                                //   起播反倒更慢、更卡。真正的“输出 surface 失效”只会出现在 PLAYER 自认
+                                //   在播（READY）却拿不到视频帧的场景。
+                                final int __st = player.getPlaybackState();
+                                if (__st == Player.STATE_IDLE || __st == Player.STATE_BUFFERING) {
+                                    pendingBindPlayer = false;
+                                    pendingRetryRunnable = null;
+                                    LogBridge.i(TAG, "Surface 已就绪，播放器状态=" + __st
+                                            + "（未就绪/加载中），不做强制重绑，交给正常起播流程");
+                                    return;
+                                }
+                                mHandler.postDelayed(() -> {
+                                    try {
+                                        if (player == null || playerView == null) return;
+                                        if (isVideoOutputHealthy()) {
+                                            LogBridge.i(TAG, "复核：解码器已在出帧（videoSize="
+                                                    + player.getVideoSize().width + "x"
+                                                    + player.getVideoSize().height + "），跳过强制重绑");
+                                            return;
+                                        }
+                                        LogBridge.w(TAG, "复核：仍无视频帧，执行 Surface 强制重绑（黑屏兜底）");
+                                        try {
+                                            playerView.setPlayer(null);
+                                        } catch (Exception ignore) {
+                                        }
+                                        mHandler.postDelayed(() -> {
+                                            try {
+                                                playerView.setPlayer(player);
+                                                if (!player.isPlaying()) player.play();
+                                                LogBridge.i(TAG, "【花屏修复】延迟重绑 Surface 完成");
+                                            } catch (Exception e) {
+                                                LogBridge.w(TAG, "延迟重绑 Surface 失败: " + e.getMessage());
+                                            }
+                                        }, 500);
+                                    } catch (Exception e) {
+                                        LogBridge.w(TAG, "Surface 重绑复核异常: " + e.getMessage());
+                                    }
+                                }, 1200);
                                 if (!player.isPlaying()) {
                                     player.play();
                                 }
@@ -4332,6 +4408,10 @@ public class TVPlayerManager {
     private void ensurePlayerBoundToView() {
         try {
             if (player != null && playerView != null) {
+                // 【2026-10-26】冷启动时 player 还没建好，attachPlayerView 里的 switchRenderer 会因
+                //   player==null 提前返回 → SP renderer_type=texture 被静默忽略，重启后又回到 XML 的
+                //   surface_view。player 就绪后在此补一次对账，让「渲染方式」开关冷启动也真正生效。
+                applyRendererModeIfMismatch();
                 if (playerView.getPlayer() != player) {
                     playerView.setPlayer(player);
                     LogBridge.d(TAG, "播放器已绑定到视图");
@@ -4341,6 +4421,28 @@ public class TVPlayerManager {
             LogBridge.e(TAG, "绑定播放器到视图失败", e);
         }
     }
+
+    /** SP 里的渲染方式与当前视图实际类型不一致时，补一次 switchRenderer（冷启动补课用） */
+    private void applyRendererModeIfMismatch() {
+        try {
+            if (player == null || playerView == null || context == null) return;
+            if (isRenderingSwitching) return;
+            View vs = playerView.getVideoSurfaceView();
+            boolean isTextureView = vs instanceof android.view.TextureView;
+            boolean isSurfaceView = vs instanceof android.view.SurfaceView;
+            if (!isTextureView && !isSurfaceView) return; // 类型未知，别乱动
+            boolean wantTexture = "texture".equals(
+                    context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                            .getString("renderer_type", "surface"));
+            if (isTextureView == wantTexture) return;
+            LogBridge.i(TAG, "渲染方式与 SP 不一致，冷启动补切换: view=" + (isTextureView ? "texture" : "surface")
+                    + ", want=" + (wantTexture ? "texture" : "surface"));
+            switchRenderer(wantTexture);
+        } catch (Exception e) {
+            LogBridge.w(TAG, "渲染方式补切换失败: " + e.getMessage());
+        }
+    }
+
 
     public void detachPlayerView() {
         try {
@@ -4365,7 +4467,17 @@ public class TVPlayerManager {
         View videoSurfaceView = view.getVideoSurfaceView();
         if (videoSurfaceView instanceof android.view.SurfaceView) {
             android.view.SurfaceView surfaceView = (android.view.SurfaceView) videoSurfaceView;
-            surfaceView.getHolder().addCallback(new android.view.SurfaceHolder.Callback() {
+            android.view.SurfaceHolder holder = surfaceView.getHolder();
+            // 【2026-10-26 重复回调修复】先把上一份回调摘掉再挂新的：
+            //   否则同一 Surface 上会叠多份 Callback，surfaceCreated/surfaceChanged 被重复执行，
+            //   每次都 setPlayer+play()，起播阶段额外 flush 解码器 → 画面卡顿。
+            try {
+                if (boundSurfaceHolder != null && boundSurfaceCallback != null) {
+                    boundSurfaceHolder.removeCallback(boundSurfaceCallback);
+                }
+            } catch (Exception ignore) {
+            }
+            android.view.SurfaceHolder.Callback newCallback = new android.view.SurfaceHolder.Callback() {
                 @Override
                 public void surfaceCreated(android.view.SurfaceHolder holder) {
                     // 【2026-09-29 黑屏根因修复·第二轮】归属判断：只认「当前 playerView」的回调。
@@ -4378,6 +4490,9 @@ public class TVPlayerManager {
                     if (player != null) {
                         if (view.getPlayer() != player) {
                             view.setPlayer(player);
+                            // 【2026-10-26】记下「刚给本视图挂过播放器」，供 retryResumeAfterSurface 判重
+                            mLastSurfaceAttachUptime = android.os.SystemClock.uptimeMillis();
+                            mLastSurfaceAttachView = view;
                         }
                         if (!player.isPlaying()) {
                             player.play();
@@ -4411,7 +4526,10 @@ public class TVPlayerManager {
                     pendingBindPlayer = true;
                     LogBridge.d(TAG, "Surface销毁，播放器保持运行不解绑");
                 }
-            });
+            };
+            holder.addCallback(newCallback);
+            boundSurfaceHolder = holder;
+            boundSurfaceCallback = newCallback;
             surfaceCallbackBound = true;
         }
     }
@@ -5250,22 +5368,19 @@ public class TVPlayerManager {
             ensureChanxiangAxisAsync(null);
         }
 
+        // 【2026-10-25】主清单预取已删除：普通源清晰度档位不再由独立 HTTP 拉取，
+        //   改由播放器自己解析出的主清单回填（LoggingHlsPlaylistParserFactory →
+        //   onNormalMasterVariants），零额外请求、零额外 prepare。这里只做两件事：
+        //   ① 起播代数 +1 并清掉上一频道的挂起恢复（换台后迟到的回填直接丢弃）；
+        //   ② 清掉上一频道残留的档位表（手选清晰度重播子清单地址时保留，见 mSuppressMasterParseOnce）。
+        final int normalPlayGen = ++mNormalPlayGeneration;
+        synchronized (mPendingNormalRestoreLock) {
+            mPendingNormalRestoreList = null;
+            mPendingNormalRestoreGen = 0;
+        }
         if (mSuppressMasterParseOnce) {
-            // 用户手选清晰度导致的重播（分片地址）：不要重新解析 master，否则 variantList 被清空。
+            // 用户手选清晰度导致的重播（子清单地址）：保留档位表，重播本次不清空
             mSuppressMasterParseOnce = false;
-        } else if (isHlsUrl(url)) {
-            // 【2026-10-24 冷启动优化①】播放器未就绪（冷启动首播/换台缓冲中）时延后主清单预取：
-            //   慢源场景下预取会与 ExoPlayer 首帧加载抢同一个慢服务器（实测 hwrr.jx 网关清单
-            //   10s 才 200，两个并发连接互相拖累）。延后到首次 STATE_READY 后再解析，
-            //   只牺牲「清晰度菜单的就绪时机」，换取首帧少一个并发竞争。
-            if (player != null && player.getPlaybackState() == Player.STATE_READY) {
-                fetchAndParseMasterPlaylistNormal(url);
-            } else {
-                synchronized (mPendingMasterParseLock) {
-                    mPendingMasterParseUrl = url;
-                }
-                LogBridge.i(TAG, "【普通源】主清单预取延后到出画后（首帧优先，省并发连接）");
-            }
         } else {
             synchronized (variantListLock) { variantList.clear(); }
         }
@@ -5315,6 +5430,12 @@ public class TVPlayerManager {
 
                 httpFactory.setDefaultRequestProperties(localHeaders);
                 httpFactory.setChannelName(channelName);
+                // 【2026-10-25】直播源/普通源改为系统原生跟随重定向（与虎牙路径对齐）：
+                //   不再走手写的逐跳解析循环，交给 HttpURLConnection 自己跟随 3xx。
+                //   下面的 maxRedirects / 跨域 / 跨协议 / 逐跳重发头 四项在本模式下不生效
+                //   （仅当原生跟随拿到 3xx 时，数据源内部会自动落回手动循环继续用它们，
+                //     用于覆盖 Android 不跟随 http↔https 跨协议跳转这个已知盲区）。
+                httpFactory.setNativeRedirectFollow(true);
                 httpFactory.setMaxRedirects(sp.getInt(KEY_REDIRECT_MAX_COUNT, 5))
                         .setAllowCrossDomainRedirects(sp.getBoolean(KEY_REDIRECT_CROSS_DOMAIN, true))
                         .setAllowCrossProtocolRedirects(sp.getBoolean(KEY_REDIRECT_CROSS_PROTOCOL, true))
@@ -5349,10 +5470,29 @@ public class TVPlayerManager {
                     //   ⑤ 30s = 本线 media3 默认值 = 10.8 实际行为，恢复「预载 3 片、缓冲拉满」；
                     //      显式 30s 同时给短分片流（默认 3×targetDuration 可能 <10s）一个 offset 下限，
                     //      防 10-17 的贴边微颤复现。代价：直播延迟约 30s（10.8 即此延迟）。
+                    // 【2026-10-25 18:07 窗口复定位 + 2.0.250 实证】30s 名义 offset 治不了小窗口频道：
+                    //   hwrr.jx PLTV 清单窗口仅 2 片（20s）< offset 30s → 播放位置被 clamp 到窗口
+                    //   最早端后匀速前进，最多 20s 必贴清单尾缘 → 边界现场下载 4s、下载头 1.3s
+                    //   缓冲在 2s 阈值附近振荡（12ms 冻/40ms 播 ~30 次），每 10s 一次微抖；
+                    //   铁证：:40 / 18:08:40 两次清单一次给 2 个分片（连下两个）后 20s 零卡顿。
+                    //   【2.0.250 试过 8s（豆包 targetOffset 方案验算后采纳）——实测无效，已回退】：
+                    //   - 8s 起播相位确实提前（首帧 1.6s 出画），但 ExoPlayer 自家清单轮询周期
+                    //     = targetDuration = 10s，与源发布节奏（10s/片）同频锁相；新片
+                    //     「发布→清单可见」最多迟 10s，8s 提前量被吃光 → 播放头到边界时新片
+                    //     仍未进视野，照样现场下载 4s；且比 30s 贴缘相位多等 ~2s，微抖反而更频
+                    //     （实测 60s 稳态：8s 264 次/4824ms/最大 506ms vs 30s 187 次/2128ms/最大 43ms）；
+                    //   - 结论：2 片窗口 + 10s 发布 + 10s 清单轮询同频下，targetOffset 任何值都无解
+                    //     （≥10s 被 clamp 成贴缘，<10s 提前量被清单可见延迟吃掉）；
+                    //   - 唯一根治方向 = 方案 A 预取器（自建 1s 清单轮询 + 后台下载 + CacheDataSource），
+                    //     把「发现新片」提前到播放头边界之前——待用户拍板。
+                    //   【保留】min/maxPlaybackSpeed 锁 1.0：显式禁止变速追帧（非低延迟流 UNSET 本就不调，
+                    //     显式锁是双保险；09-19 教训：0.95x 慢放会拉长音画时间感，虎牙路径同样不锁）。
                     mediaItem = new MediaItem.Builder()
                             .setUri(finalUrl)
                             .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
                                     .setTargetOffsetMs(30000)
+                                    .setMinPlaybackSpeed(1.0f)
+                                    .setMaxPlaybackSpeed(1.0f)
                                     .build())
                             .build();
                 } else {
@@ -5367,7 +5507,49 @@ public class TVPlayerManager {
                     HlsMediaSource.Factory hlsFactory = new HlsMediaSource.Factory(
                             new ChanxiangM3u8DataSource.Factory(httpFactory))
                             .setAllowChunklessPreparation(true)
-                            .setPlaylistParserFactory(new LoggingHlsPlaylistParserFactory());
+                            // 【2026-10-25】主清单预取已删除：普通源清晰度档位改由播放器
+                            //   自己解析的主清单回填（解析线程直接拿，零额外请求）
+                            .setPlaylistParserFactory(new LoggingHlsPlaylistParserFactory(
+                                    (playlistUri, variants) ->
+                                            onNormalMasterVariants(normalPlayGen, playlistUri, variants)));
+                    // 【2026-10-25 直播清单快轮询（卡顿专项·替代 targetOffset 路线）】
+                    //   病根：PLTV 每 10s 发布一片，ExoPlayer 自带清单重载周期 =
+                    //     targetDuration(10s)/td÷2(5s)，与源发布同频锁相 →「新片发布→清单可见」
+                    //     最多迟 10s；2 片窗口频道播放头贴缘时新片未进视野，现场下载 4s
+                    //     → 每 10s 一次微抖（12ms 冻/40ms 播 ~30 次）。targetOffset 四版本
+                    //     A/B（8s 264 次/4824ms/最大 506ms vs 30s 187 次/2128ms/最大 43ms）
+                    //     已证任何 offset 都无解（≥10s 被 2 片窗口 clamp 成贴缘、<10s 被
+                    //     清单可见延迟吃光）。
+                    //   方案：自定义 Tracker 工厂（FastLivePlaylistTrackerFactory，纯公开 API
+                    //     零反射）把媒体清单 targetDurationUs 改写 10s→2s → 重载周期 2s/1s，
+                    //     发现延迟 ≤2s，下载 4s 在播放头到边界前 ~5s 完成 → 振荡消失。
+                    //   安全边界（media3 1.7.1 源码级实证）：
+                    //     - 卡死系数 3.5→15.0：阈值 2s×15=30s > 实测最大发布尖刺 21s，不误判；
+                    //     - 显式 targetOffsetMs=30000 不受 td 改写影响（HlsMediaSource 仅在
+                    //       LiveConfiguration 未显式设置时才用 3×targetDuration 兜底）；
+                    //     - DeadStreamMonitor 已同步改时间窗口（40s），2s 轮询不误判死流；
+                    //     - 仅原 td≥5s、窗口总时长 ≤300s、且命中快轮询线名单的直播清单改写；
+                    //       短分片源/点播/未验证的线原样；任何异常回退原清单。
+                    //   ⚠ 开关判据（2026-10-26 电视真机 2×2 A/B 订正，勿再改回旧的「按窗口大小」口径）：
+                    //     旧口径「hwrr.jx=2片小窗口(20s)、CCTV4欧洲=10片大窗口(90s)，
+                    //     故只给小窗口频道开快轮询」——**前提是误判**：hwrr.jx 投诉频道实为
+                    //     **9 片 × td 10s = 90s 窗口**（模拟器 FastLiveMnt「窗口 90s（9 片 ×
+                    //     td 10s）」+ 电视 2.0.251 清单恒为 1059 字节=9 片，双证）。
+                    //     2.0.252 按旧口径把 40s 门限上线 → 投诉频道被挡在快轮询之外 →
+                    //     清单回到原生 10s 节奏，与 PLTV 的 10s 发布节奏**同频锁相** →
+                    //     冷启动后 +13.7s 起 109 段微缓冲翻转（累计 ≈5.6s，release 汇总为
+                    //     「严重卡顿 5563ms」），**冷启动即卡，用户可感知**。
+                    //     电视真机 2×2 矩阵（创维 8N05_Q840，debug 包 + 9527 全量日志）：
+                    //       频道/线                    分片/片  下载  占发布间隔  原生 10s          快轮询 1s
+                    //       hwrr.jx(90 个频道)          5.2MB   3.9s    39%     109 段缓冲 ❌      1 段/稳态 0 ✅
+                    //       39.135(18 个频道)          11.5MB  7.5s    75%     2 次 1.2s ✅       104 段缓冲 ❌
+                    //     结论：按「线」开关——只对已验证的 hwrr.jx（移动 PLTV）线开快轮询，
+                    //     其余线保持原生 10s 轮询（= 2.0.250 行为，零回归）；
+                    //     名单与依据见 {@link FastLivePlaylistTrackerFactory}。
+                    //     回退：删掉下面两行 + DeadStreamMonitor 恢复计数制即可回到 2.0.250 行为。
+                    if (isLiveHls) {
+                        hlsFactory.setPlaylistTrackerFactory(new FastLivePlaylistTrackerFactory());
+                    }
                     mediaSource = hlsFactory.createMediaSource(mediaItem);
                     mediaSource.addEventListener(mHandler, mMediaSourceListener);
                 } else {
@@ -5554,148 +5736,51 @@ public class TVPlayerManager {
         }, "TVPlayer-Prepare-Huya").start();
     }
 
-    private void fetchAndParseMasterPlaylistNormal(String masterUrl) {
-        if (isParsingMasterPlaylist) {
-            // 【2026-10-21 P0修复】入口守卫命中必须打 i 级日志：release 下 d 级被 proguard 剥离，
-            // 若无此日志，「换台后清晰度菜单不更新/串台」无法经 9527 通道定位
-            LogBridge.i(TAG, "【普通源】主播放列表解析进行中，跳过本次请求: "
-                    + masterUrl.substring(0, Math.min(100, masterUrl.length())));
+    /**
+     * 【2026-10-25 主清单预取已删除】播放器自己解析出普通源主清单（多码率，
+     * {@code #EXT-X-STREAM-INF} 多档）后的档位回填入口。
+     *
+     * <p>原实现由 {@code fetchAndParseMasterPlaylistNormal} 用独立 HttpURLConnection
+     * 再拉一次主清单 —— 多一次并发连接、与首帧抢同一台慢服务器（实测 hwrr.jx 网关清单
+     * 10s 才 200，两条连接互相拖累，是冷启动卡顿的诱因之一）。现改为直接复用播放器
+     * 已经下载并解析的同一份主清单：零额外 HTTP 请求、零额外 prepare，
+     * 普通源「多码率清晰度切换」功能完整保留。</p>
+     *
+     * <p>守卫口径与 {@link #maybeRestoreChannelResolution} 一致：虎牙（走自己的线路 ×
+     * 清晰度矩阵）、咪咕/畅享（各自独立轴）都不进这里，避免污染共用的 {@link #variantList}。</p>
+     *
+     * <p>解析发生在 prepare 阶段（首帧前），故只落表；用户偏好档的恢复动作延后到
+     * 首次 {@code STATE_READY}（见 {@code onPlaybackStateChanged} 的 pending restore），
+     * 避免在首帧前触发二次 prepare 反而拖慢起播。</p>
+     *
+     * @param generation 起播代数，与当前不一致（已换台）则丢弃这次迟到回填
+     * @param playlistUri ExoPlayer 实际请求的主清单地址
+     * @param variants    主清单档位（已由 {@link LoggingHlsPlaylistParserFactory} 映射）
+     */
+    private void onNormalMasterVariants(int generation, String playlistUri, List<Variant> variants) {
+        if (variants == null || variants.isEmpty()) return;
+        if (generation != mNormalPlayGeneration) {
+            LogBridge.d(TAG, "【普通源】主清单档位回填已过期（换台），忽略: "
+                    + (playlistUri == null ? "" : playlistUri));
             return;
         }
-        isParsingMasterPlaylist = true;
-        ensurePlaylistExecutor().execute(() -> {
-            // 【2026-10-21 P0修复】任务体整体包 try/finally 兜底重置标志位：
-            // HTTP_OK 成功 / 重定向无 Location / 明确失败码三条 return 路径均需覆盖，
-            // 否则首次成功后标志位永久卡死，换台解析被静默拦截、variantList 陈旧导致清晰度串台
-            try {
-                // 【2026-10-12 主播放列表 EOF 修复】HttpURLConnection 复用连接池时可能拿到
-                // 被服务端/CDN 已关闭的 keep-alive 连接 → getResponseCode() 抛
-                // "unexpected end of stream"(EOF，零字节)。此为瞬时可自愈问题：
-                // 第 1 次失败后立即用全新连接（Connection: close）重试一次。
-                final int MAX_ATTEMPTS = 2;
-                for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-                    java.net.HttpURLConnection connection = null;
-                    try {
-                        LogBridge.d(TAG, "【普通源】解析主播放列表" + (attempt > 1 ? "（第 " + attempt + " 次重试）" : "")
-                                + ": " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
+        Channel ch = getCurrentChannel();
+        if (ch == null) return;
+        if (isScopedHuyaLines(ch) || isHuyaSource(ch.getMainPlayUrl())) return; // 虎牙走自己的轴
+        if (hasMiguAxis() || hasChanxiangAxis()) return;                       // 咪咕/畅享走各自轴
 
-                        java.net.URL url = new java.net.URL(masterUrl);
-                        connection = (java.net.HttpURLConnection) url.openConnection();
-                        connection.setRequestMethod("GET");
-                        connection.setConnectTimeout(5000);
-                        connection.setReadTimeout(5000);
-                        connection.setInstanceFollowRedirects(true);
-                        if (attempt > 1) {
-                            // 强制不复用连接池，规避陈旧 keep-alive 连接
-                            connection.setRequestProperty("Connection", "close");
-                        }
-                        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)");
-                        connection.setRequestProperty("Accept", "*/*");
+        List<Variant> sorted = new ArrayList<>(variants);
+        // 与原 parseMasterPlaylist 同口径：按分辨率升序（低清在前），菜单顺序不变
+        Collections.sort(sorted, (a, b) -> Integer.compare(a.height, b.height));
+        synchronized (variantListLock) { this.variantList = sorted; }
+        LogBridge.i(TAG, "【普通源】主清单档位回填(播放器解析，零额外请求): " + sorted.size()
+                + " 档, master=" + (playlistUri == null ? "" : playlistUri));
 
-                        int code = connection.getResponseCode();
-                        LogBridge.d(TAG, "【普通源】主播放列表响应码: " + code);
-
-                        if (code == java.net.HttpURLConnection.HTTP_OK) {
-                            StringBuilder content = new StringBuilder();
-                            try (java.io.InputStream is = connection.getInputStream();
-                                 java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(is))) {
-                                String line;
-                                while ((line = reader.readLine()) != null) {
-                                    content.append(line).append("\n");
-                                }
-                            }
-                            String playlist = content.toString();
-                            LogBridge.d(TAG, "【普通源】主播放列表长度: " + playlist.length());
-                            parseMasterPlaylist(playlist, masterUrl);
-                            if (attempt > 1) {
-                                LogBridge.i(TAG, "【普通源】主播放列表重试成功（EOF 已自愈）");
-                            }
-                            return;
-                        } else if (code == java.net.HttpURLConnection.HTTP_MOVED_TEMP
-                                || code == java.net.HttpURLConnection.HTTP_MOVED_PERM) {
-                            String newUrl = connection.getHeaderField("Location");
-                            LogBridge.d(TAG, "【普通源】重定向到: " + newUrl);
-                            // 提前放行标志位，使递归调用能通过自身入口守卫；finally 仍会兜底重置
-                            isParsingMasterPlaylist = false;
-                            if (newUrl != null) {
-                                fetchAndParseMasterPlaylistNormal(newUrl);
-                            }
-                            // 重定向无 Location：按失败处理，不再重试（finally 兜底重置标志位）
-                            return;
-                        } else {
-                            // 明确的非成功状态码（404/500…）：重试无意义，直接放弃（finally 兜底重置标志位）
-                            LogBridge.w(TAG, "【普通源】主播放列表请求失败: code=" + code);
-                            synchronized (variantListLock) { variantList.clear(); }
-                            return;
-                        }
-                    } catch (Exception e) {
-                        LogBridge.e(TAG, "【普通源】解析主播放列表失败(第 " + attempt + "/" + MAX_ATTEMPTS + " 次): ", e);
-                        if (attempt >= MAX_ATTEMPTS) {
-                            synchronized (variantListLock) { variantList.clear(); }
-                        }
-                        // attempt < MAX_ATTEMPTS：继续下一轮重试（新连接）
-                    } finally {
-                        if (connection != null) {
-                            try { connection.disconnect(); } catch (Exception ignored) {}
-                        }
-                    }
-                }
-            } finally {
-                isParsingMasterPlaylist = false;
-            }
-        });
-    }
-
-    private void parseMasterPlaylist(String playlist, String baseUrl) {
-        List<Variant> list = new ArrayList<>();
-        Pattern streamInfPattern = Pattern.compile("^#EXT-X-STREAM-INF:", Pattern.CASE_INSENSITIVE);
-        Pattern bandwidthPattern = Pattern.compile("BANDWIDTH=(\\d+)", Pattern.CASE_INSENSITIVE);
-        Pattern resolutionPattern = Pattern.compile("RESOLUTION=(\\d+)x(\\d+)", Pattern.CASE_INSENSITIVE);
-        dLog("播放列表内容（截取前500字符）：\n" + playlist.substring(0, Math.min(playlist.length(), 500)));
-
-        String[] lines = playlist.split("\\r?\\n");
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
-            if (!streamInfPattern.matcher(line).find()) continue;
-
-            Matcher bwMatcher = bandwidthPattern.matcher(line);
-            if (!bwMatcher.find()) continue;
-            int bandwidth = Integer.parseInt(bwMatcher.group(1));
-
-            int width = 0, height = 0;
-            String resolutionStr = null;
-            Matcher resMatcher = resolutionPattern.matcher(line);
-            if (resMatcher.find()) {
-                width = Integer.parseInt(resMatcher.group(1));
-                height = Integer.parseInt(resMatcher.group(2));
-                resolutionStr = width + "x" + height;
-            }
-
-            String uri = null;
-            for (int j = i + 1; j < lines.length; j++) {
-                String next = lines[j].trim();
-                if (!next.isEmpty() && !next.startsWith("#")) {
-                    uri = next;
-                    break;
-                }
-            }
-            if (uri != null) {
-                if (!uri.startsWith("http")) {
-                    uri = resolveUrl(baseUrl, uri);
-                }
-                list.add(new Variant(uri, bandwidth, width, height));
-                dLog("解析到清晰度: " + (height > 0 ? resolutionStr : "自适应") + " -> " + uri);
-            }
+        // 挂起「出画后恢复用户手选清晰度」；代数一起记，换台后旧挂起不消费
+        synchronized (mPendingNormalRestoreLock) {
+            mPendingNormalRestoreList = sorted;
+            mPendingNormalRestoreGen = generation;
         }
-        Collections.sort(list, (a, b) -> Integer.compare(a.height, b.height));
-        synchronized (variantListLock) { this.variantList = list; }
-        if (!list.isEmpty()) {
-            dLog("解析到 " + list.size() + " 个清晰度");
-        } else {
-            LogBridge.w(TAG, "未解析到任何清晰度流，可能是直播源本身不支持多码率或网络被墙");
-        }
-        // 【2026-10-10】普通源：若该频道有用户手选的清晰度偏好，起播时自动切到同档。
-        maybeRestoreChannelResolution(list);
     }
 
     /**
@@ -5703,7 +5788,8 @@ public class TVPlayerManager {
      * 且本次解析出的档位里仍有同档时，自动切到该档（换台回来 / 重启后仍在用户选的档）。
      * 无偏好则不动，保持原有「ExoPlayer 自适应」行为。
      *
-     * <p>调用点在 {@link #parseMasterPlaylist} 的解析线程上，故切台动作 post 回主线程。
+     * <p>调用点在主线程（出画后）或 {@link #onNormalMasterVariants} 的解析线程上，
+     * 故切台动作 post 回主线程执行。
      */
     private void maybeRestoreChannelResolution(final List<Variant> list) {
         final Channel ch = currentChannel;
@@ -5726,7 +5812,7 @@ public class TVPlayerManager {
         }
     }
 
-    /** 主线程执行：确认仍在同一频道且当前不在该档 → 重播该档（抑制 master 重解析以保留档位表） */
+    /** 主线程执行：确认仍在同一频道且当前不在该档 → 重播该档（保留档位表，不清空） */
     private void applyNormalResolutionRestore(Variant pick, String prefLabel, String ck) {
         if (pick == null || TextUtils.isEmpty(pick.url)) return;
         if (currentChannel == null || !TextUtils.equals(channelKeyOf(currentChannel), ck)) return;
@@ -5753,16 +5839,6 @@ public class TVPlayerManager {
         String k = ch.getChannelId();
         if (TextUtils.isEmpty(k)) k = ch.getName();
         return k == null ? "" : k;
-    }
-
-    private String resolveUrl(String base, String relative) {
-        try {
-            URL baseUrl = new URL(base);
-            URL resolved = new URL(baseUrl, relative);
-            return resolved.toString();
-        } catch (Exception e) {
-            return relative;
-        }
     }
 
     public List<String> getAvailableResolutions() {

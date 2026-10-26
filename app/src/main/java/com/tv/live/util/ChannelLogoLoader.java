@@ -153,6 +153,8 @@ public class ChannelLogoLoader {
                 // 超时本也应更短，故连接 1.5s、读取 2.5s。
                 .connectTimeout(1500, TimeUnit.MILLISECONDS)
                 .readTimeout(2500, TimeUnit.MILLISECONDS)
+                // 【2026-10-25 NO_PROXY】台标/海报属播放链路附属资源，统一绕开系统代理
+                .proxy(java.net.Proxy.NO_PROXY)
                 .build();
     }
 

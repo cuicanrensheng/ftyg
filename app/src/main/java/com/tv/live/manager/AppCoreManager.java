@@ -1,6 +1,7 @@
 package com.tv.live.manager;
 
 import com.tv.live.TVPlayerManager;
+import com.tv.live.MyApplication;
 import android.content.BroadcastReceiver;
 import com.tv.live.util.LogBridge;
 import android.content.Context;
@@ -42,6 +43,10 @@ public class AppCoreManager {
     /** 【2026-10-05】直播源缓存有效期：7 天。7 天内启动直接用本地缓存，不重新下载，
      *  避免直播源链接下载次数限制；满 7 天才重新拉一次。 */
     private static final long LIVE_SOURCE_CACHE_VALID_MS = 7L * 24 * 60 * 60 * 1000;
+
+    /** 【2026-10-26 EPG 懒加载】true = 冷启动不自动解析 EPG，用户打开节目单时才加载（降低弱 CPU 起播期抢核）。
+     *  切源 / 远程配置改源等用户主动行为仍走 forceLoadEpg 强制加载。 */
+    private static final boolean EPG_LAZY = true;
     private volatile long lastNetworkLoadAtMs = 0;
     private static final int MAX_CONSECUTIVE_SKIP = 10;
 
@@ -371,6 +376,8 @@ public class AppCoreManager {
                 log("【直播源】缓存未满 7 天，跳过网络刷新，直接使用本地缓存");
                 isLoading = false;
                 timeoutHandler.removeCallbacksAndMessages(null);
+                // 【2026-10-25 首帧优先】loadEpg 内部已自带首帧闸门（冷启动延后 5s、运行期立即），
+                //   这里保持直呼即可，不要再套一层，否则会叠成 10s。
                 loadEpg();
                 // 【切源单飞】此路径不触发网络加载，必须立刻收口释放闸门，
                 // 否则闸门要等 30s 兜底释放，期间的切源操作会退化成「等 30s 才生效」。
@@ -531,18 +538,57 @@ public class AppCoreManager {
     }
 
     private void loadEpgCache() {
+        if (EPG_LAZY) {
+            // 【2026-10-26 懒加载】冷启动不提前解析 EPG 磁盘缓存，省下整段 parseXml 的 CPU 占用，
+            // 留给媒体解码/提取线程。节目单数据将在用户打开节目单时由 ensureEpgLoaded 触发。
+            log("【EPG】懒加载模式：跳过冷启动 EPG 缓存解析（待用户打开节目单时再加载）");
+            return;
+        }
         log("【EPG】尝试从缓存加载...");
         // 【2026-10-05 提速】原实现是空壳（只回调 onEpgLoaded 刷信息栏，不加载 EPG 数据）。
         // 导致冷启动直播源缓存命中时，EPG 节目单数据要等到 30s 后网络错峰刷新 → loadEpg()
         // 才真正加载磁盘缓存 → 用户打开 EPG 面板长时间空白。
-        // 现在冷启动即先行加载 EPG 磁盘缓存数据（毫秒级解析），节目单立即可用。
-        EpgManager em = EpgManager.getInstance(context);
+        // 现在冷启动即先行加载 EPG 磁盘缓存数据，节目单立即可用。
+        //
+        // 【2026-10-25 首帧优先】上面注释里说的「毫秒级解析」在这台电视上是错的：
+        //   9527 冷启动实测 2.5MB 的 epg 缓存解析要 **2916ms**，而它原来在启动后立刻执行，
+        //   与首帧解码抢 CPU → 日志出现「[PLAY] 短暂缓冲恢复，时长：1977ms」，
+        //   用户体感就是“打开软件画面卡几秒”。EPG 只影响信息栏节目名，晚 1~2 秒完全无感，
+        //   因此改为：首帧之后再解析；并把解析线程降到后台优先级，避免与解码抢时间片。
+        final EpgManager em = EpgManager.getInstance(context);
         em.setEpgUrl(UrlConfig.EPG_URL);
-        // 【2026-10-05】EPG 操作全部走 serial 单线程：loadEpgCache 与 loadEpg 并行会在
-        // 4 线程池上同时 clear/parseXml（channelEpgMap 竞态 → 节目单随机空白）。
-        AppExecutors.serial(() -> {
-            em.loadEpgFromCache();
-        });
+        Runnable parseTask = new Runnable() {
+            @Override
+            public void run() {
+                // 【2026-10-05】EPG 操作全部走 serial 单线程：loadEpgCache 与 loadEpg 并行会在
+                // 4 线程池上同时 clear/parseXml（channelEpgMap 竞态 → 节目单随机空白）。
+                AppExecutors.serial(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            // 再降一档优先级：即使真的和播放重叠，也让解码优先拿 CPU
+                            android.os.Process.setThreadPriority(
+                                    android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                        } catch (Throwable ignored) {
+                        }
+                        long t0 = android.os.SystemClock.elapsedRealtime();
+                        em.loadEpgFromCache();
+                        log("【EPG】首帧后解析磁盘缓存完成，耗时 "
+                                + (android.os.SystemClock.elapsedRealtime() - t0) + "ms");
+                    }
+                });
+            }
+        };
+        MyApplication app = MyApplication.getInstance();
+        if (app != null) {
+            // 冷启动：首帧后 12s 再解析 —— 避开首帧缓冲窗口，也避开 +10s 左右的直播边缘追帧抖动
+            //   （实测该抖动与 EPG 无关，延后到 45s 也照样出现，属播放器/CDN 侧）。
+            //   运行期首帧早已出过则立即执行（切源等交互不受影响）。
+            long grace = app.isFirstFrameShown() ? 0L : 12000L;
+            app.runAfterFirstFrame(parseTask, 15000L, grace);
+        } else {
+            parseTask.run();
+        }
         if (dataLoadListener != null) {
             dataLoadListener.onEpgLoaded();
         }
@@ -585,22 +631,58 @@ public class AppCoreManager {
     }
 
     private void loadEpg() {
+        if (EPG_LAZY) {
+            // 【2026-10-26 懒加载】冷启动自动加载路径在懒加载模式下不执行；
+            // 节目单改为用户打开时由 EpgManager.ensureEpgLoaded 触发。
+            log("【EPG】懒加载模式：跳过冷启动自动加载（待用户打开节目单时再加载）");
+            return;
+        }
+        loadEpgInternal();
+    }
+
+    /** 【2026-10-26 懒加载】用户主动行为（切源 / 远程配置改源）强制加载 EPG，不受 EPG_LAZY 影响。 */
+    private void forceLoadEpg() {
+        log("【EPG】强制加载（切源 / 远程配置改源 / 用户主动）");
+        loadEpgInternal();
+    }
+
+    private void loadEpgInternal() {
         log("【EPG】开始加载节目单...");
-        EpgManager em = EpgManager.getInstance(context);
-        em.setEpgUrl(UrlConfig.EPG_URL);
         // 【2026-10-05】EPG 操作串行化（同 loadEpgCache，全部走 serial 单线程）。
         // loadEpg 内部自带「7 天新鲜 + 缓存来源校验 + 坏缓存回退下载」：
         // 缓存有效 → 只用缓存不下载；换源/损坏/过期 → 自动下载兜底。
-        AppExecutors.serial(() -> {
-            em.loadEpg(() -> {
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    log("【EPG】最新节目单加载完成");
-                    if (dataLoadListener != null) {
-                        dataLoadListener.onEpgLoaded();
+        //
+        // 【2026-10-25 首帧优先】这条路径在「无缓存/缓存过期」时会立刻下载并解析整份 EPG。
+        //   实测无缓存冷启动：下载 1374ms + **解析 7404ms**，正好压在首帧上 → 画面卡顿。
+        //   因此与 loadEpgCache 统一：冷启动首帧前先挂起，首帧后 5s 再跑；
+        //   运行期（用户切 EPG 源）首帧早已出过，grace=0 立即执行，不影响交互。
+        Runnable epgTask = new Runnable() {
+            @Override
+            public void run() {
+                AppExecutors.serial(new Runnable() {
+                    @Override
+                    public void run() {
+                        EpgManager em2 = EpgManager.getInstance(context);
+                        em2.setEpgUrl(UrlConfig.EPG_URL);
+                        em2.loadEpg(() -> {
+                            new Handler(Looper.getMainLooper()).post(() -> {
+                                log("【EPG】最新节目单加载完成");
+                                if (dataLoadListener != null) {
+                                    dataLoadListener.onEpgLoaded();
+                                }
+                            });
+                        });
                     }
                 });
-            });
-        });
+            }
+        };
+        MyApplication app = MyApplication.getInstance();
+        if (app != null) {
+            long grace = app.isFirstFrameShown() ? 0L : 12000L;
+            app.runAfterFirstFrame(epgTask, 15000L, grace);
+        } else {
+            epgTask.run();
+        }
     }
 
     private List<Channel> parseLiveSource(String content) {
@@ -876,8 +958,8 @@ public class AppCoreManager {
                         // 挡掉），同时绝不与在飞加载并发，并把多个接收器收到的同源重复广播折叠成
                         // 一次 —— 避免对第三方源站重复/并发请求。
                         forceReloadLiveSource();
-                        // 额外直接调用 loadEpg() 确保节目单一定重载（EPG 走独立 serial 链路）。
-                        loadEpg();
+                        // 额外强制加载 loadEpg 确保节目单一定重载（EPG 走独立 serial 链路，不受懒加载跳过）。
+                        forceLoadEpg();
                     });
                 }
             }
@@ -1015,7 +1097,7 @@ public class AppCoreManager {
             if (!liveChanged && hasData) {
                 log("【远程配置】直播源地址未变化且已有频道数据，跳过重复下载");
                 if (epgChanged) {
-                    loadEpg();
+                    forceLoadEpg();
                 }
                 return;
             }

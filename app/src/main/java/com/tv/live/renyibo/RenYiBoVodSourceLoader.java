@@ -1546,7 +1546,9 @@ public final class RenYiBoVodSourceLoader {
         if (url == null || url.isEmpty()) return -1;
         java.net.HttpURLConnection conn = null;
         try {
-            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            // 【2026-10-25 NO_PROXY】播放链路统一绕开系统代理（见虎牙 6 处同口径注释）
+            conn = (java.net.HttpURLConnection) new java.net.URL(url)
+                    .openConnection(java.net.Proxy.NO_PROXY);
             conn.setConnectTimeout(PROBE_CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(PROBE_READ_TIMEOUT_MS);
             conn.setInstanceFollowRedirects(true);

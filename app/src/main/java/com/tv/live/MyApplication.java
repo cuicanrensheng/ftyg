@@ -281,7 +281,11 @@ public class MyApplication extends Application {
             long tDns = android.os.SystemClock.elapsedRealtime();
 
             // ② TCP + TLS 预连接（同一 HTTP 栈 → 连接进 KeepAliveCache 供播放复用）
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+            // 【2026-10-25 NO_PROXY】预热必须与播放链路同口径：播放侧已统一 NO_PROXY，
+            //   这里若走系统代理，预热出来的连接与真正播放用的连接不在同一目标上，
+            //   预连接就白做了（设备配代理时甚至会连到代理端口，等于把预热浪费掉）。
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
+                    u.openConnection(java.net.Proxy.NO_PROXY);
             conn.setConnectTimeout(3000);
             conn.setReadTimeout(3000);
             // ⚠️【方案A关键】绝不跟随重定向。播放链路（RedirectLoggingHttpDataSource）
@@ -654,17 +658,29 @@ public class MyApplication extends Application {
     }
 
     private void initCacheCleanup() {
-        try {
-            AppCacheInspector.startupCleanup(this);
-        } catch (Exception e) {
-            LogBridge.w("MyApplication", "AppCacheInspector failed: " + e.getMessage());
-        }
-
-        try {
-            AppCacheGovernor.startupCleanup(this);
-        } catch (Exception e) {
-            LogBridge.w("MyApplication", "AppCacheGovernor failed: " + e.getMessage());
-        }
+        // 【2026-10-25 首帧优先】缓存巡检 263ms + 清理 722ms（扫 296 个文件）原本在启动后
+        //   2s 就跑，正好压在首帧上。纯后台任务，延后到首帧后执行；IO 仍留在独立线程，
+        //   不要把扫描挪到主线程。
+        runAfterFirstFrame(new Runnable() {
+            @Override
+            public void run() {
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            AppCacheInspector.startupCleanup(MyApplication.this);
+                        } catch (Exception e) {
+                            LogBridge.w("MyApplication", "AppCacheInspector failed: " + e.getMessage());
+                        }
+                        try {
+                            AppCacheGovernor.startupCleanup(MyApplication.this);
+                        } catch (Exception e) {
+                            LogBridge.w("MyApplication", "AppCacheGovernor failed: " + e.getMessage());
+                        }
+                    }
+                }, "init-cache-cleanup").start();
+            }
+        }, 10000L);
     }
 
     /**
@@ -677,6 +693,82 @@ public class MyApplication extends Application {
         } catch (Throwable t) {
             LogBridge.w("MyApplication", "onFirstFrameShown 触发流信息仓库就绪失败: " + t.getMessage());
         }
+        runDeferredAfterFirstFrameTasks();
+    }
+
+    // ================= 【2026-10-25 首帧优先】启动期重任务延后执行 =================
+    // 背景（9527 冷启动实测 14:58:32~14:58:36）：
+    //   启动后 EPG 磁盘缓存解析（2.5MB XML）在这台电视上要 **2916ms**，
+    //   同时还有缓存巡检 263ms + 缓存清理 722ms 一起跑，
+    //   全部挤在首帧那 2 秒里和解码抢 CPU → 日志里直接出现
+    //   「[PLAY] 短暂缓冲恢复，时长：1977ms」，用户看到的就是“打开软件画面卡几秒”。
+    //   这些任务都不影响出画（EPG 只影响信息栏节目名、缓存清理纯后台），
+    //   因此统一挂到首帧之后再跑；首帧迟迟不来（无信号等）由兜底超时放行。
+    private static final long FIRST_FRAME_GRACE_MS = 1200L;   // 首帧后再等 1.2s，避开淡入与首缓冲
+    private volatile boolean firstFrameShown = false;
+    private final java.util.List<Runnable> pendingAfterFirstFrame =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.Map<Runnable, Long> pendingGrace =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 首帧是否已经出过（供调用方决定要不要给「首帧宽限」延迟）。 */
+    public boolean isFirstFrameShown() {
+        return firstFrameShown;
+    }
+
+    /**
+     * 把启动期重任务挂到「首帧之后 + 1.2s」执行；若首帧一直不来，超时后照样执行。
+     * 注意：传入的 Runnable 会在调用方线程/主线程执行，涉及 IO/CPU 请自行切后台线程。
+     */
+    public void runAfterFirstFrame(final Runnable task, long fallbackTimeoutMs) {
+        runAfterFirstFrame(task, fallbackTimeoutMs, FIRST_FRAME_GRACE_MS);
+    }
+
+    /** 同上，可自定义首帧后的宽限延迟（越吃 CPU 的任务应给越长的宽限）。 */
+    public void runAfterFirstFrame(final Runnable task, long fallbackTimeoutMs, final long graceMs) {
+        if (task == null) return;
+        final long grace = Math.max(0L, graceMs);
+        if (firstFrameShown) {
+            mainHandler.postDelayed(task, grace);
+            return;
+        }
+        pendingAfterFirstFrame.add(task);
+        pendingGrace.put(task, grace);
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // 兜底：首帧超时未到（黑屏/无信号/未起播），也要把任务放出去
+                if (pendingAfterFirstFrame.remove(task)) {
+                    pendingGrace.remove(task);
+                    LogBridge.i("MyApplication", "【首帧优先】首帧超时未到，兜底放行延后任务");
+                    task.run();
+                }
+            }
+        }, Math.max(fallbackTimeoutMs, grace));
+    }
+
+    private void runDeferredAfterFirstFrameTasks() {
+        if (firstFrameShown) return;
+        firstFrameShown = true;
+        if (pendingAfterFirstFrame.isEmpty()) return;
+        // 每个任务各自的宽限延迟不同，这里统一收集后按各自的 grace 投递。
+        final java.util.List<java.util.Map.Entry<Runnable, Long>> tasks =
+                new java.util.ArrayList<>();
+        for (Runnable r : pendingAfterFirstFrame) tasks.add(new java.util.AbstractMap.SimpleEntry<>(r, pendingGrace.get(r)));
+        pendingAfterFirstFrame.clear();
+        pendingGrace.clear();
+        for (final java.util.Map.Entry<Runnable, Long> e : tasks) {
+            long grace = e.getValue() == null ? FIRST_FRAME_GRACE_MS : e.getValue();
+            mainHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    try { e.getKey().run(); } catch (Throwable t) {
+                        LogBridge.w("MyApplication", "【首帧优先】延后任务执行失败: " + t.getMessage());
+                    }
+                }
+            }, grace);
+        }
+        LogBridge.i("MyApplication", "【首帧优先】首帧已到，安排 " + tasks.size() + " 个启动期任务延后执行");
     }
 
     private void initHuyaStreamRepoDeferred(String reason) {

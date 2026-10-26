@@ -89,6 +89,12 @@ public class EpgManager {
      *  避免每次打开面板/换台都对 channelEpgMap 全表模糊匹配（2000 频道 × normalize+score）。 */
     private final Map<String, List<Channel.EpgItem>> epgMatchCache = new ConcurrentHashMap<>();
 
+    /** 【2026-10-26 懒加载】EPG 是否已成功解析并装填（缓存或网络）。用于懒加载去重：已就绪则不重复触发。 */
+    private volatile boolean epgDataReady = false;
+    /** 【2026-10-26 懒加载】loadEpg 是否正在执行中（去重 + 允许失败后重试）。 */
+    private volatile boolean epgLoadInFlight = false;
+    private final Object epgLoadLock = new Object();
+
     private static final String CACHE_KEY_EPG = "epg";
 
     /** 【2026-10-05】EPG 缓存有效期：7 天。7 天内启动直接用本地缓存，不重新下载，
@@ -261,10 +267,51 @@ public class EpgManager {
         return null;
     }
 
+    /**
+     * 【2026-10-26 懒加载】确保 EPG 已加载；未加载则触发一次。
+     * 冷启动不再自动加载 EPG，改为「用户打开节目单时才解析」。
+     * 带去重：已发起（epgLoadStarted）或已就绪（epgDataReady）均不会重复入队/重复下载。
+     *
+     * @param onReady EPG 就绪后回调（主线程），可为 null
+     */
+    public void ensureEpgLoaded(Runnable onReady) {
+        if (epgDataReady) {
+            if (onReady != null) AppExecutors.main(onReady);
+            return;
+        }
+        boolean start;
+        synchronized (epgLoadLock) {
+            // 仅当没有加载在飞时才发起；加载中则复用同一次，避免重复入队 parseXml
+            start = !epgLoadInFlight;
+            epgLoadInFlight = true;
+        }
+        if (start) {
+            LogBridge.i("EpgManager", "【EPG·懒加载】用户打开节目单，触发 EPG 加载（缓存优先，必要时下载）");
+            setEpgUrl(UrlConfig.EPG_URL);
+            loadEpg(() -> {
+                synchronized (epgLoadLock) {
+                    epgLoadInFlight = false; // 无论成功/失败都释放，失败则下次打开面板可重试
+                }
+            });
+        }
+        if (onReady != null) {
+            OnEpgDataReadyListener oneShot = new OnEpgDataReadyListener() {
+                @Override
+                public void onEpgDataReady() {
+                    unregisterEpgDataReadyListener(this);
+                    AppExecutors.main(onReady);
+                }
+            };
+            registerEpgDataReadyListener(oneShot);
+        }
+    }
+
     public void loadEpg(Runnable callback) {
         // 【2026-10-05】串行执行器：EPG 的缓存加载/下载/解析必须全链路串行，
         // 并行会导致 channelEpgMap.clear() 与 parseXml 竞态（节目单随机空白）。
         AppExecutors.serial(() -> {
+            try {
+            epgDataReady = false; // 新一轮加载开始：先置否，解析/缓存就绪后由 notifyEpgDataReady 置真
             LogBridge.i("EpgManager", "【EPG】loadEpg 任务开始执行（serial 队列已到达），url=" + epgUrl);
             // 【2026-10-05】7 天内不重复下载：缓存仍新鲜（存在+<7天+来源匹配）时直接读本地，
             // 跳过网络请求，避免 EPG 链接的下载次数限制。
@@ -334,6 +381,13 @@ public class EpgManager {
             notifyEpgDataReady();
             if (callback != null) {
                 new Handler(Looper.getMainLooper()).post(callback);
+            }
+            } finally {
+                // 加载结束（成功/失败/提前 return）一律释放在飞标志；
+                // 失败时 epgDataReady 仍为 false → 下次打开节目单可重新尝试。
+                synchronized (epgLoadLock) {
+                    epgLoadInFlight = false;
+                }
             }
         });
     }
@@ -1129,6 +1183,7 @@ public class EpgManager {
         if (listener != null) epgDataReadyListeners.remove(listener);
     }
     private void notifyEpgDataReady() {
+        epgDataReady = true;
         if (epgDataReadyListeners.isEmpty()) return;
         new Handler(Looper.getMainLooper()).post(() -> {
             for (OnEpgDataReadyListener l : epgDataReadyListeners) {
@@ -1482,6 +1537,9 @@ public class EpgManager {
 
         public void refresh(Channel currentChannel, List<Channel> channelSourceList, int dateIndex) {
             if (currentChannel == null) return;
+            // 【2026-10-26 懒加载】打开节目单即视为用户要看 EPG → 确保已加载（冷启动不会提前解析）。
+            // ensureEpgLoaded 内部去重，多次 refresh 只触发一次解析；解析完由 epgDataReadyListener 自动重绘面板。
+            EpgManager.getInstance(context).ensureEpgLoaded(null);
             playingIndex = -1;
             selectDayIndex = dateIndex;
             // 【2026-10-21】用户已切到非今天日期 → 作废尚未执行的「今天」定位请求

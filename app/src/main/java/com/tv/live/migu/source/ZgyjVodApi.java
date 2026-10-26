@@ -272,7 +272,8 @@ public final class ZgyjVodApi {
     private static String httpGet(String url) {
         HttpURLConnection conn = null;
         try {
-            conn = (HttpURLConnection) new URL(url).openConnection();
+            // 【2026-10-25 NO_PROXY】播放链路统一绕开系统代理（见虎牙 6 处同口径注释）
+            conn = (HttpURLConnection) new URL(url).openConnection(java.net.Proxy.NO_PROXY);
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(TIMEOUT_MS);
             conn.setReadTimeout(TIMEOUT_MS);

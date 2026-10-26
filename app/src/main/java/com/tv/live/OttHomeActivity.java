@@ -467,7 +467,13 @@ public class OttHomeActivity extends AppCompatActivity {
             if (appCoreManager != null) appCoreManager.loadLiveAndEpg();
         });
 
-        ensureHuyaLoaded();
+        // 【2026-10-26 修「退出后重进 OTT 预览起播卡顿」】虎牙预热（读缓存合并 + 多分类并发抓取 +
+        //   整张网格重建）会给主线程和 CPU 造成 1.6s 级尖峰：
+        //   实测同一路 CCTV1，直播模式冷启动前 20s 仅 2 次短暂缓冲，
+        //   OTT 模式却有 124 次 + 2076ms 严重卡顿 + BehindLiveWindowException 重试。
+        //   正常路径改为「预览首帧就绪后」再热（见 onPlayReady）；这里只做兜底——
+        //   万一预览迟迟不就绪（无网/源异常），8s 后仍要把虎牙频道补上。
+        mainHandler.postDelayed(this::ensureHuyaLoadedDelayed, 8000);
 
         // 【2026-10-11 源7】注册 EPG 数据就绪监听：异步抓取集数完成后自动刷新面板
         epgDataReadyListener = () -> mainHandler.post(() -> {
@@ -692,6 +698,12 @@ public class OttHomeActivity extends AppCompatActivity {
         final String keepChip = focusedChildText(llSubGroup);
         llSubGroup.removeAllViews();
         subGroupChipViews.clear();
+        // 【2026-10-26】本容器被虎牙胶囊条复用：作废源5筛选栏缓存，
+        //   否则下次回源5分组会误判「栏已建好」而不重建，栏里还挂着虎牙胶囊。
+        rybBarBuiltFor = null;
+        rybClearRow = null;
+        rybClearPill = null;
+        rybYearRowPills = null;
 
         for (int i = 0; i < huyaGroupNames.size(); i++) {
             final int position = i;
@@ -831,6 +843,11 @@ public class OttHomeActivity extends AppCompatActivity {
                 setPreviewLoading(false);
                 // 【2026-10-18 启动图】首次播放就绪 → 淡出启动覆盖层（dismiss 幂等）
                 mainHandler.post(() -> dismissSplashOverlay("播放就绪"));
+                // 【2026-10-26 修「退出后重进 OTT 预览起播卡顿」】虎牙预热（读缓存合并 183 个频道 +
+                //   多分类并发抓取 → 整张网格重建）实测会把主线程按住 1.6s（Choreographer Skipped 99 frames），
+                //   预览起播正好撞上 → 2s 严重卡顿 → BehindLiveWindowException 追播失效重试。
+                //   改成「首帧出来之后再热」，并留给解码线程 800ms 喘息。
+                mainHandler.postDelayed(OttHomeActivity.this::ensureHuyaLoadedDelayed, 800);
             }
             @Override public void onPlayEnd() { setPreviewLoading(false); }
             @Override public void onPlayError(String msg) { setPreviewLoading(false); }
@@ -2247,8 +2264,22 @@ public class OttHomeActivity extends AppCompatActivity {
      * 再点已选中的值 = 取消该维度）；上下键跨行、左右键行内选值；网格按「上」回到
      * 最后聚焦的值。视觉复用 ott_tab_item_bg（焦点蓝底白框 / 选中实心蓝），与应用一致。
      */
+    // 【2026-10-26 焦点不跳】筛选栏「建一次、之后只原地刷选中态」：
+    //   每次 OK 都 removeAllViews 重建会把聚焦中的胶囊一起删掉 → 焦点瞬间被系统丢给顶部「直播」。
+    //   这里按分组缓存结构，结构不变就只改 pill 的 selected/文字色，视图一个都不摘，焦点天然不动。
+    private String rybBarBuiltFor = null;
+    private LinearLayout rybClearRow = null;
+    private TextView rybClearPill = null;
+    private java.util.List<TextView> rybYearRowPills = null;
+
     private void buildRybFilterBar(final RybVodFilterState st) {
         if (llSubGroup == null) return;
+        // 同分组且栏已建好 → 只同步选中态，绝不 removeAllViews（焦点零丢失）
+        if (rybBarBuiltFor != null && rybBarBuiltFor.equals(currentGroup)
+                && !subGroupChipViews.isEmpty()) {
+            syncRybFilterBarState(st);
+            return;
+        }
         llSubGroup.setOrientation(LinearLayout.VERTICAL);
         // 焦点保持按扁平下标找回（「全部」在多行重名，按文案找回会串行）；
         // 重建只发生在 OK 应用后，行 0~3 的扁平下标稳定不变
@@ -2256,6 +2287,10 @@ public class OttHomeActivity extends AppCompatActivity {
         for (int i = 0; i < subGroupChipViews.size(); i++) {
             if (subGroupChipViews.get(i).isFocused()) { keepIdx = i; break; }
         }
+        // 【2026-10-26】重建前先记「焦点是否在栏内」：决定重建后要不要主动把焦点拉回栏里，
+        //   避免本来焦点在网格/控制栏时被无端抢走。
+        View cfBefore = getCurrentFocus();
+        final boolean focusWasInBar = cfBefore != null && isDescendantOf(llSubGroup, cfBefore);
         llSubGroup.removeAllViews();
         subGroupChipViews.clear();
 
@@ -2268,6 +2303,7 @@ public class OttHomeActivity extends AppCompatActivity {
         sortRow.addView(makeRybFilterRowLabel("排序"));
         for (final String o : new String[]{"最新", "最热", "好评"}) {
             TextView pill = makeRybFilterPill(o, o.equals(st.order));
+            pill.setTag(new Object[]{"order", o});
             pill.setOnClickListener(v -> {
                 final String group = currentGroup;
                 st.order = o;
@@ -2313,12 +2349,15 @@ public class OttHomeActivity extends AppCompatActivity {
             llSubGroup.addView(row);
             rybRows.add(row);
         }
-        if (rybFilterActive(st) || !"最热".equals(st.order)) {
+        // 【2026-10-26】「操作/清除筛选」行改为常驻（未启用筛选时 GONE）：
+        //   常驻才能保证结构稳定、后续 OK 不必重建（重建 = 丢焦点）。
+        {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.addView(makeRybFilterRowLabel("操作"));
             TextView clear = makeRybFilterPill("清除筛选", false);
+            clear.setTag(new Object[]{"clear"});
             clear.setOnClickListener(v -> {
                 st.cls = st.area = st.lang = st.year = "";
                 st.order = "最热";
@@ -2335,6 +2374,10 @@ public class OttHomeActivity extends AppCompatActivity {
             subGroupChipViews.add(clear);
             llSubGroup.addView(row);
             rybRows.add(row);
+            rybClearRow = row;
+            rybClearPill = clear;
+            boolean engaged0 = rybFilterActive(st) || !"最热".equals(st.order);
+            row.setVisibility(engaged0 ? View.VISIBLE : View.GONE);
         }
         // 【2026-10-24 用户反馈】焦点锁在筛选栏内：
         //  · 上下 = **显式列对齐映射**（行 i 第 j 颗 → 上/下行第 min(j, len-1) 颗）——
@@ -2384,12 +2427,87 @@ public class OttHomeActivity extends AppCompatActivity {
             } catch (Throwable ignored) {
             }
         });
+        rybBarBuiltFor = currentGroup;
+        // 年份行（最后一个维度行）按下时的落点：启用筛选 → 清除筛选；未启用 → 交给几何搜索
+        if (rybRowPills.size() >= 5) rybYearRowPills = rybRowPills.get(rybRowPills.size() - 2);
         if (keepIdx >= 0 && keepIdx < subGroupChipViews.size()) {
-            final TextView keep = subGroupChipViews.get(keepIdx);
-            keep.post(() -> {
-                if (keep.isShown()) keep.requestFocus();
-            });
+            restoreFilterChipFocus(subGroupChipViews.get(keepIdx));
+        } else if (focusWasInBar && rybFilterTab != null) {
+            // 下标已失效（行结构变化）→ 退而求其次回「筛选/收起筛选」按钮，别让焦点掉到顶部导航
+            restoreFilterChipFocus(rybFilterTab);
         }
+    }
+
+    /**
+     * 【2026-10-26 筛选栏焦点修复】重建筛选栏后把焦点还回原胶囊。
+     *
+     * <p>原实现：`keep.post(() -> { if (keep.isShown()) keep.requestFocus(); })`。
+     * 两个坑：<br>
+     *  ① `llSubGroup.removeAllViews()` 会连焦点视图一起删掉 → 焦点变 null，系统立刻做默认
+     *     焦点搜索，落到布局里第一个可聚焦项，也就是顶部「直播」按钮；<br>
+     *  ② `post` 那一刻布局还没走完，`isShown()` 恒为 false → 恢复被静默跳过，人就停在「直播」。
+     *
+     * <p>改为不看 isShown（只看是否已 attach），并且连打三次：立即 / 60ms / 160ms，
+     * 覆盖「系统在移除视图后补做一次几何焦点搜索」的机型差异。
+     */
+    /**
+     * 【2026-10-26 焦点不跳】结构不变时的原地刷新：只改每颗胶囊的 selected/文字色，
+     * 顺带按需显隐「清除筛选」行。全程不摘任何视图 → 焦点原地不动，用户感觉不到跳变。
+     */
+    private void syncRybFilterBarState(final RybVodFilterState st) {
+        for (TextView pill : subGroupChipViews) {
+            Object tag = pill.getTag();
+            if (!(tag instanceof Object[])) continue;
+            Object[] t = (Object[]) tag;
+            String kind = String.valueOf(t[0]);
+            boolean sel;
+            if ("order".equals(kind)) {
+                sel = t[1].equals(st.order);
+            } else if ("dim".equals(kind)) {
+                int dimIdx = (Integer) t[1];
+                String value = String.valueOf(t[2]);
+                String curVal = dimIdx == 0 ? st.cls : dimIdx == 1 ? st.area
+                        : dimIdx == 2 ? st.lang : st.year;
+                sel = value.equals(curVal);
+            } else {
+                continue;
+            }
+            pill.setSelected(sel);
+            pill.setTextColor(sel ? Color.WHITE : 0xFFC6D2E0);
+        }
+        boolean engaged = rybFilterActive(st) || !"最热".equals(st.order);
+        if (rybClearRow != null) {
+            rybClearRow.setVisibility(engaged ? View.VISIBLE : View.GONE);
+        }
+        applyRybYearDownFocus(engaged);
+    }
+
+    /** 年份行「下」的落点：启用筛选 → 清除筛选行；未启用（该行 GONE）→ 让几何搜索回网格 */
+    private void applyRybYearDownFocus(boolean engaged) {
+        if (rybYearRowPills == null || rybClearPill == null) return;
+        for (TextView p : rybYearRowPills) {
+            p.setNextFocusDownId(engaged ? rybClearPill.getId() : View.NO_ID);
+        }
+    }
+
+    private void restoreFilterChipFocus(final TextView chip) {
+        if (chip == null) return;
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // 焦点已经主动交给网格（如「清除筛选」）时不再抢回来
+                    if (gvChannel != null && gvChannel.hasFocus()) return;
+                    boolean ok = false;
+                    if (chip.isAttachedToWindow() && !chip.hasFocus()) ok = chip.requestFocus();
+                    if (ok) LogBridge.i(TAG, "【筛选栏焦点恢复】→ " + chip.getText());
+                } catch (Throwable ignored) {
+                }
+            }
+        };
+        chip.post(r);
+        chip.postDelayed(r, 60);
+        chip.postDelayed(r, 160);
     }
 
     /** 行首维度标签（灰 14sp，宽同 2 字对齐各行）。 */
@@ -2439,6 +2557,7 @@ public class OttHomeActivity extends AppCompatActivity {
     private void addRybFilterPill(final LinearLayout row, final RybVodFilterState st,
                                   final int dimIdx, final String value, final boolean selected) {
         final TextView pill = makeRybFilterPill(value, selected);
+        pill.setTag(new Object[]{"dim", dimIdx, value});
         pill.setOnClickListener(v -> {
             final String group = currentGroup;
             final String pick = selected ? "" : value;
@@ -2482,6 +2601,12 @@ public class OttHomeActivity extends AppCompatActivity {
         }
         st.expanded = !st.expanded;
         LogBridge.i(TAG, "【源5筛选】" + (st.expanded ? "展开" : "收起") + "筛选栏：" + currentGroup);
+        // 【2026-10-26 焦点不跳】收起时先把焦点交给「筛选」按钮，再隐藏筛选栏。
+        //   反过来的话，隐藏的正是焦点所在的胶囊 → 焦点先被系统丢给顶部「直播」，
+        //   再由下面的 post 拉回「筛选」，用户会看到「跳出去又跳回来」的闪动。
+        if (!st.expanded && rybFilterTab != null && rybFilterTab.isShown()) {
+            rybFilterTab.requestFocus();
+        }
         applyRybVodFilter();
         final RybVodFilterState fst = st;
         gvChannel.post(() -> {
@@ -6602,6 +6727,12 @@ public class OttHomeActivity extends AppCompatActivity {
      * 缓存 + HTTP 线路立即发出，第二路自研 2135 线路紧跟补发。
      * 起播安全不受影响：加载只是把频道放进列表，点击虎牙频道起播仍走 TVPlayerManager 的等待链。
      */
+    /** 【2026-10-26】虎牙预热统一入口：再让出 200ms，避免和刚触发的 UI 刷新挤在同一帧 */
+    private void ensureHuyaLoadedDelayed() {
+        if (huyaLoadStarted) return;
+        mainHandler.postDelayed(this::ensureHuyaLoaded, 200);
+    }
+
     private void ensureHuyaLoaded() {
         if (huyaLoadStarted) return;
         huyaLoadStarted = true;

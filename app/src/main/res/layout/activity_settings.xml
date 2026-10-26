@@ -495,8 +495,9 @@
                     android:textSize="14sp" />
             </LinearLayout>
 
-            <!-- 网页设置提示 -->
+            <!-- 网页设置提示（地址在代码里按实时局域网 IP 填充） -->
             <TextView
+                android:id="@+id/tv_web_settings_hint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"

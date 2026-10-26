@@ -440,7 +440,11 @@ public final class JzUrlResolver {
     private static long measureSpeed(String segUrl, java.util.Map<String, String> headers) {
         java.net.HttpURLConnection conn = null;
         try {
-            conn = (java.net.HttpURLConnection) new java.net.URL(segUrl).openConnection();
+            // 【2026-10-25 NO_PROXY】全工程统一口径：凡播放/清单类请求一律绕开系统代理。
+            //   设备若配了 WiFi 代理，openConnection() 默认走 ProxySelector → 测速全部超时，
+            //   表现为「源9 线路全被判定不可用」。与虎牙 6 处保持同一口径。
+            conn = (java.net.HttpURLConnection) new java.net.URL(segUrl)
+                    .openConnection(java.net.Proxy.NO_PROXY);
             conn.setConnectTimeout(PROBE_CONNECT_TIMEOUT_MS);
             conn.setReadTimeout(PROBE_READ_TIMEOUT_MS);
             conn.setInstanceFollowRedirects(true);

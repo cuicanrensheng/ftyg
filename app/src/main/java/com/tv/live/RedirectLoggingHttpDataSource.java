@@ -458,7 +458,12 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
     private HttpURLConnection openSingleConnection(DataSpec dataSpec, String url,
                                                    Map<String, String> headers,
                                                    boolean firstHop) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        // 【2026-10-25 NO_PROXY】这是**所有源共用**的播放数据源（虎牙/源9/任意播/咪咕…）。
+        //   openConnection() 无参会走默认 ProxySelector，设备配了 WiFi 代理就整体播不动；
+        //   而 127.0.0.1 的本地剥离代理同样应直连（部分 ROM 不豁免回环）。
+        //   统一绕开系统代理，与虎牙 6 处口径一致。
+        HttpURLConnection conn = (HttpURLConnection) new URL(url)
+                .openConnection(java.net.Proxy.NO_PROXY);
         conn.setConnectTimeout(connectTimeout);
         // 【2026-10-23 源9 慢速 CDN 专项】本地代理地址（127.0.0.1:<port>）动态放宽读超时：
         //   代理侧已改为流式转发（边下边播），慢速 CDN 下一个大分片需 25~45s，

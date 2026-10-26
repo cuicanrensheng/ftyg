@@ -58,6 +58,8 @@ public final class JsBridge {
                 .readTimeout(15, TimeUnit.SECONDS)
                 .writeTimeout(15, TimeUnit.SECONDS)
                 .callTimeout(CALL_TIMEOUT_SEC, TimeUnit.SECONDS)
+                // 【2026-10-25 NO_PROXY】播放链路统一绕开系统代理
+                .proxy(java.net.Proxy.NO_PROXY)
                 // 红线：不做连接失败重试
                 .retryOnConnectionFailure(false)
                 .followRedirects(true)

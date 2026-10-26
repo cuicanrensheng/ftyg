@@ -35,7 +35,6 @@
         android:alpha="0.0"
         android:visibility="gone"
         android:scaleType="fitXY" />
-
     <!-- 频道号显示 -->
     <TextView
         android:id="@+id/tv_channel_num"

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 【2026-10-26】switchRenderer 重建分支专用：TextureView 渲染的 PlayerView。
+     老实现用 ContextThemeWrapper(R.style.PlayerView_Texture) + new PlayerView(ctx) 动态造视图，
+     实测 surface_type 不生效（重建出来仍是 SurfaceView）→ 改为显式 inflate 本布局。 -->
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:keep_content_on_player_reset="true"
+    app:resize_mode="fill"
+    app:surface_type="texture_view"
+    app:use_controller="false" />

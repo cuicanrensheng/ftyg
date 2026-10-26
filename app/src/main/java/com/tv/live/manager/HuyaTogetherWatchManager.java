@@ -106,8 +106,13 @@ public class HuyaTogetherWatchManager {
      * —— 该值已实测安全（8 并发拉 10 页 cache.php，0 次 503）。
      * 历史教训：{@code 开发记录_2026-09-15.md} 与 {@code 开发记录_2026-09-19.md} 均记录
      * 「提高并发 → 触发虎牙 WAF 503」，两次都是靠降并发解决，故这里不裸奔线程池宽度（10）。</p>
+     *
+     * <p>【2026-10-25 起播保护】8 → 3：8 并发（+34 worker + 长尾专属线程）在电视上跑起来时，
+     * 与正在拉 5.3MB/10s 直播分片的播放器直接抢带宽/CPU，实测启动后 10 秒内播放器反复缓冲
+     * 83 次、累计停顿 7.7s。降到 3 后尖峰显著变小；虎牙分组只是面板数据，慢几秒无感。
+     * WAF 503 的门槛远高于 3，不会重新触发限流。</p>
      */
-    private static final int NO_THROTTLE_CONCURRENCY = 8;
+    private static final int NO_THROTTLE_CONCURRENCY = 3;
 
     /** 新通道并发闸门：保证对外实际并发 ≤ {@link #NO_THROTTLE_CONCURRENCY}，避免重新引入 WAF 503 */
     private static final java.util.concurrent.Semaphore NO_THROTTLE_SEM =
@@ -252,7 +257,15 @@ public class HuyaTogetherWatchManager {
     // 【2026-10-03 第四轮·拆池】分类/协调任务已移出本池（见 mCategoryExecutor）。
     // 【2026-10-03 第五轮·扩容 34】已在第六轮回退为 8（实测负收益 +10.7%，见 SUB_WORKER_POOL_SIZE 注释）。
     // 其余经 NetUtil 的虎牙请求仍由 HuyaHttpThrottle 限流（见 HuyaStreamPlayer.HuyaHttpThrottle）。
-    private final ExecutorService mExecutor = Executors.newFixedThreadPool(SUB_WORKER_POOL_SIZE);
+    // 【2026-10-25 起播保护②】全部预加载线程 MIN_PRIORITY（nice 19）：这些线程只服务频道面板，
+    //   不该和视频解码器（nice 0）平级抢 CPU。实测默认优先级下，预加载期间的 TLS 握手+JSON 解析
+    //   会让播放器在 1~2s 内连发 8~66ms 的 BUFFERING 抖动（弱机肉眼可见顿挫）。
+    //   注意：只降优先级不动并发——并发已按 503 教训定在安全值。
+    private final ExecutorService mExecutor = Executors.newFixedThreadPool(SUB_WORKER_POOL_SIZE, r -> {
+        Thread t = new Thread(r, "huya-tw-worker");
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
 
     /**
      * 【2026-10-03 第四轮·拆池】分类协调任务专用池，容量 5（外层协调 1 + 4 个分类任务）。
@@ -263,7 +276,11 @@ public class HuyaTogetherWatchManager {
      * <p>容量必须 ≥ 5：若只开 4，第 5 个「会阻塞等待」的任务会被排到协调任务之后，
      * 重新引入缩水版的阶梯串行。这些任务全程只做 latch.await + 轻量分类，不占 CPU。</p>
      */
-    private final ExecutorService mCategoryExecutor = Executors.newFixedThreadPool(5);
+    private final ExecutorService mCategoryExecutor = Executors.newFixedThreadPool(5, r -> {
+        Thread t = new Thread(r, "huya-tw-category");
+        t.setPriority(Thread.MIN_PRIORITY);
+        return t;
+    });
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
 
     /**
@@ -280,6 +297,7 @@ public class HuyaTogetherWatchManager {
     private final ExecutorService mLongTailExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "huya-longtail-warmup");
         t.setDaemon(true);
+        t.setPriority(Thread.MIN_PRIORITY);   // 【2026-10-25 起播保护②】同 mExecutor
         return t;
     });
 
@@ -975,7 +993,11 @@ public class HuyaTogetherWatchManager {
         }
 
         final int pageCount = maxPages;
-        ExecutorService pagePool = Executors.newFixedThreadPool(CACHE_PAGE_CONCURRENCY);
+        ExecutorService pagePool = Executors.newFixedThreadPool(CACHE_PAGE_CONCURRENCY, r -> {
+            Thread t = new Thread(r, "huya-cache-page");
+            t.setPriority(Thread.MIN_PRIORITY);   // 【2026-10-25 起播保护②】同 mExecutor
+            return t;
+        });
         try {
             List<Future<FetchPage>> futures = new ArrayList<>();
             for (int p = 2; p <= pageCount; p++) {

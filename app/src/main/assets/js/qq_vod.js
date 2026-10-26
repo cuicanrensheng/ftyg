@@ -392,71 +392,28 @@ function QqVodParsePlay(origUrl) {
         ret = ret.substring(0,ret.lastIndexOf('&'));
         return ret;
     }
-    var data = {
-        url: origUrl,
-        referer: 'aHR0cHM6Ly9hcGkub2tqeC5jYzo2NjYvangucGhwP3VybD1odHRwczovL3YucXEuY29tL3gvY292ZXIvbWgzbnZqb3lnaWppaTY4LzdkYTJwNk1pTnVGLmh0bWw=',
-        ref: 0,
-        key: '5ae4f61fa55d35387ffc51e6f3b33b49',
-        keep: 'f7dff5b67814cb41fe73d46e83168f7c',
-        keys: '7e6560b041963800790731eb1cf3f379',
-        token: '1e528fde95fcd9c2413dcbda503b4ee1',
-        ip: '183.14.134.0',
-        time: '1610938627',
-        type: '',
-        other: encode(origUrl),
-        ios: ''
+    // 原生取流：复用本文件已有的 getQqUrl / getCkey（腾讯视频官方 App 同款
+    // vd.l.qq.com/proxyhttp 接口，单次请求，不依赖任何第三方解析源）。
+    // 旧 okjx.cc:666 第三方转发已死，故切回官方原生链路（符合"只模拟应用获取"红线）。
+    var vid = getvid(origUrl);
+    var urlArray = new Array();
+    if (vid == "" || vid == null) {
+        urlArray.push("error://qq_404");
+        return urlArray;
     }
-    var headers = [
-        {
-            'header': 'User-Agent',
-            'value': 'Mozilla/5.0 (Linux; Android 8.1.0; V1813A Build/O11019; wv) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.84 Mobile Safari/537.36 VivoBrowser/6.6.3.0'
-        },
-        {
-            'header': 'Content-Type',
-            'value': 'application/x-www-form-urlencoded; charset=UTF-8'
-        }
-    ];
-    var res = postWithHeaders('https://api.okjx.cc:666/17/api.php', transformRequest(data), headers, 'application/x-www-form-urlencoded');
-    var src = JSON.parse(res)['url']
-    return [src]
-    log('res:'+res)
-    log('src:'+src)
-
-    // ------------------------------------------------
-
-    
-    // var vid = getvid(origUrl);
-    // var urlArray = new Array();
-    // if (vid=="") {
-    //     urlArray.push("error://qq_404");
-    //     return urlArray;
-    // }
-    // var guid = getUuid();
-    // var guid = getUuid();
-    // var mp4info = urlRequest("http://h5vv.video.qq.com/getinfo?otype=json&defn=shd&platform=11001&vid=" + vid);
-    // var strJson = mp4info.substring(mp4info.indexOf("{"), mp4info.lastIndexOf("}")+1);//json
-    // mp4info = eval("(" + strJson + ")");//转换后的json对象'
-    // var uip = mp4info.ip;
-    // var src = mp4info['vl']['vi'][0]['ul']['ui'][0]['url'] + mp4info['vl']['vi'][0]['fn'] + "?vkey=" + mp4info['vl']['vi'][0]['fvkey']
-    // var src = mp4info['vl']['vi'][0]['ul']['ui'][0]['url'] + mp4info['vl']['vi'][0]['fn'] + "?vkey=" + mp4info['vl']['vi'][0]['fvkey']
-    // log('src:'+src)
-    // var mp4Name = mp4info.vl.vi[0].lnk+".mp4";
-    // var ctime = FormatDate(new Date().getTime());
-    // var hexstr = decode("10901", vid, "v1010", 1, rnd);
-    // var u = urlenc(tempcalc(hexstr, Seed), 1, rnd);
-    // var qv_rmt = u1(u, 0);
-    // var qv_rmt2 = u1(u, 1);
-    // var params = {vid:vid,rnd:rnd,q1:qv_rmt,q2:qv_rmt2,guid:guid,pwd:'12133212',pid:'5185ee6bc21b9e01c0f2c4500c2c22ca',filename:mp4Name,format:2,fmt:'mp4',ds:'',ss:'0',cover:'',ctime:ctime,cdn:'http://vhot.dnion.videocdn.qq.com/flv/97/69/',img:'',appver:'3.4.31',uip:uip,br:64,dur:'',vt:112,dltype:1};
-    // playData = gdjiexi.qq.parse(params);
-    // sdUrl = getQqUrl(origUrl,vid,guid,"sd");
-    // hdUrl = getQqUrl(origUrl,vid,guid,"hd");
-    // if(hdUrl!=""){
-    // 	urlArray.push(hdUrl+"#高清");
-    // }
-    // if(sdUrl!=""){
-    // 	urlArray.push(sdUrl+"#标清");
-    // }
-    // return urlArray;
+    var guid = getUuid();
+    var hdUrl = getQqUrl(origUrl, vid, guid, "hd");
+    var sdUrl = getQqUrl(origUrl, vid, guid, "sd");
+    if (hdUrl != "" && hdUrl.indexOf("error://") < 0) {
+        urlArray.push(hdUrl + "#高清");
+    }
+    if (sdUrl != "" && sdUrl.indexOf("error://") < 0 && sdUrl != hdUrl) {
+        urlArray.push(sdUrl + "#标清");
+    }
+    if (urlArray.length == 0) {
+        urlArray.push("error://qq_empty");
+    }
+    return urlArray;
 }
 
 function parseZzvod(origUrl) {
@@ -499,6 +456,13 @@ function getQqUrl(origUrl, vid, guid, bt) {
         jsonObject = eval('(' + apiCont + ')');
         var vinfo = jsonObject.vinfo;
         jsonObject1 = eval('(' + vinfo + ')');
+        // 【2026-10-26 加固】腾讯返回 errCode=0 但视频不可用（如 code=62.6 区域/下架限制）时，
+        //   vinfo 里没有 vl.vi 结构；直接访问会抛 TypeError 冒泡成 __JSERR__。
+        //   这里先判空，缺失则干净返回空（上层判该线路不可达，换下一个视频/线路即可）。
+        if (!jsonObject1 || !jsonObject1.vl || !jsonObject1.vl.vi || !jsonObject1.vl.vi[0]) {
+            console.log("qq getQqUrl: 视频不可用/无 vl 结构（可能下架或区域限制）");
+            return "";
+        }
         var urls = jsonObject1.vl.vi[0].ul.ui;
         var bip = urls[0].url;
         var playUrl = "";

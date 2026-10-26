@@ -346,7 +346,9 @@ public final class JzUrlResolver {
                 continue;
             }
             // 【2026-10-26 网页线路】下发的是 HTML 播放页 → 走 web 解析拿真实 m3u8
-            if (!looksLikeM3u8(m3u8)) {
+            //   【2026-10-26 收窄】改用 looksLikeHtmlPage：只有真正的网页（.html 或已知视频站）
+            //   才进 web 解析；图片 URL / 裸 vid 等非网页直接判不可达，不再浪费 30s WebView 兜底。
+            if (looksLikeHtmlPage(m3u8)) {
                 LogBridge.w(TAG, "线路[" + v.source + "] 是网页播放页，走 web 解析: " + brief(m3u8));
                 String web = resolveWebLineUrl(m3u8, null);
                 if (TextUtils.isEmpty(web)) {
@@ -495,6 +497,34 @@ public final class JzUrlResolver {
         return p.contains(".m3u8") || p.contains(".m3u")
                 || p.contains(".mp4") || p.contains(".m4s")
                 || p.contains(".mov") || p.contains(".flv");
+    }
+
+    /**
+     * 【2026-10-26 收窄】地址是否像「需要解析的网页播放页」。
+     *
+     * <p>之前用 {@code !looksLikeM3u8(url)} 判定网页，会把 <b>任何非媒体地址</b>
+     * （图片 CDN 的 {@code *.image}、源下发的裸 vid {@code v025aag...}/{@code JD-...} 等）
+     * 都当成网页送去 JS 插件 / WebView（30s 级）解析，结果一律 {@code no js parser}，
+     * 既浪费 30s 兜底解析，又污染「web 解析失败」日志，掩盖了真正能播的网页线路。
+     *
+     * <p>正判：必须是 http(s) 页面，且要么以 {@code .html/.htm/.shtml} 结尾，
+     * 要么落在已知视频站 host（与 {@code yt_source_root.js} 路由表对齐）。
+     * 其余（图片、裸 vid、异常串）一律不当网页，直接判不可达，不再做无意义解析。
+     */
+    private static boolean looksLikeHtmlPage(String url) {
+        if (url == null || url.isEmpty()) return false;
+        String p = url.toLowerCase(java.util.Locale.ROOT);
+        if (!p.startsWith("http://") && !p.startsWith("https://")) return false;
+        if (p.contains(".html") || p.contains(".htm") || p.contains(".shtml")) return true;
+        return p.contains(".iqiyi.com") || p.contains(".mgtv.com")
+                || p.contains("v.qq.com") || p.contains("youku.com")
+                || p.contains(".le.com") || p.contains("tv.sohu.com")
+                || p.contains(".pptv.com") || p.contains(".bilibili.com")
+                || p.contains(".fun.tv") || p.contains(".hanju.cc")
+                || p.contains("weibo.com") || p.contains("miaopai.com")
+                || p.contains("baofeng.com") || p.contains("krcom.cn")
+                || p.contains("onln.cn") || p.contains("cntv.cn")
+                || p.contains("cctv.com");
     }
 
     /**
@@ -763,7 +793,8 @@ public final class JzUrlResolver {
         if (r == null || TextUtils.isEmpty(r.url)) return new ProbeOutcome(-1, null);
         // 【2026-10-26 网页线路】下发的是 HTML 播放页 → 先 web 解析出真实 m3u8，再拿分片测速。
         //   否则会把网页里随便一行 URL 当分片（下载又快）→ 网页被选成"最快线路"，落地必播不出。
-        if (!looksLikeM3u8(r.url)) {
+        //   【2026-10-26 收窄】改用 looksLikeHtmlPage：非网页（图片/裸 vid）直接判不可达。
+        if (looksLikeHtmlPage(r.url)) {
             LogBridge.w(TAG, "线路[" + v.source + "] 是网页播放页，测速前先 web 解析: " + brief(r.url));
             PlayResult wr = resolveWebLineResult(r.url, r.headers);
             if (wr == null || TextUtils.isEmpty(wr.url)) {

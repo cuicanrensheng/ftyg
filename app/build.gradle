@@ -32,8 +32,8 @@ android {
         applicationId "com.tv.live"
         minSdk 21
         targetSdk 36
-        versionCode 257
-        versionName "2.0.257"
+        versionCode 258
+        versionName "2.0.258"
         resConfigs "zh"
         multiDexEnabled true
 
@@ -389,28 +389,12 @@ project.afterEvaluate {
                 println "[体积优化] 已删除 mergeReleaseAssets/cacert.pem (222KB)"
             }
 
-            // —— 2026-10-15：release 专用剔除清单（源文件保留在 app/src/main/assets/js/） ——
-            def UNUSED_JS_ASSETS = [
-                    // 零引用
-                    'js/block.js',
-                    'js/web_parse_filter.json',
-                    // 仅「网页类源兜底」可达（本工程无搜片 / 网页解析入口）
-                    'js/gw_live.js', 'js/tv_live.js', 'js/qq_vod.js', 'js/other_vod.js',
-                    'js/replay.js', 'js/fun_vod.js', 'js/mgtv_vod.js', 'js/bili_vod.js',
-                    'js/sohu_vod.js', 'js/pptv_vod.js', 'js/iyf_live.js', 'js/iqy_live.js',
-                    'js/weibo_vod.js', 'js/lunbo.js', 'js/fymb_live.js', 'js/tvpass_live.js',
-            ]
-            long freed = 0L
-            int removed = 0
-            UNUSED_JS_ASSETS.each { rel ->
-                def f = new File(mergedAssets, rel)
-                if (f.exists()) {
-                    freed += f.length()
-                    if (f.delete()) removed++
-                }
-            }
-            println "[体积优化] release 已剔除未使用的 JS 资产 ${removed} 个（未压缩 ${freed / 1024}KB）；" +
-                    "源文件保留于 app/src/main/assets/js/（恢复：删掉 build.gradle 里对应一行）"
+            // —— 2026-10-26：JS 资产剔除【已取消】（用户要求） ——
+            //   原 2026-10-15 的 UNUSED_JS_ASSETS 清单把 qq_vod.js / mgtv_vod.js 等 17 个插件
+            //   从 release 包剔除，依据是「本工程无搜片 / 网页解析入口，实际不可达」。
+            //   但此后接入了【源9 网页线路】，上游会真实下发 v.qq.com / mgtv 等网页播放页 URL，
+            //   这些插件（qq_vod.js / mgtv_vod.js / web_parse_filter.json 等）实际可达、必须随包分发。
+            //   故整体取消剔除：app/src/main/assets/js/ 下全部 JS 插件（含基线）均进 release 包。
 
             // —— 防呆闸门：误放进 assets 的备份/临时文件一律不许进包 ——
             //   背景（2026-10-15 事故）：曾把 `yt_source_root.js.bak-routefix-20261015` 直接建在

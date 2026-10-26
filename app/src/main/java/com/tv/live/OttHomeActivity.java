@@ -181,7 +181,6 @@ public class OttHomeActivity extends AppCompatActivity {
     /** 【2026-10-22 源2 联播】专用回调（独立槽位，与源8/源5/源7 各自独立，互不清理） */
     private TVPlayerManager.OnNbMovieEpisodeListener nbmEpisodeListener;
     private TextView tvMetadata;
-    private TextView tvPreviewTip;
     private TextView tvBreadcrumb;
     private TextView tvEmpty;
     private View topBar;
@@ -535,7 +534,6 @@ public class OttHomeActivity extends AppCompatActivity {
         tvMetadata = findViewById(R.id.tv_ott_metadata);
         // 【2026-10-14】隐藏底部视频元数据信息栏
         tvMetadata.setVisibility(android.view.View.GONE);
-        tvPreviewTip = findViewById(R.id.tv_ott_preview_tip);
         tvBreadcrumb = findViewById(R.id.tv_ott_breadcrumb);
         tvEmpty = findViewById(R.id.tv_ott_empty);
         playerView = findViewById(R.id.ott_player_view);
@@ -656,8 +654,6 @@ public class OttHomeActivity extends AppCompatActivity {
         if (svSubGroup != null) {
             svSubGroup.setVisibility(View.GONE);
         }
-
-        tvPreviewTip.setText(R.string.ott_preview_idle);
     }
 
     /**
@@ -826,6 +822,32 @@ public class OttHomeActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 【2026-10-26】直播 → OTT 热切换（{@link #EXTRA_WARM_START}）时补齐预览区状态。
+     *
+     * <p>热切换路径只做 attachPlayerView，播放器沿用上一页仍在播的流，因此：
+     * ① 不会回调 onPlayReady；② 不走 startPlayback → 台名/「正在播放 · 分组」不刷新、
+     * 「选一个频道开始播放」占位文字不被隐藏。结果就是视频在播、占位文字盖在上面。
+     * 这里按 {@code TVPlayerManager.getCurrentChannel()} 把预览信息补一次。
+     */
+    private void restoreWarmStartPreviewIfPlaying() {
+        try {
+            if (getIntent() == null
+                    || !getIntent().getBooleanExtra(EXTRA_WARM_START, false)) return;
+            if (mPlayerManager == null || !mPlayerManager.isPlaying()) return;
+            final Channel ch = mPlayerManager.getCurrentChannel();
+            if (ch == null) return;
+            playingChannel = ch;
+            if (tvNowChannel != null) tvNowChannel.setText(ch.getName());
+            refreshNowPlayingProgram();
+            refreshEpgPanel(ch);
+            setPreviewLoading(false);
+            LogBridge.i(TAG, "【热切换】预览接续：播放器已在播 " + ch.getName() + "，隐藏占位并补齐台名/信息栏");
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "【热切换】预览接续失败: " + t.getMessage());
+        }
+    }
+
     private void initPlayer() {
         mPlayerManager = TVPlayerManager.getInstance(this);
         mPlayerManager.setOnPlayerViewRecreatedListener(newPlayerView -> {
@@ -853,6 +875,12 @@ public class OttHomeActivity extends AppCompatActivity {
             @Override public void onPlayError(String msg) { setPreviewLoading(false); }
         };
         mPlayerManager.setOnPlayStateListener(ottPlayStateListener);
+
+        // 【2026-10-26 热切换补 UI】直播 → OTT 热切换时共享播放器仍在播，本页不会再收到
+        //   onPlayReady，起播路径（startPlayback）也不会跑 → 左侧预览区残留
+        //   「选一个频道开始播放」占位文字、台名/正在播放信息栏空白（实测 2.0.253 正式版复现）。
+        //   这里按播放器当前频道补齐一次；未在播（暂停/空闲）时不动作，保持占位语义。
+        restoreWarmStartPreviewIfPlaying();
 
         // 【2026-10-11 源7 联播】专用回调（独立槽位，MainActivity 不会清它）：
         //   自动联播换集 → 同步 EPG 高亮 + 播放历史；全部播完 → 退出全屏并收起控制栏。
@@ -3254,7 +3282,6 @@ public class OttHomeActivity extends AppCompatActivity {
         }
 
         setPreviewLoading(true);
-        tvPreviewTip.setVisibility(View.GONE);
         mPlayerManager.playUrl(playUrl, channel.getName(), channel);
         // 【2026-10-17 按源清晰度】起播即套用**该源自己**上次选择的封顶值（0=自动）
         // 必须无条件调用（含 0），否则从「封顶 720 的源」切到「自动的源」会残留上一源的封顶。
@@ -6714,10 +6741,11 @@ public class OttHomeActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 【2026-10-26】预览区占位文字（「加载中…／选一个频道开始播放」）已按用户要求整体移除，
+     * 播放器上方不再有 TextView 覆盖。方法保留为幂等空实现，避免散落的调用点改动。
+     */
     private void setPreviewLoading(boolean loading) {
-        if (loading && tvPreviewTip != null) {
-            tvPreviewTip.setVisibility(View.GONE);
-        }
     }
 
     // ============================ 虎牙频道 ============================

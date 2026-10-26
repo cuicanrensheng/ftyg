@@ -168,15 +168,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="match_parent" />
 
-                    <TextView
-                        android:id="@+id/tv_ott_preview_tip"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:text="@string/ott_preview_loading"
-                        android:textColor="#99FFFFFF"
-                        android:textSize="18sp" />
-
                     <!-- 焦点提示：仅播放器获焦时显示 -->
                     <TextView
                         android:id="@+id/tv_ott_preview_focus_hint"

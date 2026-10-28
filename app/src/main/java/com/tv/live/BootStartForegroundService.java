@@ -74,7 +74,7 @@ public class BootStartForegroundService extends Service {
                     }
                     try {
                         if (BootStartManager.isSelfForegroundSafe(BootStartForegroundService.this)) {
-                            LogBridge.i(TAG, "【自启兜底】已确认 App 在前台，结束确认");
+                            LogBridge.d(TAG, "【自启兜底】已确认 App 在前台，结束确认");
                             return;
                         }
                         if (!BootStartManager.allowRecoveryStart(BootStartForegroundService.this)) {
@@ -82,7 +82,7 @@ public class BootStartForegroundService extends Service {
                         }
                         startMainActivityForce();
                     } catch (Throwable t) {
-                        LogBridge.w(TAG, "【自启兜底】确认异常: " + t.getMessage());
+                        LogBridge.d(TAG, "【自启兜底】确认异常: " + t.getMessage());
                     }
                 }
             }
@@ -97,7 +97,7 @@ public class BootStartForegroundService extends Service {
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(mainIntent);
-            LogBridge.i(TAG, "【自启兜底】补拉 MainActivity 成功");
+            LogBridge.d(TAG, "【自启兜底】补拉 MainActivity 成功");
             BootStartManager.noteLaunchSource(this, "开机窗口补拉", "startActivity 成功");
             return true;
         } catch (Exception e) {
@@ -173,7 +173,6 @@ public class BootStartForegroundService extends Service {
                 mainIntent.addFlags(Intent.FLAG_ACTIVITY_REQUIRE_DEFAULT);
             }
             startActivity(mainIntent);
-            LogBridge.d(TAG, "从前台服务启动 MainActivity 成功");
             return true;
         } catch (Exception e) {
             LogBridge.e(TAG, "从前台服务启动 MainActivity 失败", e);

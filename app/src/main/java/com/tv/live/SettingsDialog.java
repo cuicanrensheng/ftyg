@@ -666,7 +666,7 @@ public class SettingsDialog extends android.app.Dialog {
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             host.startActivity(intent);
                             host.finish();
-                            LogBridge.i("Settings", "【模式切换】直播 → OTT（按键落地后延迟启动）");
+                            LogBridge.d("Settings", "【模式切换】直播 → OTT（按键落地后延迟启动）");
                         } catch (Exception e) {
                             LogBridge.e("Settings", "切换 OTT 失败: " + e.getMessage(), e);
                         }
@@ -1247,6 +1247,13 @@ public class SettingsDialog extends android.app.Dialog {
             return;
         }
 
+        // 【2026-10-27 源9（橘汁）点播】线路 = getDetail 的 source 线路；复用测速/播放失败失效记录标记
+        String jzVodIdStr = com.tv.live.juzhi.JzUrlResolver.vodIdOf(currentChannel);
+        if (!TextUtils.isEmpty(jzVodIdStr)) {
+            showJzLineDialog(playerManager, currentChannel);
+            return;
+        }
+
         // 【2026-10-11】源7（afhgrj 影视）频道：线路 = 该片播放源 sid，切换走 switchAfhgrjLine
         if (playerManager.isAfhgrjChannel()) {
             showAfhgrjLineDialog(playerManager);
@@ -1478,6 +1485,51 @@ public class SettingsDialog extends android.app.Dialog {
             if (url != null) {
                 playerManager.playUrl(url, currentChannel.getName(), currentChannel);
             }
+            refreshStreamStatusRows();
+            Toast.makeText(getContext(), "已切换到：" + lineArray[which], Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    /**
+     * 【2026-10-27 新增】源9（橘汁）点播「频道线路选择」。
+     * 列出该片全部 source 线路，复用 JzUrlResolver 的测速/播放失败失效记录标记「已失效」，
+     * 点击失效线路拦截不切换（OTT 面板用 CapsuleChoicePanel 直接置灰禁用，设置面板用拦截兜底）。
+     */
+    private void showJzLineDialog(final TVPlayerManager playerManager, final Channel currentChannel) {
+        String jzVodIdStr = com.tv.live.juzhi.JzUrlResolver.vodIdOf(currentChannel);
+        if (TextUtils.isEmpty(jzVodIdStr)) {
+            Toast.makeText(getContext(), "源9线路尚未就绪，请先播放再切换", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final int jzVodId = Integer.parseInt(jzVodIdStr);
+        final int jzEp = com.tv.live.juzhi.JzUrlResolver.episodeOf(currentChannel.getMainPlayUrl());
+        final java.util.List<String> jzLines =
+                com.tv.live.juzhi.JzUrlResolver.lineNames(jzVodId, jzEp);
+        if (jzLines.isEmpty()) {
+            Toast.makeText(getContext(), "源9线路解析中，请稍后再试", Toast.LENGTH_SHORT).show();
+            com.tv.live.juzhi.JzUrlResolver.fetchEpisodes(jzVodIdStr);
+            return;
+        }
+        final int curLine = com.tv.live.juzhi.JzUrlResolver.getSelectedLine(jzVodId, jzEp);
+        final java.util.List<Boolean> jzDead =
+                com.tv.live.juzhi.JzUrlResolver.lineDeadFlags(jzVodId, jzEp);
+        String[] lineArray = new String[jzLines.size()];
+        final boolean[] deadArray = new boolean[jzLines.size()];
+        int checkedItem = (curLine >= 0 && curLine < jzLines.size()) ? curLine : 0;
+        for (int i = 0; i < jzLines.size(); i++) {
+            boolean dead = (i < jzDead.size()) && jzDead.get(i);
+            deadArray[i] = dead;
+            lineArray[i] = jzLines.get(i) + (dead ? "（已失效）" : "");
+        }
+        showCapsulePicker("频道线路选择", lineArray, checkedItem, (which) -> {
+            if (deadArray[which]) {
+                Toast.makeText(getContext(), "该线路已失效，请选择其他线路", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            com.tv.live.juzhi.JzUrlResolver.setSelectedLine(jzVodId, jzEp, which);
+            // 重播当前集（与 showRenyiboVodLineDialog 同构：触发重新解析，下次起播走手动选线）
+            String url = currentChannel.getMainPlayUrl();
+            if (url != null) playerManager.playUrl(url, currentChannel.getName(), currentChannel);
             refreshStreamStatusRows();
             Toast.makeText(getContext(), "已切换到：" + lineArray[which], Toast.LENGTH_SHORT).show();
         });
@@ -1831,7 +1883,7 @@ public class SettingsDialog extends android.app.Dialog {
                 LogBridge.e("SUBSCRIPTION", "二维码生成失败: " + e.getMessage(), e);
             }
         } else {
-            LogBridge.w("SUBSCRIPTION", "【订阅地址】未取到局域网 IP，本次只显示提示、不生成二维码");
+            LogBridge.i("SUBSCRIPTION", "【订阅地址】未取到局域网 IP，本次只显示提示、不生成二维码");
         }
         openQrCapsule(title, qrBitmap,
                 webUrl != null && !webUrl.trim().isEmpty()

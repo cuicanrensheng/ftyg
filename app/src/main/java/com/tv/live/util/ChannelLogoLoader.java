@@ -94,6 +94,19 @@ public class ChannelLogoLoader {
     private static final long HOST_FAIL_COOLDOWN_MS = 5L * 60L * 1000L;
     private final Map<String, Long> badHostUntil = new ConcurrentHashMap<>();
 
+    /**
+     * 【2026-10-27 日志打点审计】台标失败是**逐 URL** 触发的：首屏几百个频道里若图床大面积失效，
+     * 会在几秒内刷出几十上百条同类日志，把 2000 条环形缓冲里的播放排障历史整段挤掉。
+     * 故改为「前 3 条全记录 + 之后每 50 条记一次」，既有首因证据又不淹没。
+     */
+    private static final java.util.concurrent.atomic.AtomicInteger sLogoFailLogs =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    private static boolean shouldLogLogoFailure() {
+        final int n = sLogoFailLogs.incrementAndGet();
+        return n <= 3 || (n % 50) == 0;
+    }
+
     /** 【2026-10-10 台标性能·闸门】已确认可达的主机：不再受 in-flight 闸门限制，全速并发 */
     private final Set<String> hostGood = ConcurrentHashMap.newKeySet();
     /** 【2026-10-10 台标性能·闸门】未确认主机的等待队列：key=host，value=挂起的加载任务 */
@@ -327,11 +340,10 @@ public class ChannelLogoLoader {
      */
     private static void logPerf(String source, String url, long t0) {
         if (!com.tv.live.BuildConfig.IS_DEBUG) return;   // 【2026-10-10 台标性能·复核修复】release 不做主线程日志开销
+        // 【2026-10-28 降噪】内存命中的耗时行全是 0ms，且同一 URL 会被 4 个视图各绑一次
+        //   （实测 345ms 内 4 条同文案，占单次冷启动日志 30%+）→ 不记。真 IO 走 logPerfBg。
+        if ("内存".equals(source)) return;
         long now = SystemClock.uptimeMillis();
-        LogBridge.d(TAG, "【台标耗时】来源=" + source
-                + " 排队=0ms 磁盘=0ms 网络=0ms 解码=0ms 回写=0ms"
-                + " 总计=" + (now - t0) + "ms"
-                + " url=" + (url == null ? "" : url));
     }
 
     /**
@@ -343,15 +355,10 @@ public class ChannelLogoLoader {
     private static void logPerfBg(String source, String url, long queueMs, long diskMs,
                                   long netMs, long decMs, long tBgEnd, long t0) {
         if (!com.tv.live.BuildConfig.IS_DEBUG) return;   // 【2026-10-10 台标性能·复核修复】release 不做主线程日志开销
+        // 【2026-10-28 只留异常/真下载】磁盘命中、内存解码这些成功路径一律不记
+        //   （实测单次冷启动 18 条，每条都长一样），只在真发网络请求时记一条。
+        if (netMs <= 0) return;
         long now = SystemClock.uptimeMillis();
-        LogBridge.d(TAG, "【台标耗时】来源=" + source
-                + " 排队=" + queueMs + "ms"
-                + " 磁盘=" + diskMs + "ms"
-                + " 网络=" + netMs + "ms"
-                + " 解码=" + decMs + "ms"
-                + " 回写=" + (now - tBgEnd) + "ms"
-                + " 总计=" + (now - t0) + "ms"
-                + " url=" + url);
     }
 
     // ------------------------------------------------------------------
@@ -393,10 +400,16 @@ public class ChannelLogoLoader {
     private void markHostFailure(String url) {
         String h = hostOf(url);
         if (h != null) {
+            // 【2026-10-27 降噪】冷却期内重复失败不再打点：实测同一 host（logo.catvod.com）
+            // 5 秒内被标记 9 次，首屏批量拉海报时整段刷掉。只在「首次进入冷却」记一条。
+            Long prev = badHostUntil.get(h);
+            boolean firstEntry = (prev == null || prev <= System.currentTimeMillis());
             badHostUntil.put(h, System.currentTimeMillis() + HOST_FAIL_COOLDOWN_MS);
             // 【2026-10-10 台标性能·闸门】冷却结束后需重新走一次探测，清除「已确认可达」标记
             hostGood.remove(h);
-            LogBridge.w(TAG, "【海报】图床不可达，冷却 " + (HOST_FAIL_COOLDOWN_MS / 60000) + " 分钟: " + h);
+            if (firstEntry) {
+                LogBridge.w(TAG, "【海报】图床不可达，冷却 " + (HOST_FAIL_COOLDOWN_MS / 60000) + " 分钟: " + h);
+            }
         }
     }
 
@@ -574,7 +587,9 @@ public class ChannelLogoLoader {
                 if (!response.isSuccessful()) {
                     // 【2026-09-29 频道台标】非 2xx：多为内置源里的图床已失效（例如 tb.zbds.top 已 404），记录以便排查
                     // 注意：非 2xx 说明主机可达（只是这张图没有），不触发主机冷却
-                    LogBridge.w(TAG, "台标 HTTP " + response.code() + " 不可用: " + url);
+                    if (shouldLogLogoFailure()) {
+                        LogBridge.i(TAG, "台标 HTTP " + response.code() + " 不可用: " + url);
+                    }
                     markPermanentFailure(url);
                     if (outStats != null) outStats[0] = SystemClock.uptimeMillis() - tNetStart;
                     return null;
@@ -582,7 +597,9 @@ public class ChannelLogoLoader {
                 // 【2026-10-11 海报】拿到响应 = 主机可达，清除该主机的冷却标记
                 clearHostFailure(url);
                 if (response.body() == null) {
-                    LogBridge.w(TAG, "台标响应体为空: " + url);
+                    if (shouldLogLogoFailure()) {
+                        LogBridge.i(TAG, "台标响应体为空: " + url);
+                    }
                     if (outStats != null) outStats[0] = SystemClock.uptimeMillis() - tNetStart;
                     return null;
                 }
@@ -601,7 +618,9 @@ public class ChannelLogoLoader {
         } catch (Exception e) {
             // 【2026-10-11 海报】连接/读写失败（含超时、TLS reset）：标记该图床进入冷却期，
             // 后续同主机 URL 直接回退占位图，避免整屏被逐张超时拖慢
-            LogBridge.w(TAG, "台标下载失败: " + url + " -> " + e.getMessage());
+            if (shouldLogLogoFailure()) {
+                LogBridge.w(TAG, "台标下载失败: " + url + " -> " + e.getMessage());
+            }
             if (outStats != null && outStats[0] == 0L) {
                 outStats[0] = SystemClock.uptimeMillis() - tNetStart;
             }

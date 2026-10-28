@@ -208,7 +208,6 @@ public final class MiguSourceLoader {
             cached = "";
         }
         if (!TextUtils.isEmpty(cached) && !isCacheExpired(context)) {
-            LogBridge.i(TAG, "源6(咪咕)：命中磁盘缓存，跳过目录请求");
             return cached;
         }
 
@@ -217,24 +216,21 @@ public final class MiguSourceLoader {
         // 请求只是浪费且可能拿到残表；本地缓存或 assets 兜底表在蜂窝下均可正常播放。
         if (!isBroadbandNetwork(context)) {
             if (!TextUtils.isEmpty(cached)) {
-                LogBridge.i(TAG, "源6(咪咕)：非WiFi出口，跳过目录请求，直接用本地频道表（"
-                        + countM3uChannels(cached) + " 频道）");
                 return cached;
             }
             String fb = readAssetFallback(context);
             if (!TextUtils.isEmpty(fb)) {
-                LogBridge.w(TAG, "源6(咪咕)：非WiFi出口且无本地频道表，直接启用 assets 兜底（"
+                LogBridge.d(TAG, "源6(咪咕)：非WiFi出口且无本地频道表，直接启用 assets 兜底（"
                         + countM3uChannels(fb) + " 频道，不请求控制面）");
                 return fb;
             }
-            LogBridge.w(TAG, "源6(咪咕)：非WiFi出口但缓存与 assets 兜底均不可用，仍尝试在线目录");
+            LogBridge.d(TAG, "源6(咪咕)：非WiFi出口但缓存与 assets 兜底均不可用，仍尝试在线目录");
         }
 
         // ---- ② 网络：服务端下发优先（对应原版链路第 ① 步） ----
         String fresh = fetchNowTvAsM3u(context);
         if (!TextUtils.isEmpty(fresh) && countM3uChannels(fresh) >= MIN_CHANNELS) {
             writeDiskCache(context, fresh);
-            LogBridge.i(TAG, "源6(咪咕)：服务端下发频道表构建成功，已写缓存");
             return fresh;
         }
 
@@ -242,7 +238,6 @@ public final class MiguSourceLoader {
         fresh = fetchCatalogAsM3u();
         if (!TextUtils.isEmpty(fresh) && countM3uChannels(fresh) >= MIN_CHANNELS) {
             writeDiskCache(context, fresh);
-            LogBridge.i(TAG, "源6(咪咕)：官方目录构建成功，已写缓存");
             return fresh;
         }
         if (!TextUtils.isEmpty(fresh)) {
@@ -259,7 +254,7 @@ public final class MiguSourceLoader {
         // ---- ④ assets 兜底 ----
         String fallback = readAssetFallback(context);
         if (!TextUtils.isEmpty(fallback)) {
-            LogBridge.w(TAG, "源6(咪咕)：目录与缓存均不可用，启用 assets 静态兜底频道表");
+            LogBridge.d(TAG, "源6(咪咕)：目录与缓存均不可用，启用 assets 静态兜底频道表");
             return fallback;
         }
 
@@ -288,7 +283,7 @@ public final class MiguSourceLoader {
             List<NowTvSourceApi.Channel> channels =
                     NowTvSourceApi.fetchChannelList(context, NOWTV_MAX_CATEGORIES);
             if (channels.isEmpty()) {
-                LogBridge.w(TAG, "服务端未下发频道（或接口不可用）");
+                LogBridge.i(TAG, "服务端未下发频道（或接口不可用）");
                 return null;
             }
             Set<String> groups = new LinkedHashSet<>();
@@ -340,7 +335,7 @@ public final class MiguSourceLoader {
             for (String wanted : ENABLED_CATEGORIES) {
                 String vomsId = findVomsId(liveList, wanted);
                 if (TextUtils.isEmpty(vomsId)) {
-                    LogBridge.w(TAG, "目录中未找到分类：" + wanted);
+                    LogBridge.d(TAG, "目录中未找到分类：" + wanted);
                     continue;
                 }
 
@@ -356,14 +351,14 @@ public final class MiguSourceLoader {
 
                 String catText = getText(CATALOG_ITEM_PREFIX + vomsId);
                 if (TextUtils.isEmpty(catText)) {
-                    LogBridge.w(TAG, "分类[" + wanted + "]明细为空");
+
                     continue;
                 }
                 JSONObject catJson = new JSONObject(catText);
                 JSONObject catBody = catJson.optJSONObject("body");
                 JSONArray dataList = catBody == null ? null : catBody.optJSONArray("dataList");
                 if (dataList == null) {
-                    LogBridge.w(TAG, "分类[" + wanted + "]无 dataList");
+
                     continue;
                 }
                 int n = 0;
@@ -377,11 +372,11 @@ public final class MiguSourceLoader {
                     rows.add(new String[]{wanted, name, pid});
                     n++;
                 }
-                LogBridge.i(TAG, "分类[" + wanted + "] vomsID=" + vomsId + " 取到 " + n + " 个频道");
+
             }
 
             if (rows.isEmpty()) {
-                LogBridge.w(TAG, "目录构建结果为空");
+                LogBridge.i(TAG, "目录构建结果为空");
                 return null;
             }
             LogBridge.i(TAG, "源6(咪咕)：联网目录共 " + rows.size() + " 个频道，"
@@ -434,7 +429,7 @@ public final class MiguSourceLoader {
                 rows.add(new String[]{group, name, pid});
             }
             if (rows.isEmpty()) return "";
-            LogBridge.i(TAG, "assets 兜底频道表命中，共 " + rows.size() + " 个频道");
+            LogBridge.d(TAG, "assets 兜底频道表命中，共 " + rows.size() + " 个频道");
             return buildM3u(rows);
         } catch (IOException e) {
             LogBridge.w(TAG, "读取 assets 兜底失败：" + e.getMessage());

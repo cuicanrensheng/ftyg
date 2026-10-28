@@ -313,6 +313,22 @@ Date.prototype.Format = function (fmt) {
     return fmt;
 }
 function getvid(URl) {
+    // 【2026-10-27 修复】原实现只取页面里**第一个** "vid":" 字段 —— 那是腾讯页面的
+    // 「推荐视频」vid（实测 v.qq.com/x/cover/<cover>/<vid>.html 页面里唯一的 "vid":" 值
+    // 是 s00242sxrne，与当前视频无关），导致 getQqUrl 拿错 vid → 腾讯返回
+    // code=62.6「这个视频被外星人劫走」→ 插件输出 error://qq_empty → 线路判不可达。
+    //
+    // 正确做法：**优先从 URL 路径提取 vid**（腾讯 URL 结构固定 /x/cover/<cover>/<vid>.html），
+    // 页面解析仅作兜底，且必须与 URL 提取到的 vid 一致才采纳（避免再次取到推荐视频）。
+    var urlVid = "";
+    try {
+        var m = String(URl).match(/\/([a-zA-Z0-9]{6,20})\.html/i);
+        if (m) urlVid = m[1];
+    } catch (e) {}
+    if (urlVid) {
+        return urlVid;
+    }
+    // 兜底：页面解析（仅当 URL 里提取不到时才用）
     var cont = getUrlContent(URl);
     if (cont.indexOf("style/404.css") > 0) {
         return "";

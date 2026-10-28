@@ -123,11 +123,11 @@ public class BootStartManager {
         }
         final int n = sRecoveryCount.get();
         if (n >= MAX_RECOVERY_PER_BOOT) {
-            LogBridge.i(TAG, "【自启兜底】补拉次数已达上限 " + MAX_RECOVERY_PER_BOOT + " 次，放弃");
+            LogBridge.d(TAG, "【自启兜底】补拉次数已达上限 " + MAX_RECOVERY_PER_BOOT + " 次，放弃");
             return false;
         }
         sRecoveryCount.incrementAndGet();
-        LogBridge.i(TAG, "【自启兜底】确认 App 不在前台，补拉第 " + (n + 1) + " 次");
+        LogBridge.d(TAG, "【自启兜底】确认 App 不在前台，补拉第 " + (n + 1) + " 次");
         return true;
     }
 
@@ -139,11 +139,11 @@ public class BootStartManager {
     // ==================================================================
     // 【2026-10-13 自启埋点】记录"本次由哪条路径拉起 / 闸门是否放行"
     //
-    //   背景：bootlog 原先只记广播链路（BootReceiver 收到什么 action），而
+    //   背景：原先只记广播链路（BootReceiver 收到什么 action），而
     //   JobScheduler（BootJobService）与 sticky 前台服务（BootStartForegroundService）
     //   这两条路径**完全没有记录** —— 事后无法判断"自启到底是哪条路径拉起的、
     //   有没有被闸门拦住"，也就没法定位"偶尔自启失效"。
-    //   以下埋点补齐这一环，写 bootlog（持久化文件，不受 9527 环形缓冲影响）+ 9527 日志。
+    //   以下埋点补齐这一环，统一写 9527 日志（boot_logs.txt 文件旁路已于 2026-10-28 删除）。
     // ==================================================================
 
     /**
@@ -156,10 +156,6 @@ public class BootStartManager {
     public static void noteLaunchSource(Context context, String source, String detail) {
         String line = "来源=" + source + (detail == null || detail.isEmpty() ? "" : " | " + detail);
         LogBridge.i(TAG, "【自启埋点】" + line);
-        try {
-            BootReceiver.writeBootLog(context, "【自启埋点】" + line);
-        } catch (Throwable ignored) {
-        }
     }
 
     /**
@@ -284,12 +280,9 @@ public class BootStartManager {
                     || (brand != null && (brand.toLowerCase(Locale.ROOT).contains("skyworth")
                                           || brand.toLowerCase(Locale.ROOT).contains("coocaa")))) {
                 LogBridge.w(TAG, "【自启】检测到创维/酷开系统，需手动开启自启");
-                BootReceiver.writeBootLog(context, "checkBootStatus: 检测到创维/酷开系统，需系统自启白名单授权");
                 return BootStatus.SYSTEM_RESTRICTED;
             }
         }
-        LogBridge.d(TAG, "【自启】状态检测：正常");
-        BootReceiver.writeBootLog(context, "checkBootStatus: 状态正常，广播接收组件可用");
         return BootStatus.NORMAL;
     }
 
@@ -332,10 +325,8 @@ public class BootStartManager {
                     .setPositiveButton("知道了", null)
                     .show();
             LogBridge.d(TAG, "【自启】已显示系统自启授权引导");
-            BootReceiver.writeBootLog(context, "showBootGuideDialog: 已引导用户在系统设置中授权自启");
         } catch (Exception e) {
             LogBridge.w(TAG, "【自启】显示引导对话框失败：" + e.getMessage());
-            BootReceiver.writeBootLog(context, "showBootGuideDialog 失败: " + e.getMessage());
         }
     }
 
@@ -376,27 +367,21 @@ public class BootStartManager {
                     .setMessage(sb.toString())
                     .setPositiveButton("知道了", null)
                     .show();
-            LogBridge.d(TAG, "【自启】已显示状态详情");
-            BootReceiver.writeBootLog(context, "showBootStatusDialog: 已显示自启状态详情");
         } catch (Exception e) {
             LogBridge.w(TAG, "【自启】显示状态对话框失败：" + e.getMessage());
-            BootReceiver.writeBootLog(context, "showBootStatusDialog 失败: " + e.getMessage());
         }
     }
 
     public void testBootAutoStart() {
         LogBridge.d(TAG, "【自启】开始测试自启功能");
-        BootReceiver.writeBootLog(context, "testBootAutoStart: 手动测试，发送 BOOT_COMPLETED 广播");
         try {
             Intent intent = new Intent(Intent.ACTION_BOOT_COMPLETED);
             intent.setComponent(new ComponentName(context, BootReceiver.class));
             context.sendBroadcast(intent);
             Toast.makeText(context, "已发送开机广播测试\n\n请观察应用是否会重新启动", Toast.LENGTH_LONG).show();
             LogBridge.d(TAG, "【自启】测试广播已发送");
-            BootReceiver.writeBootLog(context, "testBootAutoStart: BOOT_COMPLETED 测试广播已发送");
         } catch (Exception e) {
             LogBridge.w(TAG, "【自启】测试失败：" + e.getMessage());
-            BootReceiver.writeBootLog(context, "testBootAutoStart 发送失败: " + e.getMessage());
             Toast.makeText(context, "测试失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
@@ -404,7 +389,6 @@ public class BootStartManager {
     public void toggleBoot(boolean isChecked, TextView tvStatus) {
         sp.edit().putBoolean(KEY_BOOT_AUTO_START, isChecked).apply();
         LogBridge.d(TAG, "【设置】开机自启" + (isChecked ? "已开启" : "已关闭"));
-        BootReceiver.writeBootLog(context, "toggleBoot: 用户" + (isChecked ? "开启" : "关闭") + "应用内自启开关");
         updateBootStatusText(tvStatus);
         if (isChecked) {
 
@@ -415,7 +399,6 @@ public class BootStartManager {
                 } else {
                     context.startService(svc);
                 }
-                BootReceiver.writeBootLog(context, "toggleBoot: 已启动常驻保活服务");
             } catch (Throwable t) {
                 LogBridge.w(TAG, "启动保活服务失败: " + t.getMessage());
             }
@@ -430,7 +413,6 @@ public class BootStartManager {
 
             try {
                 context.stopService(new Intent(context, BootStartForegroundService.class));
-                BootReceiver.writeBootLog(context, "toggleBoot: 已停止常驻保活服务");
             } catch (Throwable t) {
                 LogBridge.w(TAG, "停止保活服务失败: " + t.getMessage());
             }

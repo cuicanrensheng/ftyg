@@ -35,7 +35,7 @@ public class AppConfig {
         //   否则启动会一直卡在拉取一个死地址上。
         if (v != null && v.startsWith("kvm4://")) {
             appSp.edit().remove("custom_live_url").apply();
-            LogBridge.i("AppConfig", "【源8 已移除】清除遗留自定义直播源: " + v);
+            LogBridge.d("AppConfig", "【源8 已移除】清除遗留自定义直播源: " + v);
             return null;
         }
         return v;

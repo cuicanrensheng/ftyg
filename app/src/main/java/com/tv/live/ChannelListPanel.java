@@ -94,6 +94,10 @@ public class ChannelListPanel extends LinearLayout {
     private FavoriteLookup favLookup;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
+    /** 【2026-10-27 切台提速】高亮预热防抖：用户上下浏览频道时，延迟预热获焦频道的播放地址。 */
+    private Runnable mPrewarmRunnable;
+    private String mLastPrewarmUrl;
+
     private final List<String> groups = new ArrayList<>();
     private String activeGroup = "全部";
     private boolean closed;
@@ -142,7 +146,7 @@ public class ChannelListPanel extends LinearLayout {
     private final ViewTreeObserver.OnGlobalFocusChangeListener focusGuard =
             (oldF, newF) -> {
                 if (closed) return;
-                LogBridge.i(TAG, "焦点 " + describe(oldF) + " → " + describe(newF));
+                LogBridge.d(TAG, "焦点 " + describe(oldF) + " → " + describe(newF));
                 if (newF != null && isDescendantOf(newF, this)) {
                     lastFocusedInside = newF;
                     return;
@@ -157,7 +161,7 @@ public class ChannelListPanel extends LinearLayout {
                     }
                     if (back == null) return;
                     boolean ok = back.requestFocus();
-                    LogBridge.i(TAG, "焦点被清空/越界 → 拉回 " + describe(back) + " 成功=" + ok);
+                    LogBridge.d(TAG, "焦点被清空/越界 → 拉回 " + describe(back) + " 成功=" + ok);
                 });
             };
 
@@ -220,7 +224,7 @@ public class ChannelListPanel extends LinearLayout {
             set.add(g);
         }
         groups.addAll(set);
-        LogBridge.i(TAG, "频道列表分组共 " + groups.size() + " 个：" + groups);
+        LogBridge.d(TAG, "频道列表分组共 " + groups.size() + " 个：" + groups);
     }
 
     private boolean isEmpty(String s) {
@@ -341,7 +345,6 @@ public class ChannelListPanel extends LinearLayout {
         restyleGroups();
         restyleRows();
         ensureGroupVisible();
-        LogBridge.i(TAG, "切换分组：" + g + "（分组列焦点 idx=" + groupFocusIdx + "），右列重建");
     }
 
     /** 只重刷分组样式，不重建视图（重建会把焦点所有者删掉 → 焦点掉到控制栏） */
@@ -519,7 +522,7 @@ public class ChannelListPanel extends LinearLayout {
                 }
             }
         }
-        LogBridge.i(TAG, "频道列表 " + activeGroup + " 共 " + filtered.size()
+        LogBridge.d(TAG, "频道列表 " + activeGroup + " 共 " + filtered.size()
                 + " 台（双栏，随焦点滚动），保留焦点行=" + keepIdx
                 + "，构建耗时=" + (System.currentTimeMillis() - t0) + "ms");
 
@@ -533,7 +536,6 @@ public class ChannelListPanel extends LinearLayout {
                 if (rows.get(want).requestFocus()) {
                     final int y = Math.max(0, want * rowPitch() - rowPitch());
                     listScroll.post(() -> listScroll.scrollTo(0, y));
-                    LogBridge.i(TAG, "分片构建完成 → 定位到目标行[" + want + "]");
                 }
             }
         }
@@ -579,7 +581,7 @@ public class ChannelListPanel extends LinearLayout {
         int i = Math.max(0, Math.min(idx, rows.size() - 1));
         lastRowIdx = i;
         boolean ok = rows.get(i).requestFocus();
-        LogBridge.i(TAG, "聚焦频道行[" + i + "] 成功=" + ok);
+        LogBridge.d(TAG, "聚焦频道行[" + i + "] 成功=" + ok);
     }
 
     /** 在分组列内上下移动"虚拟焦点"（越界钳在首/末个） */
@@ -589,7 +591,7 @@ public class ChannelListPanel extends LinearLayout {
         groupFocusIdx = Math.max(0, Math.min(groupFocusIdx + delta, tabViews.size() - 1));
         restyleGroups();
         restyleRows();
-        LogBridge.i(TAG, "分组列焦点 → " + describe(tabViews.get(groupFocusIdx)));
+        LogBridge.d(TAG, "分组列焦点 → " + describe(tabViews.get(groupFocusIdx)));
     }
 
     /** 焦点切到左侧分组列（Android 焦点仍留在频道行上，只切换绘制区） */
@@ -599,7 +601,7 @@ public class ChannelListPanel extends LinearLayout {
         groupFocusIdx = idx >= 0 ? idx : Math.max(0, Math.min(groupFocusIdx, tabViews.size() - 1));
         restyleGroups();
         restyleRows();
-        LogBridge.i(TAG, "焦点进入分组列：" + describe(tabViews.get(groupFocusIdx)));
+        LogBridge.d(TAG, "焦点进入分组列：" + describe(tabViews.get(groupFocusIdx)));
     }
 
     /** 焦点切回右侧频道列（光标行保持原来的金色焦点态） */
@@ -607,7 +609,7 @@ public class ChannelListPanel extends LinearLayout {
         focusZone = 1;
         restyleGroups();
         restyleRows();
-        LogBridge.i(TAG, "焦点回到频道列，第 " + (lastRowIdx + 1) + " 行");
+        LogBridge.d(TAG, "焦点回到频道列，第 " + (lastRowIdx + 1) + " 行");
     }
 
     /** 焦点控件描述（类名 + 文案），用于定位焦点问题 */
@@ -658,7 +660,7 @@ public class ChannelListPanel extends LinearLayout {
     private void handleNav(int code) {
         View f = getRootView().findFocus();
         int ri = indexOf(rows, f);
-        LogBridge.i(TAG, "按键 code=" + code + " 焦点=" + describe(f)
+        LogBridge.d(TAG, "按键 code=" + code + " 焦点=" + describe(f)
                 + " 区=" + (focusZone == 0 ? "分组" : "频道") + " 行=" + ri);
 
         // Android 焦点被系统清空/落在弹窗外 → 先收回频道行，再继续处理本次按键。
@@ -733,7 +735,6 @@ public class ChannelListPanel extends LinearLayout {
             v.setNextFocusUpId((i == 0) ? v.getId() : list.get(i - 1).getId());
             v.setNextFocusDownId((i == list.size() - 1) ? v.getId() : list.get(i + 1).getId());
         }
-        LogBridge.i(TAG, "【频道列表】焦点已锁定在内（双栏：分组↔频道）");
     }
 
     private View makeRow(final Channel ch, final int index) {
@@ -768,6 +769,23 @@ public class ChannelListPanel extends LinearLayout {
             //   白描边会立刻消失（实测 BUG：左键进分组后按上下键又跳回金色频道行）。
             //   zone 只由方向键（handleNav）和点击分组（activateGroup）决定。
             styleRow((LinearLayout) v, isCur, has && focusZone == 1);
+            // 【2026-10-27 切台提速】行获焦（用户上下浏览频道列表）时，防抖预热该频道的播放地址：
+            //   DNS+TCP+TLS 提前建连进 KeepAliveCache，按 OK 起播时直连复用，压缩切台那
+            //   0.5~1.5s 的清单/首跳 gap。当前正在播的频道跳过（已暖好，无需重复）；
+            //   非 http 地址（如 juzhi:// 等协议）交给 prewarmStreamAsync 自行守卫。
+            if (has && !isCur) {
+                final String purl = ch.getPlayUrl();
+                if (purl != null && purl.startsWith("http")) {
+                    if (mPrewarmRunnable != null) handler.removeCallbacks(mPrewarmRunnable);
+                    final String urlToWarm = purl;
+                    mPrewarmRunnable = () -> {
+                        if (urlToWarm.equals(mLastPrewarmUrl)) return;
+                        mLastPrewarmUrl = urlToWarm;
+                        com.tv.live.MyApplication.prewarmStreamAsync(urlToWarm);
+                    };
+                    handler.postDelayed(mPrewarmRunnable, 350);
+                }
+            }
         });
         row.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
@@ -855,8 +873,6 @@ public class ChannelListPanel extends LinearLayout {
         post(this::capBodyHeight);
         // 打开即定位到「正在播放的频道」那一行（找不到才退回第一行）
         focusCurrentRowWithRetry(0);
-        LogBridge.i(TAG, "频道列表显示（双栏/560dp），共" + allChannels.size()
-                + "台，准备定位当前播放频道");
     }
 
     /** 标题行 + 内边距 + 底部提示等固定占用（dp），用于精确算主体可用高度 */
@@ -880,7 +896,7 @@ public class ChannelListPanel extends LinearLayout {
         if (lp.height != h) {
             lp.height = h;
             body.setLayoutParams(lp);
-            LogBridge.i(TAG, "弹窗主体高度=" + h + "px（上限=" + maxBody + "px，内容=" + need + "px）");
+            LogBridge.d(TAG, "弹窗主体高度=" + h + "px（上限=" + maxBody + "px，内容=" + need + "px）");
         }
     }
 
@@ -896,7 +912,7 @@ public class ChannelListPanel extends LinearLayout {
         if (attempt < 8) {
             postDelayed(() -> focusCurrentRowWithRetry(attempt + 1), 150);
         } else {
-            LogBridge.w(TAG, "打开后未能把焦点定位到当前频道行");
+            LogBridge.d(TAG, "打开后未能把焦点定位到当前频道行");
         }
     }
 
@@ -905,7 +921,7 @@ public class ChannelListPanel extends LinearLayout {
         if (rows.isEmpty()) return;
         int i = Math.max(0, Math.min(lastRowIdx, rows.size() - 1));
         boolean ok = rows.get(i).requestFocus();
-        LogBridge.i(TAG, "焦点被清空/越界 → 拉回频道行[" + i + "] 成功=" + ok);
+        LogBridge.d(TAG, "焦点被清空/越界 → 拉回频道行[" + i + "] 成功=" + ok);
     }
 
     /** 定位并聚焦「正在播放」的频道；无匹配时聚焦第一行 */
@@ -938,7 +954,7 @@ public class ChannelListPanel extends LinearLayout {
             // 避免"焦点到了但行还在可视区外"。
             final int y = Math.max(0, idx * rowPitch() - rowPitch());
             listScroll.post(() -> listScroll.scrollTo(0, y));
-            LogBridge.i(TAG, "已定位到" + (current == null ? "第一行（无正在播放频道）"
+            LogBridge.d(TAG, "已定位到" + (current == null ? "第一行（无正在播放频道）"
                     : "正在播放频道：第" + (idx + 1) + " 行 " + current.getName()));
         }
         return ok;

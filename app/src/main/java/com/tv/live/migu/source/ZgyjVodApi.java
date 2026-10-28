@@ -153,7 +153,7 @@ public final class ZgyjVodApi {
         if (!isZgyjVodUrl(zgyjUrl)) return null;
         String payload = payloadOf(zgyjUrl);
         if (TextUtils.isEmpty(payload)) {
-            LogBridge.w(TAG, "zgyj_vod 载荷为空：" + zgyjUrl);
+            LogBridge.i(TAG, "zgyj_vod 载荷为空：" + zgyjUrl);
             return null;
         }
 
@@ -192,7 +192,6 @@ public final class ZgyjVodApi {
                 return null;
             }
             Result r = new Result(playUrl, token, ts);
-            LogBridge.i(TAG, "GITV 鉴权命中 → " + r);
             return r;
         } catch (Throwable t) {
             LogBridge.w(TAG, "GITV 鉴权响应解析失败："
@@ -258,7 +257,7 @@ public final class ZgyjVodApi {
             }
             return sb.toString();
         } catch (Throwable t) {
-            LogBridge.w(TAG, "SHA-256 不可用：" + t.getMessage());
+            LogBridge.i(TAG, "SHA-256 不可用：" + t.getMessage());
             return "";
         }
     }

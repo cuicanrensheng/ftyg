@@ -127,6 +127,13 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
     private long bytesToRead;
     private long bytesRead;
     private int responseCode = -1;
+    /** 【2026-10-28 四件套合并】响应类型与建连起点，供 close() 打一条汇总行 */
+    private String respContentType = "";
+    /** 【2026-10-28】请求 URL 尾段，替代原「请求链接」整行 */
+    private String reqTail = "";
+    /** 【2026-10-28】最近一次请求的完整 URL，错误行统一补在尾巴上 */
+    private String lastUriStr = "";
+    private long tOpenStartMs = 0;
     private String currentChannelName = "";
 
     /**
@@ -177,30 +184,41 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
         return "<font color='#FF0000'>" + text + "</font>";
     }
 
-    private void printLog(boolean isError, String msg) {
-        String finalMsg = "[" + getTimeStr() + "] " + msg;
-        if (isError) {
-            // 同一失败消息 60s 内只打一条 E 级（中继不可达时探测会周期重试，避免刷屏），
-            // 后续降级为 D 级。map 有界防增长（key 含端口/地址，目标集合有限）。
-            long now = System.currentTimeMillis();
-            Long last = LAST_FAIL_LOG.get(msg);
-            if (last != null && now - last < 60000L) {
-                LogBridge.d(TAG, finalMsg);
-                return;
-            }
-            if (LAST_FAIL_LOG.size() > 32) LAST_FAIL_LOG.clear();
-            LAST_FAIL_LOG.put(msg, now);
-            LogBridge.e(TAG, finalMsg);
-            LogCollector.getInstance().error(TAG, msg);
-        } else {
+    /** 【2026-10-28】Content-Type 压缩成短标签，供单行汇总使用 */
+    private String shortType(String ct) {
+        if (ct == null || ct.isEmpty()) return "-";
+        String t = ct.toLowerCase(java.util.Locale.ROOT);
+        if (t.contains("mpegurl")) return "m3u8";
+        if (t.contains("video/mp2t") || t.contains("video/mpeg")) return "ts";
+        if (t.contains("mp4")) return "mp4";
+        if (t.contains("octet-stream")) return "bin";
+        int slash = t.indexOf('/');
+        String sub = slash >= 0 ? t.substring(slash + 1) : t;
+        int semi = sub.indexOf(';');
+        if (semi > 0) sub = sub.substring(0, semi);
+        return sub.length() > 12 ? sub.substring(0, 12) : sub;
+    }
 
-            if (BuildConfig.IS_DEBUG) {
-                // 【2026-10-13 日志双写修复】同一事件此前同时写 LogBridge.d（debug）+ LogCollector.network（network），
-                // 两者都进 9527 同一环形缓冲 → 每条业务事件固定双行，RedirectHttp 一个 Tag 占日志总量 74%。
-                // 保留 network（类型即"网络请求"，前端"网络"分组依赖它），去掉重复的 debug 行。
-                LogCollector.getInstance().network(TAG, msg);
-            }
+    private void printLog(boolean isError, String msg) {
+        // 【2026-10-28 只留错误】正常 HTTP 流程（请求成功/重定向/汇总/重定向落地）一律不记，
+        //   只保留错误与告警；错误行统一补全「频道 + 完整 URL」，保证单条即可定位。
+        if (!isError) return;
+        // 同一失败消息 60s 内只打一条（中继不可达时探测会周期重试，避免刷屏）；map 有界防增长
+        long now60 = System.currentTimeMillis();
+        Long lastSame = LAST_FAIL_LOG.get(msg);
+        if (lastSame != null && now60 - lastSame < 60000L) return;
+        if (LAST_FAIL_LOG.size() > 64) LAST_FAIL_LOG.clear();
+        LAST_FAIL_LOG.put(msg, now60);
+        // 历史遗留的 HTML 着色标签对 9527 无意义，去掉
+        if (msg != null) msg = msg.replaceAll("</?font[^>]*>", "");
+        String finalMsg = "[" + getTimeStr() + "] " + msg;
+        if (msg != null && !msg.contains("url=") && lastUriStr != null && !lastUriStr.isEmpty()) {
+            finalMsg = finalMsg + " | url=" + lastUriStr;
         }
+        if (!currentChannelName.isEmpty() && (msg == null || !msg.contains(currentChannelName))) {
+            finalMsg = currentChannelName + " " + finalMsg;
+        }
+        LogCollector.getInstance().error(TAG, finalMsg);
     }
 
     public void setChannelName(String channelName) {
@@ -255,6 +273,16 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
                     HttpDataSource.HttpDataSourceException.TYPE_OPEN);
             }
             long tOpen0 = android.os.SystemClock.elapsedRealtime();
+            tOpenStartMs = tOpen0;
+            lastUriStr = dataSpec.uri.toString();
+            {
+                String u = dataSpec.uri.toString();
+                int q = u.indexOf('?');
+                if (q > 0) u = u.substring(0, q);
+                int sl = u.lastIndexOf('/');
+                reqTail = sl >= 0 ? u.substring(sl) : u;
+                if (reqTail.length() > 28) reqTail = reqTail.substring(reqTail.length() - 28);
+            }
             // 【2026-09-29 虎牙 CDN 403 抖动专项】连接 + 取响应码放进重试循环：
             // 虎牙 CDN 对同一条 m3u8 的 403/404/5xx 是随机抖动（同一 URL 前后都能 200），
             // 直接上抛会让播放器报错、上层清缓存重解析 → "播几秒卡一下再重播"。
@@ -300,12 +328,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
                 connection = null;
                 sleepQuietly(delay);
             }
-            // 【本地调试】建连/响应头耗时仅 debug 包打印，release 不刷屏（每分片都会打）。
-            if (BuildConfig.IS_DEBUG) {
-                long tNow = android.os.SystemClock.elapsedRealtime();
-                LogCollector.getInstance().info(TAG, (currentChannelName.isEmpty() ? "" : currentChannelName + " ")
-                        + "open 耗时: 建连=" + (tNow - tOpen0) + "ms 合计=" + (tNow - tOpen0) + "ms");
-            }
+            // 【2026-10-28 四件套合并】原「open 耗时」独立 info 行已并入 close() 的一条汇总行。
 
             // 【最终地址回传】原生跟随模式下由系统完成跳转，这里把"真实落地地址"交给上层缓存，
             // 下次起播/重连直接用它，避免每个分片、每次重连都再解析一遍。
@@ -331,11 +354,9 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
                 long contentLength = getContentLength(connection);
                 String contentType = connection.getContentType();
                 String contentEncoding = connection.getContentEncoding();
-                String responseInfo = "响应: HTTP " + responseCode
-                    + ", Content-Type: " + (contentType != null ? contentType : "unknown")
-                    + ", Content-Length: " + (contentLength != C.LENGTH_UNSET ? contentLength : "chunked")
-                    + (contentEncoding != null ? ", Encoding: " + contentEncoding : "");
-                printLog(false, responseInfo);
+                // 【2026-10-28 四件套合并】不再单独打「响应」行，摘要留到 close() 汇总。
+                respContentType = (contentType != null ? contentType : "unknown");
+                if (contentEncoding != null) respContentType += "/" + contentEncoding;
             }
 
             if (responseCode < 200 || responseCode > 299) {
@@ -405,7 +426,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             bytesRead = 0;
             opened = true;
             transferStarted(dataSpec);
-            printLog(false, "连接成功，开始传输，预期字节数: " + (bytesToRead != C.LENGTH_UNSET ? bytesToRead : "未知"));
+            // 【2026-10-28 四件套合并】「连接成功，开始传输」已删，字节数由 close() 汇总行给出。
 
             // ⚠️【2026-09-16 越界防护】position 超过资源实际长度时（越界 seek / CDN 长度与
             //   moov 在尾部的 MP4 不匹配），contentLength - position 会算出**负数**。
@@ -498,7 +519,8 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
         final long MAX_TOTAL_DELAY = 15000;
 
         String prefix = TextUtils.isEmpty(currentChannelName) ? "" : (currentChannelName + " ");
-        printLog(false, prefix + "请求链接: " + originalUrl);
+        // 【2026-10-28 合并】「请求链接」独立行已删（与 close() 汇总行重复），
+        //   URL 尾段（index.m3u8 / 179314354.ts）随汇总行一起输出，见 open() 里的 reqTail。
 
         // 【原生跟随模式】SDK 已解析出直连流地址（虎牙等）：不再自己解析重定向，
         // 交给 HttpURLConnection 在系统层跟随 3xx。省掉每跳 disconnect+重建+重设头，
@@ -526,7 +548,7 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             long tReq1 = android.os.SystemClock.elapsedRealtime();
             // 冷启动诊断：单跳"建连+响应"耗时，仅 debug 包打印（避免 release 每分片刷屏）
             if (BuildConfig.IS_DEBUG && (tReq1 - tReq0 > 200 || redirectCount > 0)) {
-                LogCollector.getInstance().info(TAG, prefix + "单跳建连+响应 " + (tReq1 - tReq0)
+                LogCollector.getInstance().debug(TAG, prefix + "单跳建连+响应 " + (tReq1 - tReq0)
                         + "ms (第" + (redirectCount + 1) + "跳) url=" + currentUrl);
             }
             boolean isRedirect = (respCode == 301 || respCode == 302
@@ -712,7 +734,13 @@ public class RedirectLoggingHttpDataSource extends BaseDataSource implements Htt
             transferEnded();
 
             if (bytesRead > 0) {
-                printLog(false, "传输完成，共读取 " + bytesRead + " 字节 (" + (bytesRead / 1024) + " KB)");
+                // 【2026-10-28 四件套合并】每请求只留这一条：频道 + 状态码 + 类型 + 字节 + 耗时
+                long cost = tOpenStartMs > 0 ? (android.os.SystemClock.elapsedRealtime() - tOpenStartMs) : -1;
+                printLog(false, (currentChannelName.isEmpty() ? "" : currentChannelName + " ")
+                        + "HTTP " + responseCode + " " + shortType(respContentType)
+                        + " " + bytesRead + "B" + (bytesRead >= 1024 ? "(" + (bytesRead / 1024) + "KB)" : "")
+                        + (cost >= 0 ? " 耗时=" + cost + "ms" : "")
+                        + " " + reqTail);
             }
             closeConnectionQuietly();
         }

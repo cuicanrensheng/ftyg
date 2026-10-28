@@ -262,12 +262,9 @@ public final class RybUrlResolver {
                 sInfoCache.put(slug, info);
                 // 【2026-10-19】抓到即落盘：下次启动/下次进 EPG 无需再联网
                 saveDiskAsync();
-                LogBridge.i(TAG, "详情解析成功 slug=" + slug + " 标题=" + info.title
-                        + " 线路=" + info.lineCount()
-                        + " 首线集数=" + info.lines.get(0).labels.size());
                 return info;
             }
-            LogBridge.w(TAG, "详情解析：未找到 PLAY_SOURCES slug=" + slug + " htmlLen=" + html.length());
+            LogBridge.i(TAG, "详情解析：未找到 PLAY_SOURCES slug=" + slug + " htmlLen=" + html.length());
             sFailAt.put(slug, System.currentTimeMillis());
             return null;
         }
@@ -325,7 +322,6 @@ public final class RybUrlResolver {
                         n++;
                     }
                 }
-                LogBridge.i(TAG, "集数磁盘缓存已加载 " + n + " 部（文件 " + f.length() + " 字节）");
             } catch (Throwable t) {
                 LogBridge.w(TAG, "集数磁盘缓存读取失败 " + t.getMessage());
             }
@@ -385,7 +381,6 @@ public final class RybUrlResolver {
                     java.io.File dst = new java.io.File(dir, DISK_FILE);
                     if (dst.exists()) dst.delete();
                     tmp.renameTo(dst);   // 原子替换，避免读到半截文件
-                    LogBridge.i(TAG, "集数磁盘缓存已写入 " + sInfoCache.size() + " 部");
                 } catch (Throwable t) {
                     LogBridge.w(TAG, "集数磁盘缓存写入失败 " + t.getMessage());
                 } finally {
@@ -600,7 +595,7 @@ public final class RybUrlResolver {
         String cacheKey = slug + "@" + src + "-" + ep;
         String[] hit = sUrlCache.get(cacheKey);
         if (hit != null && System.currentTimeMillis() - parseLong(hit[1]) < URL_TTL_MS) {
-            LogBridge.i(TAG, "命中解析缓存 " + cacheKey);
+            LogBridge.d(TAG, "命中解析缓存 " + cacheKey);
             return hit[0];
         }
 
@@ -623,7 +618,6 @@ public final class RybUrlResolver {
         if (TextUtils.isEmpty(url)) return null;
         sUrlCache.put(cacheKey, new String[]{url, String.valueOf(System.currentTimeMillis())});
         sLastResolvedUrl = url;
-        LogBridge.i(TAG, "解析成功 " + cacheKey + " -> " + url);
         return url;
     }
 
@@ -674,16 +668,16 @@ public final class RybUrlResolver {
         for (int step = 1; step < size; step++) {
             int idx = (cur + step) % size;
             String raw = SCHEME + slug + "@" + (idx + 1) + "-" + (ep + 1);
-            LogBridge.i(TAG, "失效换线：试第" + (idx + 1) + "条线路 slug=" + slug + " → " + raw);
+
             String url = resolve(raw);
             if (!TextUtils.isEmpty(url)) {
                 // 直接写选区（不清缓存：刚解析出的新 key 要保留，供同片后续集复用）
                 sSelectedLine.put(slug, idx);
-                LogBridge.i(TAG, "失效换线成功 slug=" + slug + " 第" + (cur + 1)
-                        + "条 → 第" + (idx + 1) + "条");
+
+
                 return raw;
             }
-            LogBridge.w(TAG, "失效换线：第" + (idx + 1) + "条线路不可用 slug=" + slug);
+
         }
         LogBridge.w(TAG, "失效换线失败：所有线路均不可用 slug=" + slug);
         return null;
@@ -697,7 +691,6 @@ public final class RybUrlResolver {
             if (key.startsWith(slug + "@")) sUrlCache.remove(key);
         }
         sInfoCache.remove(slug);
-        LogBridge.i(TAG, "已作废缓存 slug=" + slug);
     }
 
     private static long parseLong(String s) {

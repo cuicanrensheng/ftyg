@@ -76,11 +76,10 @@ public class SecurityCertificatePinner {
         mContext = context.getApplicationContext();
         mCertStore = mContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         loadCertPinsFromStorage();
-        LogBridge.i(TAG, "SSL证书管理器初始化完成，已存储 " + mCertPins.size() + " 个域名证书");
 
         if (mCertPins.isEmpty()) {
             mMode = VerificationMode.LEARN;
-            LogBridge.i(TAG, "首次启动，启用学习模式");
+            LogBridge.d(TAG, "首次启动，启用学习模式");
         } else {
             mMode = VerificationMode.WARN_ONLY;
             LogBridge.i(TAG, "已有证书数据，启用警告模式");
@@ -192,7 +191,7 @@ public class SecurityCertificatePinner {
         mLastVerificationTime = System.currentTimeMillis();
 
         if (certs == null || certs.length == 0) {
-            LogBridge.w(TAG, "证书链为空: " + hostname);
+            LogBridge.i(TAG, "证书链为空: " + hostname);
             return CertVerificationResult.FAIL;
         }
 
@@ -235,7 +234,7 @@ public class SecurityCertificatePinner {
 
                     LogBridge.w(TAG, "证书不匹配，但允许连接: " + hostname);
                     LogBridge.w(TAG, "  存储的证书: " + storedPins);
-                    LogBridge.w(TAG, "  当前证书: " + certPins);
+                    LogBridge.d(TAG, "  当前证书: " + certPins);
                     notifyCertChanged(hostname, storedPins, certPins, false);
                     return CertVerificationResult.WARNING;
                 } else if (mMode == VerificationMode.VERIFY) {

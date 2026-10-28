@@ -172,7 +172,6 @@ public final class AfhgrjSourceLoader {
                     triggerBackgroundRefresh(context);
                 }
             } else {
-                LogBridge.i(TAG, "源7(影视)：命中磁盘缓存，跳过抓取");
             }
             // 【2026-10-11 海报镜像】缓存里可能残留不可达图床域名（如 img.picbf.com），
             // 该路径不经过 normalizePoster，故在这里对整段 M3U 文本做一次主机重写。
@@ -228,7 +227,7 @@ public final class AfhgrjSourceLoader {
 
                 if (System.currentTimeMillis() > deadline) {
                     hitDeadline = true;
-                    LogBridge.w(TAG, "源7(影视)：已达整体截止时间 " + FETCH_DEADLINE_MS
+                    LogBridge.d(TAG, "源7(影视)：已达整体截止时间 " + FETCH_DEADLINE_MS
                             + "ms，提前结束抓取，使用部分结果");
                     break groupsLoop;
                 }
@@ -237,12 +236,12 @@ public final class AfhgrjSourceLoader {
 
                 String html = getText(url);
                 if (TextUtils.isEmpty(html)) {
-                    LogBridge.w(TAG, "源7(影视)：分组[" + gname + "]第" + pi + "页抓取失败 url=" + url);
+                    LogBridge.d(TAG, "源7(影视)：分组[" + gname + "]第" + pi + "页抓取失败 url=" + url);
                     continue;
                 }
                 Map<String, String[]> items = extractVods(html);
                 if (items.isEmpty()) {
-                    LogBridge.w(TAG, "源7(影视)：分组[" + gname + "]第" + pi + "页未解析到条目 url=" + url);
+
                     continue;
                 }
                 pageOkByGroup[gi]++;
@@ -278,8 +277,8 @@ public final class AfhgrjSourceLoader {
                 sb.append(AfhgrjUrlResolver.SCHEME).append(vodId).append("\n");
                 total++;
             }
-            LogBridge.i(TAG, "源7(影视)：分组[" + gname + "]抓到 " + groupItems.size()
-                    + " 部（" + pageOkByGroup[gi] + "/" + (GROUPS[gi].length - 1) + " 页）");
+
+
         }
 
         if (total == 0) {
@@ -297,15 +296,12 @@ public final class AfhgrjSourceLoader {
         } else if (!hadExistingCache) {
             // ③a 被截止时间截断，但本次抓取前本就没有任何旧缓存：写入部分结果，
             //     避免下次切回源7 又要从零重抓（有部分总比什么都没有强，下次能秒开）。
-            LogBridge.w(TAG, "源7(影视)：抓取被截止时间截断（部分结果），无旧缓存兜底，写入部分结果");
+            LogBridge.i(TAG, "源7(影视)：抓取被截止时间截断（部分结果），无旧缓存兜底，写入部分结果");
             writeDiskCache(context, m3u);
         } else {
             // ③a 被截止时间截断且已有更完整的旧缓存：跳过写入，保住旧缓存
-            LogBridge.w(TAG, "源7(影视)：抓取被截止时间截断（部分结果），跳过写磁盘缓存以免覆盖旧缓存");
+            LogBridge.i(TAG, "源7(影视)：抓取被截止时间截断（部分结果），跳过写磁盘缓存以免覆盖旧缓存");
         }
-        LogBridge.i(TAG, "源7(影视)：构建完成，共 " + total + " 部，成功分组 "
-                + groupOk + "/" + GROUPS.length
-                + (hitDeadline ? "（部分结果，已被截止时间截断）" : ""));
         return m3u;
     }
 
@@ -332,7 +328,6 @@ public final class AfhgrjSourceLoader {
                 @Override
                 public void run() {
                     try {
-                        LogBridge.i(TAG, "源7(影视)：后台刷新开始（陈旧缓存快路径触发）");
                         fetchAndCacheBlocking(appCtx);
                     } catch (Throwable t) {
                         LogBridge.w(TAG, "源7(影视)：后台刷新异常 " + t.getClass().getSimpleName()

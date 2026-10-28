@@ -81,10 +81,18 @@ final class RybHttp {
                 ResponseBody body = resp.body();
                 String text = body == null ? null : body.string();
                 // 【2026-10-19 性能日志】详情页/列表页耗时口径（源8 集数加载慢的定位依据）
-                LogBridge.i(TAG, "GET code=" + resp.code()
+                // 【2026-10-27 降噪】原来每个成功请求都打一条 info（实测 20 条/5 分钟，且带完整 url）。
+                // 改为：仅慢请求（≥2000ms）进 info 供 release 排障，常规请求降到 d。
+                final long cost = System.currentTimeMillis() - t0;
+                if (cost >= 2000L) {
+                    LogBridge.i(TAG, "GET 慢请求 code=" + resp.code()
                         + " 耗时=" + (System.currentTimeMillis() - t0) + "ms"
                         + " len=" + (text == null ? 0 : text.length())
                         + " url=" + url);
+                } else {
+                    LogBridge.d(TAG, "GET code=" + resp.code() + " 耗时=" + cost + "ms"
+                            + " len=" + (text == null ? 0 : text.length()) + " url=" + url);
+                }
                 return text;
             }
         } catch (Throwable t) {

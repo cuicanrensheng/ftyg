@@ -168,7 +168,7 @@ public class MiguCatchUpPanel extends LinearLayout {
         }
         activeDate = dates.get(0);   // 默认「今天」（列表首项）
         groupFocusIdx = 0;
-        LogBridge.i(TAG, "回看日期列共 " + dates.size() + " 天：" + dates + "（默认=" + activeDate + "）");
+        LogBridge.d(TAG, "回看日期列共 " + dates.size() + " 天：" + dates + "（默认=" + activeDate + "）");
     }
 
     // ==================== 构建（照搬 ChannelListPanel.build） ====================
@@ -278,7 +278,6 @@ public class MiguCatchUpPanel extends LinearLayout {
         focusZone = 0;
         loadPrograms();
         ensureGroupVisible();
-        LogBridge.i(TAG, "切换日期：" + d + "（日期列焦点 idx=" + groupFocusIdx + "）");
     }
 
     // ==================== 数据 ====================
@@ -338,7 +337,7 @@ public class MiguCatchUpPanel extends LinearLayout {
         rebuild(true);
         if (tvPage != null) tvPage.setText("共" + filtered.size() + "档");
         capBodyHeight();
-        LogBridge.i(TAG, "日期 " + date + " 共 " + filtered.size() + " 档");
+        LogBridge.d(TAG, "日期 " + date + " 共 " + filtered.size() + " 档");
     }
 
     // ==================== 列表 ====================
@@ -412,8 +411,6 @@ public class MiguCatchUpPanel extends LinearLayout {
                 }
             }
         }
-        LogBridge.i(TAG, "回看列表重建完成：共 " + filtered.size() + " 档，耗时="
-                + (System.currentTimeMillis() - t0) + "ms");
     }
 
     private void releaseListFocusHolder() {
@@ -567,7 +564,7 @@ public class MiguCatchUpPanel extends LinearLayout {
     private void handleNav(int code) {
         View f = getRootView().findFocus();
         int ri = indexOf(rows, f);
-        LogBridge.i(TAG, "按键 code=" + code + " 焦点=" + describe(f)
+        LogBridge.d(TAG, "按键 code=" + code + " 焦点=" + describe(f)
                 + " 区=" + (focusZone == 0 ? "日期" : "节目") + " 行=" + ri);
 
         if (ri < 0) {
@@ -639,7 +636,7 @@ public class MiguCatchUpPanel extends LinearLayout {
         int i = Math.max(0, Math.min(idx, rows.size() - 1));
         lastRowIdx = i;
         boolean ok = rows.get(i).requestFocus();
-        LogBridge.i(TAG, "聚焦回看行[" + i + "] 成功=" + ok);
+        LogBridge.d(TAG, "聚焦回看行[" + i + "] 成功=" + ok);
     }
 
     private void restoreRowFocus() {
@@ -732,7 +729,7 @@ public class MiguCatchUpPanel extends LinearLayout {
         groupScroll.post(() -> groupScroll.scrollTo(0, 0));
         loadPrograms();
         focusFirstRowWithRetry(0);
-        LogBridge.i(TAG, "回看弹窗显示（双栏/560dp）：" + channel.getName() + " tvId=" + tvId);
+        LogBridge.d(TAG, "回看弹窗显示（双栏/560dp）：" + channel.getName() + " tvId=" + tvId);
     }
 
     private void capBodyHeight() {

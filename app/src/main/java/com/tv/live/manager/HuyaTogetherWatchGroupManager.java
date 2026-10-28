@@ -61,7 +61,6 @@ public class HuyaTogetherWatchGroupManager {
             mCachedLiveListByPages.clear();
             mCachedLiveListTsByPages.clear();
         }
-        LogBridge.d(TAG, "【自研线路·共享列表】缓存已清空，下次强制重新拉取");
     }
 
     /**
@@ -243,7 +242,6 @@ public class HuyaTogetherWatchGroupManager {
             }
         }
         if (evicted != null) {
-            LogBridge.w(TAG, "闸门排队已满，丢弃最早的抓取请求");
             evicted.onDrop();
         }
         if (runNow) mExecutor.execute(wrapped);
@@ -329,20 +327,17 @@ public class HuyaTogetherWatchGroupManager {
                         saveGroupsToDisk(result);
                         int total = 0;
                         for (Group g : result) { if (g != null) total += g.channels.size(); }
-                        LogBridge.d(TAG, "⏱️【链路-自研线路】端到端总耗时 " + (System.currentTimeMillis() - t0)
-                                + "ms（TagList+推荐列表+各Tag翻页+SDK解析），分组=" + result.size() + " 频道=" + total);
+
+
                         postOnSuccess(listener, result);
                     } else {
-                        LogBridge.w(TAG, "⏱️【链路-自研线路】失败，总耗时 " + (System.currentTimeMillis() - t0) + "ms");
                         postOnError(listener, "获取分组失败（SDK 分类列表为空或超时）");
                     }
                 } catch (Throwable t) {
-                    LogBridge.w(TAG, "fetchAllGroups 异常: " + t.getMessage());
                     postOnError(listener, "获取分组异常");
                 }
             }
             @Override public void onDrop() {
-                LogBridge.w(TAG, "fetchAllGroups 排队溢出被丢弃");
             }
         });
     }
@@ -363,7 +358,6 @@ public class HuyaTogetherWatchGroupManager {
                         postOnSuccess(listener, channels);
                     }
                 } catch (Throwable t) {
-                    LogBridge.w(TAG, "fetchGroup(" + groupName + ") 异常: " + t.getMessage());
                     postOnError(listener, "获取分组异常");
                 }
             }
@@ -377,11 +371,9 @@ public class HuyaTogetherWatchGroupManager {
         long tTag = System.currentTimeMillis();
         Map<String, List<TagSpec>> byGroup = resolveSDKTagSpecsGrouped();
         if (byGroup == null) return null;
-        LogBridge.d(TAG, "⏱️【链路-自研线路】getTagList+解析Tag 阶段耗时 " + (System.currentTimeMillis() - tTag) + "ms");
 
         long tRec = System.currentTimeMillis();
         Map<String, List<Channel>> recommend = fetchRecommendGroupedBlocking();
-        LogBridge.d(TAG, "⏱️【链路-自研线路】推荐列表(getLiveList) 阶段耗时 " + (System.currentTimeMillis() - tRec) + "ms");
 
         // 【2026-10-25 起播保护】原来 5 个分组一把并发（GROUP_NAMES.length）。
         //   叠加每条线路内部 2 并发 → 启动瞬间十几个请求同时压上来，把播放器的 5.3MB 分片挤到饥饿，
@@ -409,7 +401,6 @@ public class HuyaTogetherWatchGroupManager {
                                 mergeChannels(g.channels, recommend.get(gName));
                             }
                         } catch (Throwable t) {
-                            LogBridge.w(TAG, "分组[" + gName + "]并行拉取异常: " + t.getMessage());
                         }
                         return g;
                     }
@@ -420,7 +411,6 @@ public class HuyaTogetherWatchGroupManager {
                 try {
                     groups.add(f.get(SDK_TAG_TIMEOUT_SEC + 5, TimeUnit.SECONDS));
                 } catch (Throwable t) {
-                    LogBridge.w(TAG, "分组并行拉取超时/中断: " + t.getMessage());
                 }
             }
             return groups;
@@ -526,7 +516,6 @@ public class HuyaTogetherWatchGroupManager {
             conn.setRequestProperty("Accept", "*/*");
             int code = conn.getResponseCode();
             if (code != 200) {
-                LogBridge.w(TAG, "【自研线路】HTTP " + code + " page=" + page);
                 return out;
             }
             InputStream is = conn.getInputStream();
@@ -542,7 +531,6 @@ public class HuyaTogetherWatchGroupManager {
             JSONObject data = root.optJSONObject("data");
             JSONArray datas = data == null ? null : data.optJSONArray("datas");
             if (datas == null) {
-                LogBridge.d(TAG, "【自研线路】page=" + page + " 无 datas 字段");
                 return out;
             }
             for (int i = 0; i < datas.length(); i++) {
@@ -570,9 +558,7 @@ public class HuyaTogetherWatchGroupManager {
                 info.gameId = room.optInt("gid", 0);
                 out.add(info);
             }
-            LogBridge.d(TAG, "【自研线路】page=" + page + " 解析出 " + out.size() + " 个房间");
         } catch (Throwable t) {
-            LogBridge.w(TAG, "【自研线路】拉取失败 page=" + page + " " + t.getMessage());
         } finally {
             if (conn != null) {
                 try {
@@ -619,8 +605,6 @@ public class HuyaTogetherWatchGroupManager {
         Long ts = mCachedLiveListTsByPages.get(wantPages);
         long age = now - (ts == null ? 0L : ts);
         if (cached != null && !cached.isEmpty() && age < LIVE_LIST_CACHE_MS) {
-            LogBridge.d(TAG, "【自研线路·共享列表】命中缓存(" + wantPages + "页档)，房间=" + cached.size()
-                    + "，年龄=" + age + "ms（省去重复翻页）");
             return cached;
         }
         synchronized (mListCacheLock) {
@@ -658,11 +642,7 @@ public class HuyaTogetherWatchGroupManager {
             if (!all.isEmpty()) {
                 mCachedLiveListByPages.put(wantPages, all);
                 mCachedLiveListTsByPages.put(wantPages, System.currentTimeMillis());
-                LogBridge.d(TAG, "【自研线路·共享列表】拉取完成（翻 " + wantPages + " 页，1-based），房间=" + all.size()
-                        + "（原始 " + rawCount + " 条）"
-                        + "，耗时=" + cost + "ms（后续同页数分组直接复用）");
             } else {
-                LogBridge.w(TAG, "【自研线路·共享列表】拉取为空（翻 " + wantPages + " 页），耗时=" + cost + "ms（不写缓存）");
             }
             return all;
         }
@@ -684,7 +664,6 @@ public class HuyaTogetherWatchGroupManager {
             }
         }
         if (allList.isEmpty()) return null;
-        LogBridge.d(TAG, "【推荐列表】原始频道数=" + allList.size());
 
         Map<String, List<Channel>> grouped = new LinkedHashMap<>();
         for (String g : GROUP_NAMES) grouped.put(g, new ArrayList<Channel>());
@@ -709,7 +688,6 @@ public class HuyaTogetherWatchGroupManager {
         }
         int total = 0;
         for (List<Channel> v : grouped.values()) total += v.size();
-        LogBridge.d(TAG, "【推荐列表】分类后频道数=" + total);
         if (total == 0) return null;
         return grouped;
     }
@@ -817,12 +795,8 @@ public class HuyaTogetherWatchGroupManager {
         List<com.tv.live.huya.HuyaLiveItem> allList = fetchAllLiveListShared(pages);
         if (allList != null && !allList.isEmpty()) {
             List<com.tv.live.huya.HuyaLiveItem> filtered = filterByGroup(allList, tag.groupName);
-            LogBridge.d(TAG, "【tag=" + tag.tagName + "】自研 HTTP 原始列表=" + allList.size()
-                    + "，本组过滤后=" + filtered.size());
             if (!filtered.isEmpty()) {
                 List<Channel> r = buildChannels(tag, filtered);
-                LogBridge.d(TAG, "⏱️【链路-自研线路】tag[" + tag.tagName + "] 拉取+解析 耗时 "
-                        + (System.currentTimeMillis() - tTagStart) + "ms，频道=" + (r == null ? 0 : r.size()));
                 return r;
             }
         }
@@ -832,9 +806,7 @@ public class HuyaTogetherWatchGroupManager {
         // 「虎牙其他」，若某组真的没内容（如「虎牙综艺」很少），全量回填会让同一批房间
         // 在 5 个组里重复出现，用户上下切换分组会看到大量重复频道。
         // 正确做法：本组过滤为空就返回 null，UI 侧显示「本组暂无频道」。
-        LogBridge.w(TAG, "【tag=" + tag.tagName + "】自研 HTTP 未过滤出本组房间（返回空，不做全量回填）");
-        LogBridge.d(TAG, "⏱️【链路-自研线路】tag[" + tag.tagName + "] 拉取+解析 耗时 "
-                + (System.currentTimeMillis() - tTagStart) + "ms，频道=0");
+
         return null;
     }
 
@@ -895,7 +867,7 @@ public class HuyaTogetherWatchGroupManager {
 
             }
         }
-        LogBridge.d(TAG, "【tag=" + tag.tagName + "(" + tag.tagId + ")】解析频道数=" + result.size());
+
         logLogoCoverage(tag.tagName, result);
         return result;
     }
@@ -917,7 +889,6 @@ public class HuyaTogetherWatchGroupManager {
         for (Map.Entry<String, List<TagSpec>> e : byGroup.entrySet()) {
             sb.append(e.getKey()).append('=').append(e.getValue().size()).append(' ');
         }
-        LogBridge.d(TAG, "【SDK→分组】分类分布: " + sb.toString().trim());
         return byGroup;
     }
 
@@ -930,7 +901,6 @@ public class HuyaTogetherWatchGroupManager {
             String groupName = GROUP_NAMES[i];
             result.add(new TagSpec(groupName, groupName, groupName));
         }
-        LogBridge.d(TAG, "【自研线路】分组规格数=" + result.size());
         return result;
     }
 
@@ -971,7 +941,6 @@ public class HuyaTogetherWatchGroupManager {
         for (Channel c : list) {
             if (c != null && !TextUtils.isEmpty(c.getLogoUrl())) withLogo++;
         }
-        LogBridge.d(TAG, "【台标覆盖】" + where + " 频道=" + list.size() + " 有台标=" + withLogo);
     }
 
     private static boolean isNumericString(String s) {
@@ -1057,12 +1026,10 @@ public class HuyaTogetherWatchGroupManager {
             for (Group g : groups) {
                 if (g != null) {
                     total += g.channels.size();
-                    LogBridge.d(TAG, "【缓存】分组[" + g.name + "]频道数=" + g.channels.size());
+
                 }
             }
-            LogBridge.d(TAG, "【缓存】已写入永久缓存，分组数=" + groups.size() + "，频道数=" + total + "，字节=" + data.length);
         } catch (Throwable t) {
-            LogBridge.w(TAG, "【缓存】写入失败：" + t.getMessage());
         }
     }
 
@@ -1112,10 +1079,8 @@ public class HuyaTogetherWatchGroupManager {
             if (groups.isEmpty()) return null;
             int total = 0;
             for (Group g : groups) total += g.channels.size();
-            LogBridge.d(TAG, "【缓存】已加载永久缓存，分组数=" + groups.size() + "，频道数=" + total);
             return groups;
         } catch (Throwable t) {
-            LogBridge.w(TAG, "【缓存】读取失败：" + t.getMessage());
             return null;
         } finally {
             if (br != null) try { br.close(); } catch (Exception ignored) {}

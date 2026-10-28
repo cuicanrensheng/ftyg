@@ -182,12 +182,12 @@ public final class NbMovieSourceLoader {
 
             JSONObject data = fetchPage(gkey);
             if (data == null) {
-                LogBridge.w(TAG, "分组[" + gname + "]抓取失败，跳过");
+                LogBridge.d(TAG, "分组[" + gname + "]抓取失败，跳过");
                 continue;
             }
             JSONArray modules = data.optJSONArray(modulesKey);
             if (modules == null || modules.length() == 0) {
-                LogBridge.w(TAG, "分组[" + gname + "]无 " + modulesKey + "，跳过");
+
                 continue;
             }
 
@@ -235,7 +235,7 @@ public final class NbMovieSourceLoader {
                     total++;
                 }
             }
-            LogBridge.i(TAG, "分组[" + gname + "]收录 " + (total - before) + " 部");
+
         }
 
         if (total == 0) {

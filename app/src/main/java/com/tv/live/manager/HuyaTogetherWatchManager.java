@@ -405,7 +405,6 @@ public class HuyaTogetherWatchManager {
         if (app != null) {
             return app.getApplicationContext();
         }
-        LogBridge.w(TAG, "MyApplication 实例尚未初始化，无法获取 Application Context");
         return null;
     }
 
@@ -429,7 +428,6 @@ public class HuyaTogetherWatchManager {
 
         // 【2026-09-24 提速】并发去重：已有一次拉取在途时跳过本次，由在途拉取统一回传
         if (!mFetching.compareAndSet(false, true)) {
-            LogBridge.d(TAG, "【一起看】已有拉取在途，跳过重复请求（避免双倍请求抢限流槽）");
             return;
         }
 
@@ -460,7 +458,7 @@ public class HuyaTogetherWatchManager {
                         List<TogetherWatchRoom> r = classifyRoomsByKeywords(fetchMovieRooms(), MOVIE_CATEGORY_KEYWORDS, "影视热播");
                         movieRef.set(r);
                         if (!r.isEmpty()) postPartial(listener, r);
-                    } catch (Exception e) { LogBridge.w(TAG, "电影分类异常: " + e.getMessage()); }
+                    } catch (Exception ignored) { }
                     finally { latch.countDown(); }
                 });
                 mCategoryExecutor.execute(() -> {
@@ -468,7 +466,7 @@ public class HuyaTogetherWatchManager {
                         List<TogetherWatchRoom> r = classifyRoomsByKeywords(fetchTvRooms(), TV_CATEGORY_KEYWORDS, "剧集追剧");
                         tvRef.set(r);
                         if (!r.isEmpty()) postPartial(listener, r);
-                    } catch (Exception e) { LogBridge.w(TAG, "剧集分类异常: " + e.getMessage()); }
+                    } catch (Exception ignored) { }
                     finally { latch.countDown(); }
                 });
                 mCategoryExecutor.execute(() -> {
@@ -476,7 +474,7 @@ public class HuyaTogetherWatchManager {
                         List<TogetherWatchRoom> r = classifyRoomsByKeywords(fetchAnimeRooms(), ANIME_CATEGORY_KEYWORDS, "动漫动画");
                         animeRef.set(r);
                         if (!r.isEmpty()) postPartial(listener, r);
-                    } catch (Exception e) { LogBridge.w(TAG, "动漫分类异常: " + e.getMessage()); }
+                    } catch (Exception ignored) { }
                     finally { latch.countDown(); }
                 });
                 mCategoryExecutor.execute(() -> {
@@ -484,7 +482,7 @@ public class HuyaTogetherWatchManager {
                         List<TogetherWatchRoom> r = classifyRoomsByKeywords(fetchVarietyRooms(), VARIETY_CATEGORY_KEYWORDS, "综艺娱乐");
                         varietyRef.set(r);
                         if (!r.isEmpty()) postPartial(listener, r);
-                    } catch (Exception e) { LogBridge.w(TAG, "综艺分类异常: " + e.getMessage()); }
+                    } catch (Exception ignored) { }
                     finally { latch.countDown(); }
                 });
 
@@ -498,11 +496,8 @@ public class HuyaTogetherWatchManager {
             } catch (Exception e) {
                 networkOk = false;
                 lastError = "网络异常：" + e.getMessage();
-                LogBridge.w(TAG, "网络请求异常，开始兜底：" + e.getMessage());
             }
 
-            LogBridge.d(TAG, "⏱️【链路-HTTP线路】HTTP下载+JSON解析+分类 阶段耗时 "
-                    + (System.currentTimeMillis() - tFetchStart) + "ms，房间=" + rooms.size());
 
             int animeCount = 0, varietyCount = 0;
             for (TogetherWatchRoom r : rooms) {
@@ -510,7 +505,6 @@ public class HuyaTogetherWatchManager {
                 if (r.category != null && r.category.equals("综艺娱乐")) varietyCount++;
             }
             if (animeCount < 5 || varietyCount < 5) {
-                LogBridge.w(TAG, "动漫/综艺频道过少（动漫=" + animeCount + ", 综艺=" + varietyCount + "），追加静态兜底");
                 rooms.addAll(getFallbackRooms());
             }
 
@@ -522,7 +516,6 @@ public class HuyaTogetherWatchManager {
                 if (rooms.size() >= MIN_ROOMS_FOR_FALLBACK) {
                     saveFallbackToDisk(rooms);
                 } else {
-                    LogBridge.w(TAG, "网络房间数过少（" + rooms.size() + " < " + MIN_ROOMS_FOR_FALLBACK + "），不覆盖永久兜底");
                 }
                 return;
             }
@@ -535,7 +528,6 @@ public class HuyaTogetherWatchManager {
                 if (rooms.size() >= MIN_ROOMS_FOR_FALLBACK) {
                     saveFallbackToDisk(rooms);
                 } else {
-                    LogBridge.w(TAG, "兜底后房间数过少（" + rooms.size() + " < " + MIN_ROOMS_FOR_FALLBACK + "），不覆盖永久兜底");
                 }
                 return;
             }
@@ -543,10 +535,8 @@ public class HuyaTogetherWatchManager {
             if (rooms.isEmpty() || rooms.size() < 10) {
                 List<TogetherWatchRoom> diskFb = loadFallbackFromDisk();
                 if (diskFb != null && !diskFb.isEmpty()) {
-                    LogBridge.d(TAG, "【兜底】启用本地永久兜底 " + FALLBACK_FILE + "，房间数=" + diskFb.size());
                     rooms = diskFb;
                 } else {
-                    LogBridge.w(TAG, "【兜底】本地永久兜底无数据，启用静态内置兜底");
                     if (rooms.isEmpty()) rooms = new ArrayList<>(getFallbackRooms());
                 }
             }
@@ -560,7 +550,6 @@ public class HuyaTogetherWatchManager {
             mLastFetchTime = now;
             postSuccess(listener, rooms);
             } catch (Throwable t) {
-                LogBridge.e(TAG, "一起看拉取异常: " + t.getMessage());
                 mFetching.set(false);
             }
         });
@@ -621,7 +610,7 @@ public class HuyaTogetherWatchManager {
                     List<TogetherWatchRoom> rooms = fetchBySubCategory(tmpId, categoryName);
                     if (rooms != null && !rooms.isEmpty()) merged.addAll(rooms);
                 } catch (Exception e) {
-                    LogBridge.d(TAG, "获取" + categoryName + "子分类失败: tmpId=" + tmpId + ", " + e.getMessage());
+
                 } finally {
                     long subCost = System.currentTimeMillis() - tSub;
                     if (subCost > catSlowestMs.get()) {
@@ -637,23 +626,16 @@ public class HuyaTogetherWatchManager {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        LogBridge.d(TAG, "⏱️【子分类埋点】" + categoryName + " 完成：子分类数=" + tmpIds.length
-                + "，总耗时=" + (System.currentTimeMillis() - tCatStart) + "ms"
-                + "，房间=" + merged.size()
-                + "，最慢子分类 tmpId=" + catSlowestId.get() + "(" + catSlowestMs.get() + "ms)"
-                + "（各子分类页数见上方逐条日志）");
         return merged;
     }
 
     private List<TogetherWatchRoom> fetchMovieRooms() throws IOException {
         List<TogetherWatchRoom> allRooms = fetchSubCategoriesParallel(MOVIE_TMP_IDS, "电影");
-        LogBridge.d(TAG, "电影类总共获取到 " + allRooms.size() + " 个房间");
         return filterAndSortRooms(deduplicateRooms(allRooms));
     }
 
     private List<TogetherWatchRoom> fetchTvRooms() throws IOException {
         List<TogetherWatchRoom> allRooms = fetchSubCategoriesParallel(TV_TMP_IDS, "剧集");
-        LogBridge.d(TAG, "剧集类总共获取到 " + allRooms.size() + " 个房间");
         return filterAndSortRooms(deduplicateRooms(allRooms));
     }
 
@@ -669,13 +651,9 @@ public class HuyaTogetherWatchManager {
                     animeCacheRooms.add(room);
                 }
             }
-            LogBridge.d(TAG, "cache API 返回 " + cacheRooms.size() + " 个房间，过滤出 "
-                    + animeCacheRooms.size() + " 个动漫房间");
             allRooms.addAll(animeCacheRooms);
         } catch (Exception e) {
-            LogBridge.d(TAG, "从cache获取动漫失败: " + e.getMessage());
         }
-        LogBridge.d(TAG, "动漫类总共获取到 " + allRooms.size() + " 个房间（去重前）");
         return filterAndSortRooms(deduplicateRooms(allRooms));
     }
 
@@ -709,13 +687,9 @@ public class HuyaTogetherWatchManager {
                     varietyCacheRooms.add(room);
                 }
             }
-            LogBridge.d(TAG, "cache API 返回 " + cacheRooms.size() + " 个房间，过滤出 "
-                    + varietyCacheRooms.size() + " 个综艺房间");
             allRooms.addAll(varietyCacheRooms);
         } catch (Exception e) {
-            LogBridge.d(TAG, "从cache获取综艺失败: " + e.getMessage());
         }
-        LogBridge.d(TAG, "综艺类总共获取到 " + allRooms.size() + " 个房间（去重前）");
         return filterAndSortRooms(deduplicateRooms(allRooms));
     }
 
@@ -832,7 +806,7 @@ public class HuyaTogetherWatchManager {
             } catch (IOException e) {
                 lastError = e;
                 int localCode = parseHttpCode(e);   // 本线程本轮请求的状态码，线程内局部，避免共享字段串台
-                LogBridge.d(TAG, tag + " 请求失败：" + e.getMessage());
+
                 if (localCode == 503 && attempt >= 2) {
                     // 连续 503：与旧逻辑一致，放弃重试，让上层 break 出翻页循环
                     throw e;
@@ -842,7 +816,7 @@ public class HuyaTogetherWatchManager {
                 }
                 // 退避梯度：503 → 1500ms×attempt，其他 → 1000ms×attempt
                 long delay = (localCode == 503) ? 1500L * attempt : 1000L * attempt;
-                LogBridge.d(TAG, tag + " 请求失败，延迟 " + delay + "ms 后重试 (" + attempt + "/" + MAX_RETRY + ")");
+
                 try {
                     Thread.sleep(delay);
                 } catch (InterruptedException ie) {
@@ -882,7 +856,6 @@ public class HuyaTogetherWatchManager {
         List<TogetherWatchRoom> cached = mCachedListRooms;
         long age = System.currentTimeMillis() - mCachedListTs;
         if (cached != null && !cached.isEmpty() && age < CACHE_LIST_TTL_MS) {
-            LogBridge.d(TAG, "【cache列表·共享】命中本类缓存，房间=" + cached.size() + "，年龄=" + age + "ms");
             return cached;
         }
         synchronized (mCacheListLock) {
@@ -897,8 +870,6 @@ public class HuyaTogetherWatchManager {
             if (fromLine2 != null && !fromLine2.isEmpty()) {
                 mCachedListRooms = fromLine2;
                 mCachedListTs = System.currentTimeMillis();
-                LogBridge.d(TAG, "【cache列表·共享】命中第二路已有共享列表（非阻塞 peek），房间="
-                        + fromLine2.size() + "，本轮无需自拉");
                 return fromLine2;
             }
 
@@ -910,10 +881,7 @@ public class HuyaTogetherWatchManager {
             if (all != null && !all.isEmpty()) {
                 mCachedListRooms = all;
                 mCachedListTs = System.currentTimeMillis();
-                LogBridge.d(TAG, "【cache列表·共享】自己并发拉取完成，房间=" + all.size()
-                        + "，页数≤" + pages + "，耗时=" + cost + "ms");
             } else {
-                LogBridge.w(TAG, "【cache列表·共享】自己并发拉取为空，耗时=" + cost + "ms（不写缓存）");
             }
             return all;
         }
@@ -933,7 +901,6 @@ public class HuyaTogetherWatchManager {
             if (raw == null || raw.isEmpty()) return null;
             return tryBuildFromLine2Raw(raw);
         } catch (Throwable t) {
-            LogBridge.w(TAG, "【cache列表·共享】peek 第二路列表失败（忽略，改自拉）：" + t.getMessage());
             return null;
         }
     }
@@ -981,14 +948,12 @@ public class HuyaTogetherWatchManager {
         // 先拉首页：既拿数据，也用它判断是否还有后续页
         FetchPage first = fetchCachePage(1, categoryName, pageSize);
         if (first == null || first.rooms.isEmpty()) {
-            LogBridge.d(TAG, "从Cache API获取到 0 个" + categoryName + "房间（首页为空）");
             return allRooms;
         }
         allRooms.addAll(first.rooms);
 
         // 首页不满一页 → 只有一页；否则并发拉 2..maxPages（对齐第二路 fetchAllLiveListShared 的做法）
         if (!first.hasMore || maxPages <= 1) {
-            LogBridge.d(TAG, "从Cache API获取到 " + allRooms.size() + " 个" + categoryName + "房间（单页）");
             return allRooms;
         }
 
@@ -1019,7 +984,6 @@ public class HuyaTogetherWatchManager {
             pagePool.shutdown();
         }
 
-        LogBridge.d(TAG, "从Cache API获取到 " + allRooms.size() + " 个" + categoryName + "房间");
         return allRooms;
     }
 
@@ -1047,7 +1011,6 @@ public class HuyaTogetherWatchManager {
             boolean hasMore = (datas != null && datas.length() >= pageSize);
             return new FetchPage(pageRooms, hasMore);
         } catch (Exception e) {
-            LogBridge.d(TAG, "Cache API请求/解析失败 p" + page + ": " + e.getMessage());
             return null;
         }
     }
@@ -1080,7 +1043,7 @@ public class HuyaTogetherWatchManager {
             if (profile <= 0) profile = roomNo;
             if (profile <= 0) profile = uid;
             if (profile <= 0 || profile > Integer.MAX_VALUE) {
-                LogBridge.d(TAG, "跳过无有效 profileRoom 的房间: uid=" + uid);
+
                 continue;
             }
             int roomId = (int) profile;
@@ -1096,7 +1059,7 @@ public class HuyaTogetherWatchManager {
             if (TextUtils.isEmpty(nickName)) nickName = "精彩节目";
 
             if ("精彩节目".equals(roomName) && "精彩节目".equals(nickName)) {
-                LogBridge.d(TAG, "过滤精彩节目占位: roomId=" + roomId);
+
                 continue;
             }
 
@@ -1140,7 +1103,6 @@ public class HuyaTogetherWatchManager {
             }
         }
         if (result.size() < rooms.size()) {
-            LogBridge.d(TAG, "去重后房间数: " + result.size() + " (原: " + rooms.size() + ")");
         }
         return result;
     }
@@ -1166,7 +1128,6 @@ public class HuyaTogetherWatchManager {
             return b.onlineCount - a.onlineCount;
         });
 
-        LogBridge.d(TAG, "过滤排序后房间数: " + validRooms.size() + " (原: " + rooms.size() + ")");
         return validRooms;
     }
 
@@ -1211,14 +1172,12 @@ public class HuyaTogetherWatchManager {
             }
         }
 
-        LogBridge.d(TAG, "按关键词分类完成: " + result.size() + " 个房间，默认分类: " + defaultCategory);
 
         for (java.util.Map.Entry<String, Integer> e : categoryCount.entrySet()) {
-            LogBridge.d(TAG, "  分组[" + e.getKey() + "] = " + e.getValue() + " 个频道");
+
         }
 
         if (!defaultRoomNames.isEmpty()) {
-            LogBridge.d(TAG, "  兜底[" + defaultCategory + "]频道数: " + defaultRoomNames.size());
         }
         return result;
     }
@@ -1235,12 +1194,10 @@ public class HuyaTogetherWatchManager {
         final long tWarm = System.currentTimeMillis();
         java.util.concurrent.Future<List<TogetherWatchRoom>> f = mLongTailExecutor.submit(() -> {
             List<TogetherWatchRoom> rooms = fetchBySubCategoryDirect(tmpId, "剧集");
-            LogBridge.d(TAG, "⏱️【长尾预热】tmpId=" + tmpId + " 抢先完成：房间=" + rooms.size()
-                    + "，耗时=" + (System.currentTimeMillis() - tWarm) + "ms（已与其他子分类重叠）");
             return rooms;
         });
         mLongTailFutures.put(tmpId, f);
-        LogBridge.d(TAG, "⏱️【长尾预热】tmpId=" + tmpId + " 已抢先起跑（专属线程，不等 8 线程池排波）");
+
     }
 
     private List<TogetherWatchRoom> fetchBySubCategory(int subCategoryId, String categoryName) throws IOException {
@@ -1249,11 +1206,11 @@ public class HuyaTogetherWatchManager {
         if (warm != null) {
             try {
                 List<TogetherWatchRoom> r = warm.get();
-                LogBridge.d(TAG, "⏱️【长尾预热】tmpId=" + subCategoryId + " 复用预热结果：房间="
-                        + (r == null ? 0 : r.size()) + "（省去重复请求）");
+
+
                 return r != null ? r : new ArrayList<>();
             } catch (Exception e) {
-                LogBridge.w(TAG, "⏱️【长尾预热】tmpId=" + subCategoryId + " 预热结果异常，回退自取：" + e.getMessage());
+
                 // 预热失败 → 走下方正常路径重取
             }
         }
@@ -1284,16 +1241,16 @@ public class HuyaTogetherWatchManager {
                 List<TogetherWatchRoom> pageRooms = parseRoomList(resStr, categoryName);
                 if (pageRooms.isEmpty()) {
                     // 【2026-10-03 埋点】子分类页数分布（page=1 即 break 说明单页；否则真在翻页）
-                    LogBridge.d(TAG, "⏱️【子分类埋点】tmpId=" + subCategoryId + "（" + categoryName
-                            + "）翻页结束于 page=" + page + "，共 " + pagesFetched + " 页，房间=" + allRooms.size());
+
+
                     break;
                 }
                 allRooms.addAll(pageRooms);
 
                 if (vList == null || vList.length() < pageSize) {
-                    LogBridge.d(TAG, "⏱️【子分类埋点】tmpId=" + subCategoryId + "（" + categoryName
-                            + "）翻页结束于 page=" + page + "，共 " + pagesFetched + " 页，房间=" + allRooms.size()
-                            + "（vList=" + (vList == null ? "null" : vList.length()) + " < " + pageSize + " 视为末页）");
+
+
+
                     break;
                 }
                 // 【2026-09-24 提速】页间抖动 300~600ms→60~150ms：子分类已并行，
@@ -1302,7 +1259,7 @@ public class HuyaTogetherWatchManager {
                     Thread.sleep(60L + (long) (Math.random() * 90));
                 } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); break; }
             } catch (Exception e) {
-                LogBridge.d(TAG, "解析失败：" + e.getMessage());
+
                 break;
             }
         }
@@ -1390,8 +1347,6 @@ public class HuyaTogetherWatchManager {
                 for (TogetherWatchRoom room : rooms) {
                     channels.add(room.toChannel());
                 }
-                LogBridge.d(TAG, "⏱️【链路-HTTP线路】增量批次 " + channels.size()
-                        + " 频道，已用 " + (System.currentTimeMillis() - t0) + "ms");
                 listener.onPartial(channels);
             }
 
@@ -1402,16 +1357,11 @@ public class HuyaTogetherWatchManager {
                 for (TogetherWatchRoom room : rooms) {
                     channels.add(room.toChannel());
                 }
-                LogBridge.d(TAG, "⏱️【链路-HTTP线路】解析(toChannel) " + (System.currentTimeMillis() - tParseStart)
-                        + "ms，房间=" + rooms.size() + " → 频道=" + channels.size());
-                LogBridge.d(TAG, "⏱️【链路-HTTP线路】端到端总耗时 " + (System.currentTimeMillis() - t0)
-                        + "ms（HTTP下载+JSON解析+关键词分类+toChannel）");
                 listener.onSuccess(channels);
             }
 
             @Override
             public void onFailed(String errorMsg) {
-                LogBridge.w(TAG, "⏱️【链路-HTTP线路】失败，总耗时 " + (System.currentTimeMillis() - t0) + "ms：" + errorMsg);
                 listener.onFailed(errorMsg);
             }
         });
@@ -1451,7 +1401,6 @@ public class HuyaTogetherWatchManager {
 
                     @Override
                     public void onFailed(String errorMsg) {
-                        LogBridge.w(TAG, "【自研解析】getPlayUrl 失败: " + errorMsg);
                         listener.onFailed(errorMsg);
                     }
                 });
@@ -1494,8 +1443,6 @@ public class HuyaTogetherWatchManager {
         try {
             List<TogetherWatchRoom> existing = loadFallbackFromDisk();
             if (existing != null && existing.size() > rooms.size()) {
-                LogBridge.d(TAG, "【兜底】新数据(" + rooms.size() + ")少于现有兜底("
-                        + existing.size() + ")，保留现有兜底不覆盖");
                 return;
             }
         } catch (Throwable ignore) { }
@@ -1520,9 +1467,7 @@ public class HuyaTogetherWatchManager {
             byte[] data = arr.toString().getBytes("UTF-8");
             FileOutputStream fos = new FileOutputStream(file);
             try { fos.write(data); fos.flush(); } finally { fos.close(); }
-            LogBridge.d(TAG, "【兜底】已写入永久兜底，房间数=" + rooms.size() + "，字节=" + data.length);
         } catch (Throwable t) {
-            LogBridge.e(TAG, "【兜底】写入失败：" + t.getMessage());
         }
     }
 
@@ -1559,7 +1504,6 @@ public class HuyaTogetherWatchManager {
             }
             return list;
         } catch (Throwable t) {
-            LogBridge.e(TAG, "【兜底】读取失败：" + t.getMessage());
             return null;
         } finally {
             if (br != null) { try { br.close(); } catch (IOException ignored) {} }

@@ -286,7 +286,7 @@ public class EpgManager {
             epgLoadInFlight = true;
         }
         if (start) {
-            LogBridge.i("EpgManager", "【EPG·懒加载】用户打开节目单，触发 EPG 加载（缓存优先，必要时下载）");
+            LogBridge.d("EpgManager", "【EPG·懒加载】用户打开节目单，触发 EPG 加载（缓存优先，必要时下载）");
             setEpgUrl(UrlConfig.EPG_URL);
             loadEpg(() -> {
                 synchronized (epgLoadLock) {
@@ -312,7 +312,7 @@ public class EpgManager {
         AppExecutors.serial(() -> {
             try {
             epgDataReady = false; // 新一轮加载开始：先置否，解析/缓存就绪后由 notifyEpgDataReady 置真
-            LogBridge.i("EpgManager", "【EPG】loadEpg 任务开始执行（serial 队列已到达），url=" + epgUrl);
+            LogBridge.d("EpgManager", "【EPG】loadEpg 任务开始执行（serial 队列已到达），url=" + epgUrl);
             // 【2026-10-05】7 天内不重复下载：缓存仍新鲜（存在+<7天+来源匹配）时直接读本地，
             // 跳过网络请求，避免 EPG 链接的下载次数限制。
             // 【2026-10-05 修复】若缓存加载后 channelEpgMap 仍为空（缓存损坏/解析 0 频道），
@@ -325,21 +325,21 @@ public class EpgManager {
                     usedCache = true;
                 }
                 if (usedCache) {
-                    LogBridge.i("EpgManager", "【EPG】缓存未满 7 天，跳过下载，直接使用本地缓存");
+                    LogBridge.d("EpgManager", "【EPG】缓存未满 7 天，跳过下载，直接使用本地缓存");
                     notifyEpgDataReady();
                     if (callback != null) {
                         new Handler(Looper.getMainLooper()).post(callback);
                     }
                     return;
                 }
-                LogBridge.w("EpgManager", "【EPG】缓存加载后仍无数据（损坏/来源不匹配），回退网络下载");
+                LogBridge.i("EpgManager", "【EPG】缓存加载后仍无数据（损坏/来源不匹配），回退网络下载");
             }
 
             long t0 = System.currentTimeMillis();
-            LogBridge.i("EpgManager", "【EPG】开始下载节目单...");
+            LogBridge.d("EpgManager", "【EPG】开始下载节目单...");
             try (okhttp3.Response response = getEpgHttpClient().newCall(
                     new okhttp3.Request.Builder().url(epgUrl).build()).execute()) {
-                LogBridge.i("EpgManager", "【EPG】下载响应 code=" + response.code()
+                LogBridge.d("EpgManager", "【EPG】下载响应 code=" + response.code()
                         + "，耗时 " + (System.currentTimeMillis() - t0) + "ms");
                 if (!response.isSuccessful() || response.body() == null) return;
 
@@ -367,7 +367,7 @@ public class EpgManager {
                     } finally {
                         cacheIs.close();
                     }
-                    LogBridge.i("EpgManager", "【EPG】网络节目单下载完成：下载+落盘 "
+                    LogBridge.d("EpgManager", "【EPG】网络节目单下载完成：下载+落盘 "
                             + (tDownload - t0) + "ms，解析 " + (System.currentTimeMillis() - tDownload)
                             + "ms，频道数=" + channelEpgMap.size());
                 } finally {
@@ -375,7 +375,6 @@ public class EpgManager {
                 }
 
             } catch (Exception e) {
-                e.printStackTrace();
             }
 
             notifyEpgDataReady();
@@ -423,7 +422,7 @@ public class EpgManager {
                 return false;
             }
 
-            LogBridge.i("EpgManager", "【EPG】本地缓存节目单加载完成：解析 "
+            LogBridge.d("EpgManager", "【EPG】本地缓存节目单加载完成：解析 "
                     + (System.currentTimeMillis() - t0) + "ms，频道数=" + channelEpgMap.size());
 
             notifyEpgDataReady();
@@ -475,7 +474,7 @@ public class EpgManager {
     private boolean isEpgCacheFresh() {
         File f = getEpgCacheFile();
         if (f == null || !f.exists()) {
-            LogBridge.w("EpgManager", "【EPG】isEpgCacheFresh=false：文件不存在或 null，key=" + getEpgCacheKey()
+            LogBridge.i("EpgManager", "【EPG】isEpgCacheFresh=false：文件不存在或 null，key=" + getEpgCacheKey()
                     + "，path=" + (f == null ? "null" : f.getAbsolutePath()) + "，epgUrl=" + epgUrl);
             return false;
         }
@@ -771,7 +770,7 @@ public class EpgManager {
                     List<Channel.EpgItem> l =
                             com.tv.live.afhgrj.AfhgrjUrlResolver.fetchEpisodes(vid);
                     if (l != null && !l.isEmpty()) {
-                        LogBridge.i("EpgManager", "【EPG·源7】集数列表就绪 vodId=" + vid
+                        LogBridge.d("EpgManager", "【EPG·源7】集数列表就绪 vodId=" + vid
                                 + " 共 " + l.size() + " 集");
                         notifyEpgDataReady();
                     }
@@ -816,7 +815,7 @@ public class EpgManager {
                 try {
                     List<Channel.EpgItem> l = com.tv.live.ryb.RybUrlResolver.fetchEpisodes(slug);
                     if (l != null && !l.isEmpty()) {
-                        LogBridge.i("EpgManager", "【EPG·源8】集数列表就绪 slug=" + slug
+                        LogBridge.d("EpgManager", "【EPG·源8】集数列表就绪 slug=" + slug
                                 + " 共 " + l.size() + " 集");
                         notifyEpgDataReady();
                     }
@@ -857,7 +856,7 @@ public class EpgManager {
                 try {
                     List<Channel.EpgItem> l = com.tv.live.nbmovie.NbMovieUrlResolver.fetchEpisodes(vid);
                     if (l != null && !l.isEmpty()) {
-                        LogBridge.i("EpgManager", "【EPG·4K影视】集数列表就绪 vodId=" + vid
+                        LogBridge.d("EpgManager", "【EPG·4K影视】集数列表就绪 vodId=" + vid
                                 + " 共 " + l.size() + " 集");
                         notifyEpgDataReady();
                     }
@@ -898,7 +897,7 @@ public class EpgManager {
                     List<Channel.EpgItem> l =
                             com.tv.live.juzhi.JzUrlResolver.fetchEpisodes(vid);
                     if (l != null && !l.isEmpty()) {
-                        LogBridge.i("EpgManager", "【EPG·源9】集数列表就绪 vodId=" + vid
+                        LogBridge.d("EpgManager", "【EPG·源9】集数列表就绪 vodId=" + vid
                                 + " 共 " + l.size() + " 集");
                         notifyEpgDataReady();
                     }
@@ -1037,7 +1036,7 @@ public class EpgManager {
         if (items.isEmpty()) return;
 
         miguEpgMap.put(tvId, items);
-        LogBridge.i("EpgManager", "【EPG·咪咕】轮播节目单已接入：tvId=" + tvId
+        LogBridge.d("EpgManager", "【EPG·咪咕】轮播节目单已接入：tvId=" + tvId
                 + "，节目 " + items.size() + " 条（首条《" + items.get(0).title + "》）");
 
         // 面板/信息栏可能已经打开 → 通知重渲染
@@ -1690,7 +1689,7 @@ public class EpgManager {
                     int cp = data.indexOf(curPlaying);
                     if (cp >= 0) {
                         myPlayingIndex[0] = cp;
-                        LogBridge.i("EpgManager", "【EPG】自动定位当前播放项 [" + cp + "] "
+                        LogBridge.d("EpgManager", "【EPG】自动定位当前播放项 [" + cp + "] "
                                 + curPlaying.title);
                     }
                 }

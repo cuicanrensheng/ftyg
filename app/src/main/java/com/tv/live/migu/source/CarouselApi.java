@@ -366,7 +366,7 @@ public final class CarouselApi {
                         alive = addrs != null && addrs.length > 0;
                     } catch (Throwable t) {
                         alive = false;
-                        LogBridge.w(TAG, "候选域名 DNS 失效（预热）：" + h);
+                        LogBridge.d(TAG, "候选域名 DNS 失效（预热）：" + h);
                     }
                     sDnsAliveCache.put(h, alive);
                 }
@@ -653,7 +653,6 @@ public final class CarouselApi {
             }
             if (!list.isEmpty()) {
                 sProgramCache.put(tvId.trim(), list);
-                LogBridge.i(TAG, "轮播节目单已缓存 tvId=" + tvId + " 共 " + list.size() + " 条");
             }
         } catch (Throwable ignored) {
         }
@@ -676,7 +675,7 @@ public final class CarouselApi {
         if (!isCarouselUrl(carouselUrl)) return null;
         String inner = carouselUrl.substring(SCHEME.length()).trim();
         if (TextUtils.isEmpty(inner)) {
-            LogBridge.w(TAG, "轮播地址内层为空：" + carouselUrl);
+            LogBridge.i(TAG, "轮播地址内层为空：" + carouselUrl);
             return null;
         }
         return resolveInner(inner);
@@ -698,7 +697,7 @@ public final class CarouselApi {
             JSONObject root = new JSONObject(body);
             JSONArray data = root.optJSONArray("data");
             if (data == null || data.length() == 0) {
-                LogBridge.w(TAG, "轮播接口 data 为空：" + abbreviate(body));
+                LogBridge.i(TAG, "轮播接口 data 为空：" + abbreviate(body));
                 return null;
             }
             // 原版只取 data[0]（= 当前正在播的那一条）
@@ -708,7 +707,7 @@ public final class CarouselApi {
             // 【2026-10-07 诊断】打印当前节目原始 JSON（截断）——
             //   关键判据：黑洞节目（videos[]→hlsbkmgspvod）是否**同时**带可播的
             //   videoHtml（zgyj_vod→GITV），若带则应按原版优先级重新取值。
-            LogBridge.i(TAG, "当前节目原始 JSON(截断)："
+            LogBridge.d(TAG, "当前节目原始 JSON(截断)："
                     + abbreviate(String.valueOf(cur), 700));
 
             int offset = cur.optInt("offsetTs", 0);
@@ -729,7 +728,6 @@ public final class CarouselApi {
             if (allSites != null && allSites.length() > 0) {
                 collectUrls(allSites, cands);
                 if (!cands.isEmpty()) {
-                    LogBridge.i(TAG, "命中 allSitesVideoHtml → " + cands.size() + " 条候选");
                 }
             }
             if (cands.isEmpty()) {
@@ -752,11 +750,11 @@ public final class CarouselApi {
                 //   由 TVPlayerManager.resolveMiguChain 负责落到真实可播地址。
                 String html = cur.optString("videoHtml", "").trim();
                 if (TextUtils.isEmpty(html)) {
-                    LogBridge.w(TAG, "当前节目既无 videos/allSitesVideoHtml 也无 videoHtml："
+                    LogBridge.d(TAG, "当前节目既无 videos/allSitesVideoHtml 也无 videoHtml："
                             + abbreviate(body));
                     return null;
                 }
-                LogBridge.i(TAG, "当前节目只有 videoHtml → 作为候选交解析链："
+                LogBridge.d(TAG, "当前节目只有 videoHtml → 作为候选交解析链："
                         + abbreviate(html));
                 cands.add(html);
             }
@@ -768,11 +766,11 @@ public final class CarouselApi {
             String chosen = pickPlayable(cands);
             Resolution r = new Resolution(chosen, offset, title, cands, programId,
                     carouselTvId, startTs, endTs);
-            LogBridge.i(TAG, "轮播当前节目 → " + r);
+            LogBridge.d(TAG, "轮播当前节目 → " + r);
             if (cands.size() > 1) {
                 for (int i = 0; i < cands.size(); i++) {
-                    LogBridge.i(TAG, "  候选[" + i + "] host=" + hostOf(cands.get(i))
-                            + (isKnownDead(cands.get(i)) ? "  ← 已知黑洞" : ""));
+
+
                 }
             }
             return r;
@@ -812,7 +810,7 @@ public final class CarouselApi {
         if (!isLookBackUrl(lookBackUrl)) return null;
         String pid = lookBackUrl.substring(SCHEME_LB.length()).trim();
         if (TextUtils.isEmpty(pid)) {
-            LogBridge.w(TAG, "回看地址 pid 为空：" + lookBackUrl);
+            LogBridge.i(TAG, "回看地址 pid 为空：" + lookBackUrl);
             return null;
         }
         return getCarouselVideo(pid, "回看pid=" + pid);
@@ -920,7 +918,6 @@ public final class CarouselApi {
             }
             Resolution r = new Resolution(url, 0, "回看 tvId=" + tvId,
                     java.util.Collections.singletonList(url));
-            LogBridge.i(TAG, "回看旁路命中 → " + r);
             return r;
         } catch (Throwable t) {
             LogBridge.w(TAG, "回看解析失败：" + t.getClass().getSimpleName() + " " + t.getMessage());
@@ -959,10 +956,9 @@ public final class CarouselApi {
             }
             String chosen = pickPlayable(cands);
             Resolution r = new Resolution(chosen, 0, label, cands, pid);
-            LogBridge.i(TAG, "get_carousel_video 命中 → " + r);
             for (int i = 0; i < cands.size(); i++) {
-                LogBridge.i(TAG, "  候选[" + i + "] host=" + hostOf(cands.get(i))
-                        + (isKnownDead(cands.get(i)) ? "  ← 已知黑洞" : ""));
+
+
             }
             return r;
         } catch (Throwable t) {
@@ -998,7 +994,6 @@ public final class CarouselApi {
         }
         Resolution r = new Resolution(url, 0, "回看 tvId=" + tvId,
                 java.util.Collections.singletonList(url), "", tvId, startTs, endTs);
-        LogBridge.i(TAG, "回看端点命中 → " + r);
         return r;
     }
 

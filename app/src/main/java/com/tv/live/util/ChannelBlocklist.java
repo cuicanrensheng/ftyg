@@ -146,8 +146,8 @@ public final class ChannelBlocklist {
                 //     标题二次留存（9527 可被同网段任意设备拉取）。改为只记录分组 + 命中规则，
                 //     数量由下方汇总行体现，排障时靠组名定位是哪一批源出的问题。
                 final boolean byName = BLOCKED_NAMES.contains(name.trim());
-                LogBridge.i(TAG, "已屏蔽 1 条 group=" + c.getGroup()
-                        + " 规则=" + (byName ? "点名" : "关键词"));
+
+
                 continue;
             }
             out.add(c);

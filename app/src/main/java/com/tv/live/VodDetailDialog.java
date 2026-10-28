@@ -220,7 +220,7 @@ public class VodDetailDialog extends Dialog {
                 }
                 AfhgrjUrlResolver.rememberSid(vodId, sid);
                 AfhgrjUrlResolver.invalidate(vodId);
-                LogBridge.i(TAG, "用户手选线路 vodId=" + vodId + " sid=" + sid + " → 重播");
+                LogBridge.d(TAG, "用户手选线路 vodId=" + vodId + " sid=" + sid + " → 重播");
                 dismiss();
                 if (callback != null) callback.onSwitchLine(vodId, sid);
             });

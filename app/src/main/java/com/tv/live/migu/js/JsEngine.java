@@ -99,7 +99,7 @@ public final class JsEngine {
 
         if (!hasWebViewFeature(context)) {
             unavailable = true;
-            LogBridge.w(TAG, "本机无 WebView 组件，JS 引擎不可用（将降级为 Java 解析）");
+            LogBridge.i(TAG, "本机无 WebView 组件，JS 引擎不可用（将降级为 Java 解析）");
             return;
         }
 
@@ -107,7 +107,7 @@ public final class JsEngine {
             nativeLayerJs = JsPluginStore.readAsset(context, ASSET_NATIVE_LAYER);
             if (TextUtils.isEmpty(nativeLayerJs)) {
                 unavailable = true;
-                LogBridge.w(TAG, "缺少 " + ASSET_NATIVE_LAYER + "，JS 引擎不可用");
+                LogBridge.i(TAG, "缺少 " + ASSET_NATIVE_LAYER + "，JS 引擎不可用");
                 return;
             }
 
@@ -132,7 +132,7 @@ public final class JsEngine {
             webView.loadDataWithBaseURL("file:///android_asset/",
                     "<html><head><meta charset=\"utf-8\"></head><body></body></html>",
                     "text/html", "utf-8", null);
-            LogBridge.i(TAG, "JS 引擎初始化中…");
+            LogBridge.d(TAG, "JS 引擎初始化中…");
         } catch (Throwable t) {
             unavailable = true;
             webView = null;
@@ -143,7 +143,7 @@ public final class JsEngine {
 
     private void onPageReady() {
         pageReady = true;
-        LogBridge.i(TAG, "JS 引擎就绪");
+        LogBridge.d(TAG, "JS 引擎就绪");
         List<Runnable> tasks = new ArrayList<>(pending);
         pending.clear();
         for (Runnable r : tasks) {

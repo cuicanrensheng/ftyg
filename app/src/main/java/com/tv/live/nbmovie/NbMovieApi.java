@@ -51,6 +51,8 @@ public final class NbMovieApi {
     private static volatile Context sCtx;
     private static volatile String sBaseUrl = ENTRY_DOMAIN;
     private static volatile String sSessionId = "";
+    /** 【2026-10-28 降噪】attach 日志去重签名（baseUrl|session） */
+    private static String sLastAttachSig = "";
 
     private NbMovieApi() {
     }
@@ -67,8 +69,12 @@ public final class NbMovieApi {
         }
         String sid = sp.getString(KEY_SESSION_ID, "");
         sSessionId = sid == null ? "" : sid;
-        LogBridge.i(TAG, "attach 完成 baseUrl=" + sBaseUrl + " session_id="
-                + (sSessionId.isEmpty() ? "(空)" : sSessionId));
+        // 【2026-10-28 降噪】attach 每次界面绑定都会调一次（实测 30s 内 8 条同文案），
+        //   只在基地址/session 真正变化时记一条。
+        String attachSig = sBaseUrl + "|" + sSessionId;
+        if (!attachSig.equals(sLastAttachSig)) {
+            sLastAttachSig = attachSig;
+        }
     }
 
     /** 当前业务基地址（SP domain 优先，回退入口域名） */
@@ -162,7 +168,6 @@ public final class NbMovieApi {
                 .putString(KEY_SESSION_ID, payload[1])
                 .putLong(KEY_SESSION_EXPIRE, System.currentTimeMillis() + SESSION_TTL_MS)
                 .apply();
-        LogBridge.i(TAG, "会话建立成功 session_id=" + payload[1]);
         return true;
     }
 
@@ -223,7 +228,7 @@ public final class NbMovieApi {
     /** 解信封：code==0/200 取 data */
     private static JSONObject dataOf(String resp, String tag) {
         if (resp == null || resp.isEmpty()) {
-            LogBridge.w(TAG, tag + " 响应为空");
+            LogBridge.i(TAG, tag + " 响应为空");
             return null;
         }
         try {

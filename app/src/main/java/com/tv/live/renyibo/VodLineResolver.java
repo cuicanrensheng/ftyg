@@ -137,7 +137,6 @@ public final class VodLineResolver {
         if (token == null || token.isEmpty()) return null;
         String cached = sTokenCache.get(token);
         if (cached != null) {
-            LogBridge.d(TAG, "解析命中缓存 → " + cached);
             return cached;
         }
         ensureEndpoints();
@@ -148,14 +147,12 @@ public final class VodLineResolver {
             return null;
         }
         String reqUrl = base + enc(token);
-        LogBridge.i(TAG, "开始解析 [" + typeName(token) + "] " + abbrev(token));
         String url = httpGetJsonUrl(reqUrl);
         if (url == null) {
             LogBridge.w(TAG, "解析失败（无 url 字段/网络异常）: " + abbrev(token));
             return null;
         }
         sTokenCache.put(token, url);
-        LogBridge.i(TAG, "解析成功 [" + typeName(token) + "] → " + url);
         return url;
     }
 
@@ -230,12 +227,12 @@ public final class VodLineResolver {
                     if (loc.startsWith("/")) {
                         loc = url.getProtocol() + "://" + url.getAuthority() + loc;
                     }
-                    LogBridge.i(TAG, "HTTP " + code + " 跳转 → " + abbrev(loc));
+
                     cur = loc;
                     continue;
                 }
                 if (code < 200 || code >= 300) {
-                    LogBridge.w(TAG, "HTTP " + code + " ← " + hostOfReq(cur));
+
                     return null;
                 }
                 InputStream is = conn.getInputStream();

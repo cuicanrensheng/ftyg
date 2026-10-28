@@ -65,6 +65,8 @@ import java.util.Set;
 public class OttHomeActivity extends AppCompatActivity {
 
     private static final String TAG = "OttHome";
+    /** 【2026-10-28 降噪】「虎牙自研线路频道就绪」日志的去重基准（数量不变则不重复打） */
+    private int mLastHuyaReadyCount = -1;
     public static final String EXTRA_SKIP_SOURCE_ROUTE = "skip_source_route";
 
     /** 【2026-10-18 启动图】直播模式热切换到 OTT 时透传：跳过 App 内启动覆盖层。
@@ -375,7 +377,7 @@ public class OttHomeActivity extends AppCompatActivity {
         if (!TextUtils.isEmpty(debugPlayName)) {
             mainHandler.postDelayed(() -> {
                 try {
-                    LogBridge.i(TAG, "【调试起播】候选 shownChannels=" + shownChannels.size()
+                    LogBridge.d(TAG, "【调试起播】候选 shownChannels=" + shownChannels.size()
                             + " allChannels=" + allChannels.size());
                     java.util.List<Channel> pool = new java.util.ArrayList<>(allChannels);
                     pool.addAll(shownChannels);
@@ -396,7 +398,6 @@ public class OttHomeActivity extends AppCompatActivity {
                                 java.util.List<Channel> vods =
                                         com.tv.live.PlaylistParser.parseContent(frag);
                                 if (vods != null) {
-                                    LogBridge.i(TAG, "【调试起播】点播缓存候选 " + vods.size() + " 条");
                                     for (Channel c : vods) {
                                         if (c.getName() != null && c.getName().contains(debugPlayName)) {
                                             hit = c;
@@ -406,19 +407,19 @@ public class OttHomeActivity extends AppCompatActivity {
                                 }
                             }
                         } catch (Throwable t) {
-                            LogBridge.w(TAG, "【调试起播】点播缓存解析失败: " + t.getMessage());
+                            LogBridge.d(TAG, "【调试起播】点播缓存解析失败: " + t.getMessage());
                         }
                     }
                     if (hit != null) {
-                        LogBridge.i(TAG, "【调试起播】命中 " + hit.getName()
+                        LogBridge.d(TAG, "【调试起播】命中 " + hit.getName()
                                 + " → 直接播放（源" + sourceIndexOf(hit) + "）");
                         playChannel(hit);
                         enterFullscreenImmediately();
                         return;
                     }
-                    LogBridge.w(TAG, "【调试起播】未命中 " + debugPlayName);
+                    LogBridge.d(TAG, "【调试起播】未命中 " + debugPlayName);
                 } catch (Throwable t) {
-                    LogBridge.w(TAG, "【调试起播】异常: " + t.getMessage());
+                    LogBridge.d(TAG, "【调试起播】异常: " + t.getMessage());
                 }
             }, 4500);
             if (!TextUtils.isEmpty(debugPanel)) {
@@ -427,7 +428,7 @@ public class OttHomeActivity extends AppCompatActivity {
                         showSource7Controller();
                         // 等控制栏完成一次布局再开抽屉（否则位置/焦点都会错位）
                         mainHandler.postDelayed(() -> {
-                            LogBridge.i(TAG, "【调试抽屉】打开 " + debugPanel);
+                            LogBridge.d(TAG, "【调试抽屉】打开 " + debugPanel);
                             if ("quality".equals(debugPanel)) showQualityPanel();
                             else if ("line".equals(debugPanel)) showLinePanel();
                             else if ("speed".equals(debugPanel)) showSpeedPanel();
@@ -437,13 +438,13 @@ public class OttHomeActivity extends AppCompatActivity {
                             else if ("info".equals(debugPanel)) showChannelInfo(playingChannel);
                         }, 600);
                     } catch (Throwable t) {
-                        LogBridge.w(TAG, "【调试抽屉】异常: " + t);
+                        LogBridge.d(TAG, "【调试抽屉】异常: " + t);
                     }
                 }, 9000);
             }
         }
         if (!TextUtils.isEmpty(debugVodId)) {
-            LogBridge.i(TAG, "【OTT·详情】调试直达 vodId=" + debugVodId);
+            LogBridge.d(TAG, "【OTT·详情】调试直达 vodId=" + debugVodId);
             mainHandler.postDelayed(() -> {
                 try {
                     VodDetailDialog dlg = new VodDetailDialog(OttHomeActivity.this, debugVodId,
@@ -452,7 +453,7 @@ public class OttHomeActivity extends AppCompatActivity {
                                     LogBridge.i(TAG, "【OTT·详情·调试】选择线路 sid=" + sid);
                                 }
                                 @Override public void onPlay() {
-                                    LogBridge.i(TAG, "【OTT·详情·调试】点击播放");
+                                    LogBridge.d(TAG, "【OTT·详情·调试】点击播放");
                                 }
                             });
                     dlg.show();
@@ -489,7 +490,7 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【2026-10-11】先渲染一次历史记录（此时还没起播，展示上次留下的 10 条）
         renderHistoryPanel();
 
-        LogBridge.i(TAG, "OTT 首页已启动");
+        LogBridge.d(TAG, "OTT 首页已启动");
     }
 
     private void bindViews() {
@@ -542,7 +543,6 @@ public class OttHomeActivity extends AppCompatActivity {
         rightPanel = findViewById(R.id.ott_right_panel);
         btnMenu = findViewById(R.id.btn_ott_menu);
         btnFullscreen = findViewById(R.id.btn_ott_fullscreen);
-        setupFocusLogging();
         // 【2026-09-29 OTT真全屏】全屏时需要清零边距的两个容器
         ottOuter = findViewById(R.id.ll_ott_outer);
         ottContentRow = findViewById(R.id.ott_content_row);
@@ -568,10 +568,8 @@ public class OttHomeActivity extends AppCompatActivity {
                 if (ottControllerShowing) {
                     if (vodPlayback) {
                         mPlayerManager.togglePlayWhenReady();
-                        LogBridge.i(TAG, "【OTT·点播】全屏单击 → 切换播放/暂停");
                     } else {
                         hideSource7Controller();
-                        LogBridge.i(TAG, "【OTT·直播】全屏单击 → 收起控制栏（不改播放状态）");
                     }
                 } else {
                     // 【2026-10-11 源7 专属】全屏下「单击触摸」→ 唤起播放器控制栏。
@@ -842,7 +840,7 @@ public class OttHomeActivity extends AppCompatActivity {
             refreshNowPlayingProgram();
             refreshEpgPanel(ch);
             setPreviewLoading(false);
-            LogBridge.i(TAG, "【热切换】预览接续：播放器已在播 " + ch.getName() + "，隐藏占位并补齐台名/信息栏");
+            LogBridge.d(TAG, "【热切换】预览接续：播放器已在播 " + ch.getName() + "，隐藏占位并补齐台名/信息栏");
         } catch (Throwable t) {
             LogBridge.w(TAG, "【热切换】预览接续失败: " + t.getMessage());
         }
@@ -1002,7 +1000,6 @@ public class OttHomeActivity extends AppCompatActivity {
         // 顶部分组 Tab 会一直停在上一次直播源的分组上（表现为「分组被固定」）。
         appCoreManager.registerReceivers();
         appCoreManager.setOnRefreshListener(() -> mainHandler.post(() -> {
-            LogBridge.i(TAG, "直播源已切换/更新，等待新分组数据到达");
             refreshNowPlayingProgram();
         }));
         appCoreManager.setOnDataLoadListener(new AppCoreManager.OnDataLoadListener() {
@@ -1074,7 +1071,7 @@ public class OttHomeActivity extends AppCompatActivity {
             if (i < topNavViews.size() - 1) tv.setNextFocusRightId(topNavViews.get(i + 1).getId());
         }
         syncTopNavStyle();
-        LogBridge.i(TAG, "【OTT·一级导航】已构建 3 项");
+        LogBridge.d(TAG, "【OTT·一级导航】已构建 3 项");
     }
 
     private TextView addTopNavItem(String label, int section) {
@@ -1148,61 +1145,6 @@ public class OttHomeActivity extends AppCompatActivity {
         bindTopNavFocusDown();
     }
 
-    /**
-     * 【2026-10-23 焦点排障】全局焦点变化日志。
-     *
-     * <p>背景：排查「顶栏按钮按『下』会不会丢焦点 / 落点是否随源而异」时，
-     * 只能靠截图人肉判断（uiautomator dump 在这类设备上返回空）。
-     * 这里挂 {@code OnGlobalFocusChangeListener}，把每次焦点转移（含动态生成的
-     * 分组 Tab、网格条目、集数行）都打到 9527，之后用
-     * {@code curl http://127.0.0.1:19527/api/logs} 直接拉。
-     *
-     * <p>输出格式（tag = {@code OTT·焦点}）：
-     * <pre>【焦点】直播模式 → 分组Tab[全部]   (section=直播, 源=8, group=全部)</pre>
-     * 视图无法识别时回落成类名 + 坐标。
-     */
-    private void setupFocusLogging() {
-        final View root = findViewById(android.R.id.content);
-        if (root == null) return;
-        root.getViewTreeObserver().addOnGlobalFocusChangeListener(
-                new android.view.ViewTreeObserver.OnGlobalFocusChangeListener() {
-                    @Override
-                    public void onGlobalFocusChanged(android.view.View oldV,
-                                                     final android.view.View newV) {
-                        if (newV == null) {
-                            LogBridge.w(TAG, "【焦点】焦点丢失 → null（当前焦点被清除）");
-                            return;
-                        }
-                        LogBridge.i(TAG, "【焦点】" + describeFocusView(oldV) + " → " + describeFocusView(newV)
-                                + "   (section=" + sectionName(topSection)
-                                + ", 源=" + currentSourceLabel()
-                                + ", group=" + (currentGroup == null ? "null" : currentGroup) + ")");
-                    }
-                });
-    }
-
-    /** 把视图描述成人能看懂的名字：优先 resource-id 名，其次文本，最后类名+坐标 */
-    private String describeFocusView(android.view.View v) {
-        if (v == null) return "(无)";
-        String idName = "?";
-        try {
-            idName = getResources().getResourceEntryName(v.getId());
-        } catch (Throwable ignored) {
-        }
-        CharSequence t = null;
-        if (v instanceof android.widget.TextView) t = ((android.widget.TextView) v).getText();
-        if (t != null && t.length() > 0) return idName + "[" + t + "]";
-        if (v.getParent() instanceof android.view.View) {
-            android.view.View p = (android.view.View) v.getParent();
-            String pid = "?";
-            try {
-                pid = getResources().getResourceEntryName(p.getId());
-            } catch (Throwable ignored) {
-            }
-            return idName + "(父=" + pid + ")";
-        }
-        return idName;
-    }
 
     /** 当前内置源编号/名称，日志里用于区分"是不是因源而异" */
     private String currentSourceLabel() {
@@ -1295,7 +1237,7 @@ public class OttHomeActivity extends AppCompatActivity {
      */
     private void switchTopSection(int section) {
         if (section == topSection) {
-            LogBridge.i(TAG, "【OTT·一级导航】已在「" + sectionName(section) + "」，焦点送内容区");
+            LogBridge.d(TAG, "【OTT·一级导航】已在「" + sectionName(section) + "」，焦点送内容区");
             focusIntoSection();
             return;
         }
@@ -1346,12 +1288,10 @@ public class OttHomeActivity extends AppCompatActivity {
                     View first = firstFocusableChild(llMineHistory);
                     if (first == null) first = firstFocusableChild(llMineFavorite);
                     if (first != null && first.requestFocus()) {
-                        LogBridge.i(TAG, "【OTT·一级导航】焦点 → 我的列表");
                     }
                     return;
                 }
                 if (gvChannel != null && gvChannel.requestFocus()) {
-                    LogBridge.i(TAG, "【OTT·一级导航】焦点 → 频道网格");
                 }
             } catch (Throwable t) {
                 LogBridge.w(TAG, "【OTT·一级导航】焦点恢复失败: " + t.getMessage());
@@ -1625,7 +1565,7 @@ public class OttHomeActivity extends AppCompatActivity {
             LogBridge.i(TAG, "OTT 起播：按上次记录续播 idx=" + idx + " 频道=" + target.getName());
         } else {
             target = firstChannelOfFirstLiveGroup();
-            LogBridge.i(TAG, "OTT 起播：无有效记录，取第一个直播源分组的首个频道="
+            LogBridge.d(TAG, "OTT 起播：无有效记录，取第一个直播源分组的首个频道="
                     + (target == null ? "(无)" : target.getName()
                        + " 分组=" + GroupListManager.getNormalizedGroup(target)));
         }
@@ -1665,24 +1605,19 @@ public class OttHomeActivity extends AppCompatActivity {
     /** 【2026-09-29 OTT 起播】把顶部分组切到正在播放的频道所属分组（起播后 Tab 跟随） */
     private void syncTabsToPlayingChannel() {
         if (playingChannel == null) {
-            LogBridge.i(TAG, "Tab跟随：playingChannel 为空，跳过");
             return;
         }
         if (isHuyaTab()) {
-            LogBridge.i(TAG, "Tab跟随：当前已是虎牙页，跳过");
             return;
         }
         String g = GroupListManager.getNormalizedGroup(playingChannel);
         if (TextUtils.isEmpty(g)) {
-            LogBridge.i(TAG, "Tab跟随：频道无分组，跳过");
             return;
         }
         if (!buildGroupNames().contains(g)) {
-            LogBridge.i(TAG, "Tab跟随：分组[" + g + "]不在Tab集合里，跳过");
             return;
         }
         if (g.equals(currentGroup)) {
-            LogBridge.i(TAG, "Tab跟随：已一致=" + g);
             return;
         }
         // 先把"原分组"打进日志，再覆盖 currentGroup，否则原值会被自己冲掉
@@ -1706,7 +1641,7 @@ public class OttHomeActivity extends AppCompatActivity {
             currentGroup = (pg != null && cats.contains(pg))
                     ? pg : getString(R.string.ott_group_all);
             huyaSubGroup = null;
-            LogBridge.i(TAG, "分组集合变更，原分组失效 → 当前分组=" + currentGroup);
+            LogBridge.d(TAG, "分组集合变更，原分组失效 → 当前分组=" + currentGroup);
         }
 
         // 分组集合未变时不重建 Tab，避免打断遥控焦点
@@ -2005,7 +1940,7 @@ public class OttHomeActivity extends AppCompatActivity {
         updateEmptyTip(shownChannels.isEmpty(),
                 vodSection ? getString(R.string.ott_vod_empty) : getString(R.string.ott_channel_empty));
         // 【2026-10-17 v2 诊断】板块隔离后要能一眼看出"为什么网格空"
-        LogBridge.i(TAG, "【OTT·过滤】板块=" + sectionName(topSection)
+        LogBridge.d(TAG, "【OTT·过滤】板块=" + sectionName(topSection)
                 + " 分组=" + currentGroup
                 + " all=" + allChannels.size() + " shown=" + shownChannels.size());
     }
@@ -2030,9 +1965,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 if (n <= 0) return;
                 int p = Math.max(0, Math.min(pos, n - 1));
                 gvChannel.setSelection(p);
-                if (gvChannel.requestFocus()) {
-                    LogBridge.i(TAG, "【焦点保持】网格刷新后回到 pos=" + p);
-                }
+                gvChannel.requestFocus();
             } catch (Throwable ignored) {
             }
         });
@@ -2335,7 +2268,7 @@ public class OttHomeActivity extends AppCompatActivity {
             pill.setOnClickListener(v -> {
                 final String group = currentGroup;
                 st.order = o;
-                LogBridge.i(TAG, "【源5筛选】" + group + " 排序=" + o);
+                LogBridge.d(TAG, "【源5筛选】" + group + " 排序=" + o);
                 rybFetchFiltered(group, st);   // 改排序必拉取（即使无其它筛选条件）
                 applyRybVodFilter();
             });
@@ -2391,7 +2324,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 st.order = "最热";
                 st.results.clear();
                 st.fetchFailed = false;
-                LogBridge.i(TAG, "【源5筛选】清除筛选：" + currentGroup);
+                LogBridge.d(TAG, "【源5筛选】清除筛选：" + currentGroup);
                 applyRybVodFilter();
                 gvChannel.post(() -> {
                     gvChannel.setSelection(0);
@@ -2528,7 +2461,7 @@ public class OttHomeActivity extends AppCompatActivity {
                     if (gvChannel != null && gvChannel.hasFocus()) return;
                     boolean ok = false;
                     if (chip.isAttachedToWindow() && !chip.hasFocus()) ok = chip.requestFocus();
-                    if (ok) LogBridge.i(TAG, "【筛选栏焦点恢复】→ " + chip.getText());
+                    if (ok) LogBridge.d(TAG, "【筛选栏焦点恢复】→ " + chip.getText());
                 } catch (Throwable ignored) {
                 }
             }
@@ -2590,8 +2523,8 @@ public class OttHomeActivity extends AppCompatActivity {
             final String group = currentGroup;
             final String pick = selected ? "" : value;
             rybSetDimValue(st, dimIdx, pick);
-            LogBridge.i(TAG, "【源5筛选】" + group + " "
-                    + RYB_FILTER_DIM_LABELS[dimIdx] + "=" + (pick.isEmpty() ? "全部" : pick));
+
+
             if (rybFilterActive(st)) {
                 rybFetchFiltered(group, st);
             } else {
@@ -2628,7 +2561,7 @@ public class OttHomeActivity extends AppCompatActivity {
             rybVodFilters.put(currentGroup, st);
         }
         st.expanded = !st.expanded;
-        LogBridge.i(TAG, "【源5筛选】" + (st.expanded ? "展开" : "收起") + "筛选栏：" + currentGroup);
+
         // 【2026-10-26 焦点不跳】收起时先把焦点交给「筛选」按钮，再隐藏筛选栏。
         //   反过来的话，隐藏的正是焦点所在的胶囊 → 焦点先被系统丢给顶部「直播」，
         //   再由下面的 post 拉回「筛选」，用户会看到「跳出去又跳回来」的闪动。
@@ -2772,8 +2705,8 @@ public class OttHomeActivity extends AppCompatActivity {
                     } else {
                         st.fetchFailed = false;
                         st.results = buildRybFilterChannels(group, items);
-                        LogBridge.i(TAG, "【源5筛选】" + group + " " + rybFilterSummary(st)
-                                + " → " + st.results.size() + " 条");
+
+
                     }
                     if (group.equals(currentGroup)) applyRybVodFilter();
                 }));
@@ -2975,7 +2908,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 LogBridge.i(TAG, "【顶部横幅检测】取帧方式=PixelCopy(SurfaceView)");
                 return pixelCopyTopBanner((android.view.SurfaceView) sv);
             }
-            LogBridge.i(TAG, "【顶部横幅检测】取帧方式=MediaMetadataRetriever(API<26 回退)");
+            LogBridge.d(TAG, "【顶部横幅检测】取帧方式=MediaMetadataRetriever(API<26 回退)");
             return mmrTopBanner(posMs);
         }
         return null;
@@ -3169,7 +3102,7 @@ public class OttHomeActivity extends AppCompatActivity {
 
         // 【2026-10-18】换到别的片就不该再回原来那部的详情页；同一部（重播/续播）保留标记
         if (detailReopenOnExit != null && detailReopenOnExit != channel) {
-            LogBridge.i(TAG, "【详情页】换片 → 清除「退全屏回详情」标记（原：" + detailReopenOnExit.getName() + "）");
+            LogBridge.d(TAG, "【详情页】换片 → 清除「退全屏回详情」标记（原：" + detailReopenOnExit.getName() + "）");
             detailReopenOnExit = null;
         }
 
@@ -3182,7 +3115,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 long dur = mPlayerManager.getDuration();
                 if (pos > 5000) {
                     appConfig.updateOttHistoryPosition(playingChannel.getName(), pos, dur);
-                    LogBridge.i(TAG, "【OTT·切台保存进度】频道=" + playingChannel.getName()
+                    LogBridge.d(TAG, "【OTT·切台保存进度】频道=" + playingChannel.getName()
                             + " 位置=" + pos + "ms 片长=" + dur + "ms");
                 }
             } catch (Throwable ignored) {}
@@ -3195,18 +3128,18 @@ public class OttHomeActivity extends AppCompatActivity {
 
         playingChannel = channel;
         updateTopAdMask();
-        LogBridge.i(TAG, "PLAYCHAN-ENTER " + channel.getName());
+        LogBridge.d(TAG, "PLAYCHAN-ENTER " + channel.getName());
         // 直播换台：轻量信息条（3s 消失）。冷启动首次自动起播不弹（用户口径 2026-10-17）。
         if (suppressInfoBarOnce) {
             suppressInfoBarOnce = false;
-            LogBridge.i(TAG, "【信息条】冷启动首次起播 → 不弹切台信息条");
+            LogBridge.d(TAG, "【信息条】冷启动首次起播 → 不弹切台信息条");
         } else if (switchHintsSuppressed()) {
             // 【2026-10-17 用户口径】控制栏可见（用「频道列表 / 选集」抽屉切台）时不再叠加信息条：
             //   控制栏标题行本来就显示频道名 + 清晰度，信息条只会重复并挡住画面。
             //   右上角频道号 OSD 同属"换台提示"，一并抑制。
             if (channelInfoBar != null) channelInfoBar.hide();
             hideChannelNumOsd();
-            LogBridge.i(TAG, "【信息条】控制栏可见 → 不弹信息条/频道号 OSD：" + channel.getName());
+            LogBridge.d(TAG, "【信息条】控制栏可见 → 不弹信息条/频道号 OSD：" + channel.getName());
         } else {
             showChannelInfo(channel);
         }
@@ -3267,7 +3200,7 @@ public class OttHomeActivity extends AppCompatActivity {
             appConfig.addOttHistory(channel.getName(), histVodId,
                     Math.max(1, resumeOrdinal), Math.max(0, resumePos), Math.max(0, resumeDur));
         } else {
-            LogBridge.i(TAG, "【播放历史】直播频道不记录：" + channel.getName());
+            LogBridge.d(TAG, "【播放历史】直播频道不记录：" + channel.getName());
         }
 
         int liveIndex = indexOfEquivalent(allChannels, channel);
@@ -3290,7 +3223,7 @@ public class OttHomeActivity extends AppCompatActivity {
             int maxH = appConfig.getQualityForSource(src);
             appConfig.setVodMaxHeight(maxH);
             mPlayerManager.setMaxVideoHeight(maxH);
-            LogBridge.i(TAG, "【清晰度】起播套用 源" + src + " → "
+            LogBridge.d(TAG, "【清晰度】起播套用 源" + src + " → "
                     + (maxH <= 0 ? "自动" : maxH + "P"));
         } catch (Throwable ignored) {
         }
@@ -3312,10 +3245,10 @@ public class OttHomeActivity extends AppCompatActivity {
         int num = indexOfEquivalent(allChannels, channel) + 1;
         if (switchHintsSuppressed()) {
             // 控制栏可见时切台 → 右上角大数字也一并抑制（用户口径 2026-10-17）
-            LogBridge.i(TAG, "【频道号 OSD】控制栏可见 → 跳过（" + num + "）");
+            LogBridge.d(TAG, "【频道号 OSD】控制栏可见 → 跳过（" + num + "）");
         } else {
             showChannelNum(num);
-            LogBridge.i(TAG, "显示频道号：" + num + " 频道=" + channel.getName());
+            LogBridge.d(TAG, "显示频道号：" + num + " 频道=" + channel.getName());
         }
         // 控制栏可见时切台：标题行/清晰度胶囊要跟着换台刷新，
         // 否则抽屉关掉后控制栏还挂着上一个频道的名字（用户实测）。
@@ -3357,7 +3290,7 @@ public class OttHomeActivity extends AppCompatActivity {
         final String vodId = com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch);
         if (TextUtils.isEmpty(vodId)) {
             Toast.makeText(this, "该频道无详情信息（仅源7 影视支持）", Toast.LENGTH_SHORT).show();
-            LogBridge.i(TAG, "【OTT·详情】非源7 频道，跳过: " + ch.getName());
+            LogBridge.d(TAG, "【OTT·详情】非源7 频道，跳过: " + ch.getName());
             return;
         }
         final Channel target = ch;
@@ -3380,7 +3313,7 @@ public class OttHomeActivity extends AppCompatActivity {
                         }
                     });
             dlg.show();
-            LogBridge.i(TAG, "【OTT·详情】打开详情弹窗 vodId=" + vodId + " 频道=" + ch.getName());
+            LogBridge.d(TAG, "【OTT·详情】打开详情弹窗 vodId=" + vodId + " 频道=" + ch.getName());
         } catch (Throwable t) {
             LogBridge.w(TAG, "【OTT·详情】弹窗失败: " + t.getMessage());
         }
@@ -3437,7 +3370,7 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【2026-10-22 源6 咪咕】咪咕剧场没有详情数据（无简介、无集数，只有按天回看）：
         //   点卡片直接起播，跳过详情页。放在本入口统一拦，遥控点击 / 触摸点击 / 长按全覆盖。
         if (isMiguTheaterChannel(ch)) {
-            LogBridge.i(TAG, "【详情页】咪咕剧场频道跳过详情页 → 直接播放：" + ch.getName());
+            LogBridge.d(TAG, "【详情页】咪咕剧场频道跳过详情页 → 直接播放：" + ch.getName());
             playChannel(ch);
             enterFullscreenImmediately();
             return;
@@ -3466,7 +3399,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 com.tv.live.juzhi.JzUrlResolver.vodIdOf(ch));
         // 【2026-10-21 日志修复】源标签按频道实际来源动态标注：此前硬编码「源8」，
         //   源5/源7/源2 的详情页也打这条，排查时误以为源8 在活动（实测零请求）。
-        LogBridge.i(TAG, "【详情页】打开：" + ch.getName()
+        LogBridge.d(TAG, "【详情页】打开：" + ch.getName()
                 + "（" + vodSourceTag(ch) + " 集数预取已放行）");
         // 该片自己的续播集数（不是「当前正在播的频道」的集数）
         int epIdx = historyEpisodeIndex(ch);
@@ -3517,11 +3450,11 @@ public class OttHomeActivity extends AppCompatActivity {
                 // 【2026-10-18】起播流程里关详情（hide() 的 120ms 动画回调）不得把焦点抢回网格：
                 //   否则要么打断刚进的全屏，要么把「退全屏要重开详情」的焦点链路搅乱。
                 if (detailReopenOnExit != null || fullscreen) {
-                    LogBridge.i(TAG, "【详情页】关闭：起播流程中 → 不抢网格焦点（来源 position="
+                    LogBridge.d(TAG, "【详情页】关闭：起播流程中 → 不抢网格焦点（来源 position="
                             + detailSourcePosition + "）");
                     return;
                 }
-                LogBridge.i(TAG, "【详情页】已关闭 → 焦点回到 position=" + detailSourcePosition);
+                LogBridge.d(TAG, "【详情页】已关闭 → 焦点回到 position=" + detailSourcePosition);
                 restoreGridFocusTo(detailSourcePosition);
             }
         });
@@ -3551,7 +3484,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 int p = (position >= 0) ? Math.min(position, n - 1) : 0;
                 gvChannel.setSelection(p);
                 if (gvChannel.requestFocus()) {
-                    LogBridge.i(TAG, "【详情页】焦点已回到网格 pos=" + p);
+                    LogBridge.d(TAG, "【详情页】焦点已回到网格 pos=" + p);
                 }
             } catch (Throwable ignored) {
             }
@@ -3918,7 +3851,6 @@ public class OttHomeActivity extends AppCompatActivity {
             if (target < items.size()) {
                 Channel.EpgItem t = items.get(target);
                 if (t != null && !TextUtils.isEmpty(t.customPlayUrl)) {
-                    LogBridge.i(TAG, "【OTT·源7】列表就绪 → 切到上次集数 第" + (target + 1) + "集");
                     playAfhgrjEpisodeOtt(t);
                     return;   // playAfhgrjEpisodeOtt 内部会重建面板
                 }
@@ -3961,7 +3893,6 @@ public class OttHomeActivity extends AppCompatActivity {
             pendingResumeEpisodeIdx = -1;
             Channel.EpgItem t = items.get(target);
             if (t != null && !TextUtils.isEmpty(t.customPlayUrl)) {
-                LogBridge.i(TAG, "【OTT·源5】列表就绪 → 切到上次集数 第" + (target + 1) + "集");
                 playAfhgrjEpisodeOtt(t);
                 return;
             }
@@ -4208,7 +4139,7 @@ public class OttHomeActivity extends AppCompatActivity {
         vodBar.show();
         ottControllerShowing = true;
         mainHandler.postDelayed(hideOttControllerRunnable, CONTROLLER_HIDE_MS);
-        LogBridge.i(TAG, "【OTT·控制栏】显示（5s 无操作自动收起，暂停时保持）");
+        LogBridge.d(TAG, "【OTT·控制栏】显示（5s 无操作自动收起，暂停时保持）");
     }
 
     /** 收起控制栏（同时关掉挂在它上方的弹层，避免残留） */
@@ -4218,7 +4149,7 @@ public class OttHomeActivity extends AppCompatActivity {
         // 导致直播里打开频道列表后 5 秒被自动收起，紧接着焦点被系统丢给控制栏「‹ 上一频道」。
         if (capsulePanel != null || episodePanel != null || channelListPanel != null
                 || miguCatchUpPanel != null) {
-            LogBridge.i(TAG, "【OTT·控制栏】抽屉打开中，忽略自动收起");
+            LogBridge.d(TAG, "【OTT·控制栏】抽屉打开中，忽略自动收起");
             mainHandler.removeCallbacks(hideOttControllerRunnable);
             return;
         }
@@ -4328,7 +4259,7 @@ public class OttHomeActivity extends AppCompatActivity {
                         .registerEpgDataReadyListener(vodBarEpgDataReadyListener);
             } catch (Throwable ignored) {
             }
-            LogBridge.i(TAG, "【OTT·控制栏】已初始化");
+            LogBridge.d(TAG, "【OTT·控制栏】已初始化");
         } catch (Throwable t) {
             LogBridge.w(TAG, "【OTT·控制栏】初始化失败: " + t.getMessage());
         }
@@ -4413,7 +4344,7 @@ public class OttHomeActivity extends AppCompatActivity {
             if (oldFocus != null && newFocus != null
                     && capsulePanel == null && episodePanel == null && channelListPanel == null
                     && (!oldFocus.isAttachedToWindow() || oldFocus.getVisibility() != View.VISIBLE)) {
-                LogBridge.w(TAG, "【焦点兜底】旧焦点(" + describeView(oldFocus)
+                LogBridge.d(TAG, "【焦点兜底】旧焦点(" + describeView(oldFocus)
                         + ") 已被移除/隐藏 → 焦点掉到 " + describeView(newFocus)
                         + "，拉回频道网格");
                 restoreGridFocus();
@@ -4439,7 +4370,7 @@ public class OttHomeActivity extends AppCompatActivity {
                     ? lastFocusInPanel
                     : firstFocusableIn(panel);
             if (back == null) return;
-            LogBridge.i(TAG, "【抽屉】焦点越界(" + describeView(newFocus) + ") → 拉回抽屉内 "
+            LogBridge.d(TAG, "【抽屉】焦点越界(" + describeView(newFocus) + ") → 拉回抽屉内 "
                     + describeView(back));
             mainHandler.post(back::requestFocus);
         });
@@ -4453,7 +4384,7 @@ public class OttHomeActivity extends AppCompatActivity {
             if (sel < 0) sel = 0;
             gvChannel.setSelection(sel);
             if (gvChannel.requestFocus()) {
-                LogBridge.i(TAG, "【焦点兜底】已把焦点还给频道网格 pos=" + sel);
+                LogBridge.d(TAG, "【焦点兜底】已把焦点还给频道网格 pos=" + sel);
             }
         } catch (Throwable t) {
             LogBridge.w(TAG, "【焦点兜底】归还失败: " + t.getMessage());
@@ -4482,7 +4413,7 @@ public class OttHomeActivity extends AppCompatActivity {
                     if (v instanceof TextView
                             && text.contentEquals(String.valueOf(((TextView) v).getText()))) {
                         if (v.requestFocus()) {
-                            LogBridge.i(TAG, "【焦点保持】重建后回到「" + text + "」");
+
                         }
                         return;
                     }
@@ -4510,9 +4441,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 if (index >= container.getChildCount()) return;
                 View v = container.getChildAt(index);
                 if (v != null && v.isFocusable()) {
-                    if (v.requestFocus()) {
-                        LogBridge.i(TAG, "【焦点保持】重建后回到第 " + index + " 行");
-                    }
+                    v.requestFocus();
                 }
             } catch (Throwable ignored) {
             }
@@ -4569,13 +4498,13 @@ public class OttHomeActivity extends AppCompatActivity {
             if (trigger != null && trigger.isAttachedToWindow()) nowOk = trigger.requestFocus();
         } catch (Throwable ignored) {
         }
-        LogBridge.i(TAG, "【焦点回位·即时】trigger=" + describeView(trigger) + " 成功=" + nowOk);
+        LogBridge.d(TAG, "【焦点回位·即时】trigger=" + describeView(trigger) + " 成功=" + nowOk);
         // 60ms：赶在系统把焦点落到"第一个可聚焦项（上一频道）"之后、但早于任何延迟抢焦点
         mainHandler.postDelayed(() -> {
             if (vodBar == null || vodBar.getVisibility() != View.VISIBLE) return;
             boolean ok = (trigger != null) && trigger.isAttachedToWindow() && trigger.requestFocus();
             if (!ok) ok = vodBar.restoreFocusNow();
-            LogBridge.i(TAG, "【焦点回位】trigger="
+            LogBridge.d(TAG, "【焦点回位】trigger="
                     + (trigger instanceof TextView ? ((TextView) trigger).getText() : "null")
                     + " 成功=" + ok);
         }, 60);
@@ -4584,7 +4513,6 @@ public class OttHomeActivity extends AppCompatActivity {
             if (vodBar == null || vodBar.getVisibility() != View.VISIBLE) return;
             if (trigger != null && trigger.isAttachedToWindow() && !trigger.hasFocus()) {
                 boolean ok = trigger.requestFocus();
-                LogBridge.i(TAG, "【焦点回位·补】成功=" + ok);
             }
         }, 180);
     }
@@ -4907,7 +4835,7 @@ public class OttHomeActivity extends AppCompatActivity {
         items.add(CapsuleChoicePanel.Item.capsule("自动", cur <= 0, true));
         values.add(0);
         if (heights.isEmpty()) {
-            LogBridge.i(TAG, "【OTT·清晰度】源" + src + " 暂无可选轨道（单码率流）→ 仅列自动");
+
         } else {
             for (Integer h : heights) {
                 items.add(CapsuleChoicePanel.Item.capsule(h + "P", cur == h, true));
@@ -4929,8 +4857,8 @@ public class OttHomeActivity extends AppCompatActivity {
                     if (mPlayerManager != null) mPlayerManager.setMaxVideoHeight(h);
                     Toast.makeText(this, h <= 0 ? "清晰度：自动" : ("清晰度：最高 " + h + "P"),
                             Toast.LENGTH_SHORT).show();
-                    LogBridge.i(TAG, "【OTT·清晰度】源" + src + " 选择 "
-                            + (h <= 0 ? "自动" : h + "P"));
+
+
                     if (vodBar != null) mainHandler.postDelayed(vodBar::refreshAll, 200);
                 });
     }
@@ -4997,7 +4925,6 @@ public class OttHomeActivity extends AppCompatActivity {
                         CapsuleChoicePanel.Item.line(huyaLines.get(i),
                                 shortHost(ch.getPlayUrl()), "可用", i == cur, false, true),
                         () -> {
-                            LogBridge.i(TAG, "【线路】虎牙子线路切换 → 第" + (idx + 1) + "条");
                             mPlayerManager.switchToHuyaMultiLine(idx);
                         }));
             }
@@ -5021,7 +4948,6 @@ public class OttHomeActivity extends AppCompatActivity {
                         () -> {
                             com.tv.live.afhgrj.AfhgrjUrlResolver.rememberSid(afhVodId, sid);
                             com.tv.live.afhgrj.AfhgrjUrlResolver.invalidate(afhVodId);
-                            LogBridge.i(TAG, "【线路】源7 sid=" + sid + " → 重播当前集");
                             if (playingChannel != null) playChannel(playingChannel, true);
                         }));
             }
@@ -5051,7 +4977,6 @@ public class OttHomeActivity extends AppCompatActivity {
                                     sel ? "当前" : "可用", sel, false, true),
                             () -> {
                                 com.tv.live.ryb.RybUrlResolver.setSelectedLine(rybSlug, idx);
-                                LogBridge.i(TAG, "【线路】源8 切到第" + (idx + 1) + "条 → 重播");
                                 if (playingChannel != null) playChannel(playingChannel, true);
                                 enterFullscreenImmediately();
                             }));
@@ -5076,16 +5001,27 @@ public class OttHomeActivity extends AppCompatActivity {
                 }, "Jz-LineWarm").start();
             } else {
                 final int curLine = com.tv.live.juzhi.JzUrlResolver.getSelectedLine(jzVodId, jzEp);
+                final java.util.List<Boolean> jzDead =
+                        com.tv.live.juzhi.JzUrlResolver.lineDeadFlags(jzVodId, jzEp);
                 for (int i = 0; i < jzLines.size(); i++) {
                     final int idx = i;
                     boolean sel = (curLine == i);
+                    boolean dead = (i < jzDead.size()) && jzDead.get(i);
+                    // 失效线路（非当前）置灰禁用，避免用户切到测速/播放失败的线路；
+                    // 已判死的线路一律显示「已失效」（即便它恰是当前在播线路），
+                    // 不再误导成「当前/可用」（之前 dead&&sel 显示"当前"，QQ 限速黑屏线看着像可用）。
+                    boolean enabled = !(dead && !sel);
                     opts.add(new LineOption(
                             CapsuleChoicePanel.Item.line(jzLines.get(i), "",
-                                    sel ? "当前" : "可用", sel, false, true),
+                                    dead ? "已失效" : (sel ? "当前" : "可用"),
+                                    sel, false, enabled),
                             () -> {
+                                if (dead && !sel) {
+                                    LogBridge.d(TAG, "【线路】源9 失效线路禁切：第" + (idx + 1) + "条 ["
+                                            + jzLines.get(idx) + "]");
+                                    return;
+                                }
                                 com.tv.live.juzhi.JzUrlResolver.setSelectedLine(jzVodId, jzEp, idx);
-                                LogBridge.i(TAG, "【线路】源9 切到第" + (idx + 1) + "条 ["
-                                        + jzLines.get(idx) + "] → 重播");
                                 if (playingChannel != null) playChannel(playingChannel, true);
                                 enterFullscreenImmediately();
                             }));
@@ -5116,7 +5052,6 @@ public class OttHomeActivity extends AppCompatActivity {
                                     sel ? "当前" : "可用", sel, false, true),
                             () -> {
                                 com.tv.live.nbmovie.NbMovieUrlResolver.setSelectedLine(nbmVodId, idx);
-                                LogBridge.i(TAG, "【线路】4K影视 切到第" + (idx + 1) + "条 → 重播");
                                 if (playingChannel != null) playChannel(playingChannel, true);
                                 enterFullscreenImmediately();
                             }));
@@ -5136,8 +5071,6 @@ public class OttHomeActivity extends AppCompatActivity {
                         CapsuleChoicePanel.Item.line("源6 · " + miguLines.get(i), miguQ,
                                 sel ? "当前" : "可用", sel, false, true),
                         () -> {
-                            LogBridge.i(TAG, "【线路】源6 切线路 idx=" + idx
-                                    + " → " + miguLines.get(idx));
                             mPlayerManager.switchMiguLine(idx);
                         }));
             }
@@ -5160,8 +5093,6 @@ public class OttHomeActivity extends AppCompatActivity {
                             CapsuleChoicePanel.Item.line("源3 · " + cxLines.get(i), cxQ,
                                     sel ? "当前" : "可用", sel, false, true),
                             () -> {
-                                LogBridge.i(TAG, "【线路】源3 切线路 idx=" + idx
-                                        + " → " + cxLines.get(idx));
                                 mPlayerManager.switchChanxiangLine(idx);
                             }));
                 }
@@ -5175,7 +5106,6 @@ public class OttHomeActivity extends AppCompatActivity {
             if (lines == null || lines.isEmpty()) {
                 if (rbVodId.equals(lineAutoRetryVodId)) {
                     lineAutoRetryVodId = null;
-                    LogBridge.w(TAG, "【线路】源5 线路表仍为空，停止重试 vodId=" + rbVodId);
                 } else {
                     lineAutoRetryVodId = rbVodId;
                     Toast.makeText(this, "线路表加载中，就绪后自动打开", Toast.LENGTH_SHORT).show();
@@ -5186,6 +5116,7 @@ public class OttHomeActivity extends AppCompatActivity {
                 }
             } else {
                 lineAutoRetryVodId = null;
+                    LogBridge.i(TAG, "【线路】源5 线路表仍为空，停止重试 vodId=" + rbVodId);
                 final java.util.List<String[]> fl = lines;
                 final int curIdx =
                         com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodLineIndex(rbVodId);
@@ -5201,7 +5132,6 @@ public class OttHomeActivity extends AppCompatActivity {
                             () -> {
                                 String url = com.tv.live.renyibo.RenYiBoVodSourceLoader
                                         .switchVodLine(rbVodId, idx);
-                                LogBridge.i(TAG, "【线路】源5 idx=" + idx + " → " + url);
                                 if (url != null && playingChannel != null && mPlayerManager != null) {
                                     mPlayerManager.playUrl(url, playingChannel.getName(), playingChannel);
                                 }
@@ -5229,7 +5159,6 @@ public class OttHomeActivity extends AppCompatActivity {
                     CapsuleChoicePanel.Item.line("源" + src + " · " + (vodCtx ? "同名影片" : "同名频道"),
                             shortHost(c.getPlayUrl()), "可用", false, false, true),
                     () -> {
-                        LogBridge.i(TAG, "【线路】跨源切到 源" + src + " " + c.getName());
                         playChannel(c);
                     }));
         }
@@ -5250,8 +5179,6 @@ public class OttHomeActivity extends AppCompatActivity {
         final java.util.List<LineOption> finalOpts = opts;
         java.util.List<CapsuleChoicePanel.Item> items = new java.util.ArrayList<>();
         for (LineOption o : finalOpts) items.add(o.item);
-        LogBridge.i(TAG, "【线路】源" + mySrc + " 候选 " + items.size() + " 条，形态="
-                + (vodCtx ? "点播" : "直播"));
         showCapsulePanel((vodCtx ? "播放线路 · 点播" : "播放线路 · 直播"),
                 "源" + mySrc + " · 共 " + items.size() + " 条", items,
                 idx -> finalOpts.get(idx).action.run());
@@ -5662,7 +5589,7 @@ public class OttHomeActivity extends AppCompatActivity {
             };
             mgr.registerEpgDataReadyListener(holder[0]);
             mainHandler.postDelayed(() -> mgr.unregisterEpgDataReadyListener(holder[0]), 8000);
-            LogBridge.i(TAG, "【OTT·选集】EPG 未就绪 → 已注册就绪回调，等待自动打开");
+            LogBridge.d(TAG, "【OTT·选集】EPG 未就绪 → 已注册就绪回调，等待自动打开");
             return;
         }
         openEpisodeDrawer(ch);
@@ -5777,7 +5704,6 @@ public class OttHomeActivity extends AppCompatActivity {
             if (!uniq.containsKey(key)) uniq.put(key, c);
         }
         java.util.List<Channel> pool = new java.util.ArrayList<>(uniq.values());
-        LogBridge.i(TAG, "【直播·频道列表】候选=" + source.size() + " 去重后=" + pool.size());
         if (pool.isEmpty()) {
             Toast.makeText(this, "暂无直播频道", Toast.LENGTH_SHORT).show();
             return;
@@ -5796,7 +5722,6 @@ public class OttHomeActivity extends AppCompatActivity {
         });
         p.onFavoriteLookup(ch -> appConfig.isFavorite(favoriteKey(ch)));
         p.onPick(ch -> {
-            LogBridge.i(TAG, "【直播·频道列表】切台 → " + ch.getName());
             playChannel(ch);
         });
         p.onClose(() -> {
@@ -5925,7 +5850,7 @@ public class OttHomeActivity extends AppCompatActivity {
             else status = "";
             items.add(new CapsuleChoicePanel.Item(it.title, time, status, isCur, false, true));
         }
-        LogBridge.i(TAG, "【直播·节目单】打开 " + ch.getName() + " 共" + list.size() + " 档");
+        LogBridge.d(TAG, "【直播·节目单】打开 " + ch.getName() + " 共" + list.size() + " 档");
         showCapsulePanel("节目单 · " + ch.getName(), "共 " + list.size() + " 档", items, idx -> {
             Channel.EpgItem it = list.get(idx);
             // ⚠ 用「下标是否当前档」判断正在播，而不是 it.isPlaying：
@@ -6060,27 +5985,23 @@ public class OttHomeActivity extends AppCompatActivity {
         LogBridge.i(TAG, "INFO-ENTER ch=" + (ch == null ? "null" : ch.getName())
                 + " barNull=" + (channelInfoBar == null));
         if (ch == null || channelInfoBar == null) {
-            LogBridge.w(TAG, "【切台信息条】跳过：ch=" + (ch == null) + " bar=" + (channelInfoBar == null));
+            LogBridge.i(TAG, "【切台信息条】跳过：ch=" + (ch == null) + " bar=" + (channelInfoBar == null));
             return;
         }
         // 【2026-10-17 用户口径】控制栏可见期间不弹信息条（详见 switchHintsSuppressed 注释）。
         // 这里再兜一层：EPG 就绪回调等旁路调用同样不会把信息条顶出来。
         if (switchHintsSuppressed()) {
             channelInfoBar.hide();
-            LogBridge.i(TAG, "【切台信息条】控制栏可见 → 抑制显示：" + ch.getName());
             return;
         }
-        LogBridge.i(TAG, "【切台信息条】准备显示 " + ch.getName());
         // 影视点播不走直播信息条
         // ⚠ vodIdOfChannelId 对非源5 频道返回 ""（不是 null），必须用 isEmpty 判断，
         //   原写法 != null 会把所有直播频道都误判成源5 点播 → 信息条永远不显示（已踩坑）。
         if (!TextUtils.isEmpty(
                 com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId()))) {
-            LogBridge.i(TAG, "【切台信息条】源5 点播，跳过");
             return;
         }
         if (com.tv.live.afhgrj.AfhgrjUrlResolver.vodIdOf(ch) != null) {
-            LogBridge.i(TAG, "【切台信息条】源7 影视，跳过");
             return;
         }
         String now = null, next = null;
@@ -6268,7 +6189,6 @@ public class OttHomeActivity extends AppCompatActivity {
                 default: mode = TVPlayerManager.ScaleMode.FILL; break;
             }
             if (mPlayerManager != null) mPlayerManager.setScaleMode(mode);
-            LogBridge.i(TAG, "【OTT·画面比例】切换为 " + ASPECT_LABELS[mAspectIdx]);
             Toast.makeText(this, "画面比例：" + ASPECT_LABELS[mAspectIdx], Toast.LENGTH_SHORT).show();
         } catch (Throwable t) {
             LogBridge.w(TAG, "切换画面比例失败: " + t.getMessage());
@@ -6514,7 +6434,7 @@ public class OttHomeActivity extends AppCompatActivity {
             focusAfhgrjEpgRow(idx);
             fromEpgFullscreen = true;
             lastEpgFocusIndex = idx;
-            setFullscreen(true);
+            if (!fullscreen) setFullscreen(true);   // 已在全屏则不重复进入（幂等）
             Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
                     Toast.LENGTH_SHORT).show();
             return;
@@ -6536,7 +6456,7 @@ public class OttHomeActivity extends AppCompatActivity {
             focusAfhgrjEpgRow(idx);
             fromEpgFullscreen = true;
             lastEpgFocusIndex = idx;
-            setFullscreen(true);
+            if (!fullscreen) setFullscreen(true);   // 已在全屏则不重复进入（幂等）
             Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
                     Toast.LENGTH_SHORT).show();
             return;
@@ -6559,7 +6479,7 @@ public class OttHomeActivity extends AppCompatActivity {
             fromEpgFullscreen = true;
             lastEpgFocusIndex = mCurrentRenyiboEpisodeIdx;
             // 【2026-10-14】点击集数播放后立刻进入全屏
-            setFullscreen(true);
+            if (!fullscreen) setFullscreen(true);
             Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
                     Toast.LENGTH_SHORT).show();
             return;
@@ -6583,7 +6503,7 @@ public class OttHomeActivity extends AppCompatActivity {
         fromEpgFullscreen = true;
         lastEpgFocusIndex = mCurrentAfhgrjEpisodeIdx;
         // 【2026-10-14】点击集数播放后立刻进入全屏
-        setFullscreen(true);
+        if (!fullscreen) setFullscreen(true);
         Toast.makeText(this, "播放：" + (TextUtils.isEmpty(item.title) ? "该集" : item.title),
                 Toast.LENGTH_SHORT).show();
     }
@@ -6769,7 +6689,7 @@ public class OttHomeActivity extends AppCompatActivity {
         loadHuyaCacheAndHttp();
 
         // 第二路：自研 HTTP 取 2135 → 立即发车，与 HTTP 线路并行
-        LogBridge.i(TAG, "虎牙：HTTP 线路已先发，自研线路立即补发");
+        LogBridge.d(TAG, "虎牙：HTTP 线路已先发，自研线路立即补发");
         loadHuyaSdkLine();
     }
 
@@ -6807,7 +6727,6 @@ public class OttHomeActivity extends AppCompatActivity {
                         mainHandler.post(() -> {
                             mergeHuyaChannels(channels);
                             onHuyaDataChanged(true);
-                            LogBridge.i(TAG, "虎牙 HTTP API 线路频道就绪，共 " + huyaChannels.size() + " 个");
                         });
                     }
 
@@ -6835,7 +6754,10 @@ public class OttHomeActivity extends AppCompatActivity {
                                 }
                             }
                             onHuyaDataChanged(true);
-                            LogBridge.i(TAG, "虎牙自研线路频道就绪，共 " + huyaChannels.size() + " 个");
+                            // 【2026-10-28 降噪】同一数量会因多次数据回调重复触发（实测 1.1s 内两条），只在变化时打
+                            if (mLastHuyaReadyCount != huyaChannels.size()) {
+                                mLastHuyaReadyCount = huyaChannels.size();
+                            }
                         });
                     }
 
@@ -6899,7 +6821,7 @@ public class OttHomeActivity extends AppCompatActivity {
         updateTopAdMask();
         // 【2026-10-17 界面重构 v2】「我的」板块没有播放画面，不参与全屏
         if (on && topSection == SECTION_MINE) {
-            LogBridge.i(TAG, "【OTT·全屏】当前在「我的」板块 → 忽略进入全屏");
+            LogBridge.d(TAG, "【OTT·全屏】当前在「我的」板块 → 忽略进入全屏");
             return;
         }
         // 【2026-10-18 诊断】进入全屏时记录调用方，便于排查「谁把它拉进/没拉进全屏」
@@ -6912,7 +6834,7 @@ public class OttHomeActivity extends AppCompatActivity {
                     break;
                 }
             }
-            LogBridge.i(TAG, "【全屏】进入全屏 调用方=" + caller);
+            LogBridge.d(TAG, "【全屏】进入全屏 调用方=" + caller);
         }
         fullscreen = on;
         // 【2026-10-11 源7】全屏状态一变化就收起控制栏并复位 useController=false，
@@ -7003,10 +6925,12 @@ public class OttHomeActivity extends AppCompatActivity {
                 effMarginTop = ((LinearLayout.LayoutParams) clp2).topMargin;
             }
         }
-        LogBridge.i(TAG, "全屏边距" + (on ? "已清零" : "已还原")
-                + " 生效padding=" + (ottOuter == null ? -1 : ottOuter.getPaddingLeft()) + "/" + (ottOuter == null ? -1 : ottOuter.getPaddingTop())
-                + " 生效contentMarginTop=" + effMarginTop
-                + " 保存值=" + savedContentMarginTop);
+        // 【2026-10-28 只留异常】正常进出全屏不再记；视图缺失（padding=-1）或边距没生效才记
+        if (ottOuter == null || effMarginTop < 0) {
+            LogBridge.w(TAG, "全屏边距异常(" + (on ? "进入" : "退出") + ") 视图缺失: padding="
+                    + (ottOuter == null ? -1 : ottOuter.getPaddingLeft()) + "/" + (ottOuter == null ? -1 : ottOuter.getPaddingTop())
+                    + " contentMarginTop=" + effMarginTop);
+        }
 
         // 【2026-10-18】btnFullscreen 已改为「直播」模式切换按钮（文案恒定），不再随全屏状态切换
 
@@ -7101,7 +7025,8 @@ public class OttHomeActivity extends AppCompatActivity {
             };
             if (gvChannel != null) gvChannel.post(restore); else restore.run();
         }
-        LogBridge.i(TAG, "全屏状态：" + on);
+        // 【2026-10-28】全屏状态切换不再打点：进入全屏时已有「【全屏】进入全屏 调用方=…」
+        //   一条足够定位；退出无信息量。重复调用本身是幂等的（ottInsetsSaved 已守卫）。
     }
 
     /** 【2026-09-29 自动全屏】起播后重新计时：AUTO_FULLSCREEN_DELAY_MS 内无用户操作则自动全屏 */
@@ -7117,7 +7042,6 @@ public class OttHomeActivity extends AppCompatActivity {
         autoFullscreenArmed = true;
         mainHandler.removeCallbacks(autoFullscreenRunnable);
         mainHandler.postDelayed(autoFullscreenRunnable, AUTO_FULLSCREEN_DELAY_MS);
-        LogBridge.i(TAG, "已开始 5s 自动全屏计时");
     }
 
     /** 【2026-09-29 自动全屏】用户有任何操作 → 取消本次自动全屏（幂等；只在真的取消时打日志，避免刷屏） */
@@ -7151,14 +7075,13 @@ public class OttHomeActivity extends AppCompatActivity {
                 || intent.hasExtra("debug_play_name") || intent.hasExtra("debug_panel"))) {
             splashOverlay.setVisibility(View.GONE);
             splashDismissed = true;
-            LogBridge.i(TAG, "【启动图】调试直达 → 跳过启动图");
+            LogBridge.d(TAG, "【启动图】调试直达 → 跳过启动图");
             return;
         }
         // ③ 直播模式热切换过来：共享播放器还在播，不会再回调 onPlayReady
         if (intent != null && intent.getBooleanExtra(EXTRA_WARM_START, false)) {
             splashOverlay.setVisibility(View.GONE);
             splashDismissed = true;
-            LogBridge.i(TAG, "【启动图】直播模式热切换 → 跳过启动图");
             return;
         }
         // 保底：超时无条件淡出（停留「我的」板块 / 播放异常等场景）
@@ -7166,7 +7089,6 @@ public class OttHomeActivity extends AppCompatActivity {
         mainHandler.postDelayed(splashFallbackRunnable, SPLASH_FALLBACK_MS);
         // 触摸点击（触摸屏设备）→ 理解为「想操作」，立即放行
         splashOverlay.setOnClickListener(v -> dismissSplashOverlay("用户点击"));
-        LogBridge.i(TAG, "【启动图】OTT 启动覆盖层已显示（就绪/9s 保底/用户操作后淡出）");
     }
 
     /** 【2026-10-18 启动图】淡出启动覆盖层（幂等）：动画结束后 GONE 并释放图片引用 */
@@ -7174,7 +7096,7 @@ public class OttHomeActivity extends AppCompatActivity {
         if (splashDismissed) return;
         splashDismissed = true;
         mainHandler.removeCallbacks(splashFallbackRunnable);
-        LogBridge.i(TAG, "【启动图】淡出覆盖层: " + reason);
+        LogBridge.d(TAG, "【启动图】淡出覆盖层: " + reason);
         if (splashOverlay == null) return;
         splashOverlay.animate()
                 .alpha(0f)
@@ -7195,7 +7117,7 @@ public class OttHomeActivity extends AppCompatActivity {
         fullscreenHint.setVisibility(View.VISIBLE);
         mainHandler.removeCallbacks(hideFullscreenHintRunnable);
         mainHandler.postDelayed(hideFullscreenHintRunnable, FULLSCREEN_HINT_MS);
-        LogBridge.i(TAG, "自动全屏提示已显示 " + FULLSCREEN_HINT_MS + "ms");
+        LogBridge.d(TAG, "自动全屏提示已显示 " + FULLSCREEN_HINT_MS + "ms");
     }
 
     private void hideFullscreenHint() {
@@ -7290,7 +7212,7 @@ public class OttHomeActivity extends AppCompatActivity {
 
     private void handleSettingsClosed() {
         if (appConfig.getSourceMode() == AppConfig.SOURCE_MODE_LIVE) {
-            LogBridge.i(TAG, "源模式已切换为直播模式，重启进入直播");
+            LogBridge.d(TAG, "源模式已切换为直播模式，重启进入直播");
             switchToLiveMode();
         }
     }
@@ -7310,7 +7232,7 @@ public class OttHomeActivity extends AppCompatActivity {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         startActivity(intent);
         finish();
-        LogBridge.i(TAG, "【模式切换】OTT → 直播（顶栏按钮）");
+        LogBridge.d(TAG, "【模式切换】OTT → 直播（顶栏按钮）");
     }
 
     // ============================ 生命周期 / 按键 ============================
@@ -7378,11 +7300,9 @@ public class OttHomeActivity extends AppCompatActivity {
             long dur = mPlayerManager.getDuration();
             // 【2026-10-17 广告剥离适配】片长一并记下：点播走代理时广告分片被剔除，
             //   时间轴比源清单短；下次剥离结果若不同，靠「片长比例」把位置校正回去。
-            LogBridge.i(TAG, "【OTT·保存进度】频道=" + playingChannel.getName()
-                    + " 位置=" + pos + "ms 片长=" + dur + "ms");
+            // 【2026-10-28】保存进度不再打点（每次切台/暂停都写一行，无排障价值）。
             if (pos > 5000) { // 至少播了5秒才记录
                 appConfig.updateOttHistoryPosition(playingChannel.getName(), pos, dur);
-                LogBridge.i(TAG, "【OTT·保存进度】已保存");
             }
         } catch (Throwable t) {
             LogBridge.w(TAG, "【OTT·保存进度】异常: " + t.getMessage());
@@ -7422,9 +7342,6 @@ public class OttHomeActivity extends AppCompatActivity {
             }
             return true;
         }
-        LogBridge.i(TAG, "【按键】code=" + keyCode + " 控制栏=" + ottControllerShowing
-                + " 全屏=" + fullscreen + " 焦点=" + (getCurrentFocus() == null ? "null"
-                : getCurrentFocus().getClass().getSimpleName()));
         // 【2026-10-17 v2】详情页打开时：返回键只关详情页（不连带退全屏/退应用），
         //   其余按键交给面板内部的焦点系统处理（按钮行 ↔ 选集行）。
         if (detailPanel != null && detailPanel.isShowing()) {
@@ -7473,11 +7390,11 @@ public class OttHomeActivity extends AppCompatActivity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP && flPreview != null && flPreview.hasFocus()) {
             TextView sel = selectedTabView();
             if (sel != null && sel.requestFocus()) {
-                LogBridge.i(TAG, "播放器按上 → 定向到当前分组 Tab：" + currentGroup);
+                LogBridge.d(TAG, "播放器按上 → 定向到当前分组 Tab：" + currentGroup);
             } else {
                 // 极少数情况 requestFocus 失败：仍然吃掉本次按键，
                 // 绝不让几何搜索把焦点交给别的 Tab
-                LogBridge.w(TAG, "播放器按上 → 未找到当前分组 Tab，吞掉本次按键");
+                LogBridge.i(TAG, "播放器按上 → 未找到当前分组 Tab，吞掉本次按键");
             }
             return true;
         }
@@ -7550,7 +7467,7 @@ public class OttHomeActivity extends AppCompatActivity {
                     //   控制栏已显示时，确认键由焦点按钮自己消费，不会走到这里。
                     if (isVodControllerEligible()) {
                         showSource7Controller();
-                        LogBridge.i(TAG, "【OTT·点播】全屏确认键 → 唤起控制栏（不改播放状态）");
+                        LogBridge.d(TAG, "【OTT·点播】全屏确认键 → 唤起控制栏（不改播放状态）");
                         return true;
                     }
                     setFullscreen(false);
@@ -7581,7 +7498,7 @@ public class OttHomeActivity extends AppCompatActivity {
         // 【2026-10-17 v2】详情页最优先关闭（部分系统路径 BACK 不走 onKeyDown）
         if (detailPanel != null && detailPanel.isShowing()) {
             detailPanel.hide();
-            LogBridge.i(TAG, "【详情页】onBackPressed → 关闭详情");
+            LogBridge.d(TAG, "【详情页】onBackPressed → 关闭详情");
             return;
         }
         // 【v1.6】返回键分层（与主流 TV 端一致）：先关抽屉 → 再收控制栏 → 最后退全屏

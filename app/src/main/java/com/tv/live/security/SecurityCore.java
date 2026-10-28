@@ -38,6 +38,7 @@ import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
@@ -56,7 +57,7 @@ public final class SecurityCore {
         try {
             System.loadLibrary("tvlive_security");
             sLoaded = true;
-            LogBridge.i(TAG, "libtvlive_security.so 加载成功");
+            LogBridge.d(TAG, "libtvlive_security.so 加载成功");
             LogBridge.i(TAG, "SECURITY_INIT: Native SO loaded OK");
             // 【2026-10-22 I1-07】把当前证书 SHA-256 绑给 native：
             //   之后 AES 工作密钥与 secstore 常量都由「签名哈希 + 内置片段」派生，
@@ -249,7 +250,7 @@ public final class SecurityCore {
 
     public static String decryptToString(String cipherB64) {
         if (cipherB64 == null) {
-            LogBridge.w(TAG, "DECRYPT: cipherB64 is null");
+            LogBridge.i(TAG, "DECRYPT: cipherB64 is null");
             return null;
         }
         byte[] cipher;
@@ -731,25 +732,25 @@ public final class SecurityCore {
                     Thread.sleep(30 * 60 * 1000);
 
                     if (checkFrida()) {
-                        if (!reported[0]) { LogBridge.w(TAG, "安全监控：命中 [CHK-01]"); reported[0] = true; }
-                        else { LogBridge.d(TAG, "安全监控：[CHK-01] 仍存在（已报告，跳过重复告警）"); }
+                        if (!reported[0]) { LogBridge.d(TAG, "安全监控：命中 [CHK-01]"); reported[0] = true; }
+                        else {  }
                         onThreatDetected(THREAT_FRIDA, "运行时注入环境异常");
                     }
 
                     if (checkXposed()) {
-                        if (!reported[1]) { LogBridge.w(TAG, "安全监控：命中 [CHK-02]"); reported[1] = true; }
-                        else { LogBridge.d(TAG, "安全监控：[CHK-02] 仍存在（已报告，跳过重复告警）"); }
+                        if (!reported[1]) { LogBridge.d(TAG, "安全监控：命中 [CHK-02]"); reported[1] = true; }
+                        else {  }
                         onThreatDetected(THREAT_XPOSED, "运行时注入框架异常");
                     }
 
                     if (android.os.Debug.isDebuggerConnected()) {
-                        if (!reported[2]) { LogBridge.w(TAG, "检测到调试器连接（仅记录，不上报）"); reported[2] = true; }
-                        else { LogBridge.d(TAG, "安全监控：调试器仍连接（已报告，跳过重复告警）"); }
+                        if (!reported[2]) { LogBridge.d(TAG, "检测到调试器连接（仅记录，不上报）"); reported[2] = true; }
+                        else {  }
                     }
 
                     if (checkRoot()) {
-                        if (!reported[3]) { LogBridge.w(TAG, "检测到 Root 环境（仅记录）"); reported[3] = true; }
-                        else { LogBridge.d(TAG, "安全监控：Root 仍存在（已报告，跳过重复告警）"); }
+                        if (!reported[3]) { LogBridge.d(TAG, "检测到 Root 环境（仅记录）"); reported[3] = true; }
+                        else {  }
                     }
 
                 } catch (InterruptedException e) {
@@ -937,7 +938,7 @@ public final class SecurityCore {
                 protectDex(context);
                 checkDexIntegrity(context);
                 startDexMonitor(context);
-                LogBridge.i(TAG, "DEX 保护初始化完成");
+                LogBridge.d(TAG, "DEX 保护初始化完成");
             } catch (Throwable e) {
                 LogBridge.w(TAG, "DEX 保护初始化异常: " + e.getMessage());
             }
@@ -1020,7 +1021,7 @@ public final class SecurityCore {
                 String name = file.getName().toLowerCase(Locale.ROOT);
                 for (String suspicious : suspiciousNames) {
                     if (name.contains(suspicious)) {
-                        LogBridge.w(TAG, "检测到可疑文件: " + file.getAbsolutePath());
+                        LogBridge.d(TAG, "检测到可疑文件: " + file.getAbsolutePath());
                         break;
                     }
                 }
@@ -1217,7 +1218,7 @@ public final class SecurityCore {
                             int pid = Integer.parseInt(pidStr);
 
                             if (pid != 0) {
-                                LogBridge.d(TAG, "[CHK-04]=" + pid + " (参考信息)");
+
 
                             }
                             break;
@@ -1273,7 +1274,7 @@ public final class SecurityCore {
                     socket.connect(new java.net.InetSocketAddress("127.0.0.1",
                         Integer.parseInt(port)), 100);
                     socket.close();
-                    LogBridge.w(TAG, "检测到可疑监听端口: " + port);
+                    LogBridge.d(TAG, "检测到可疑监听端口: " + port);
                     return true;
                 } catch (Exception e) {
 
@@ -1289,7 +1290,7 @@ public final class SecurityCore {
             };
             for (String path : fridaPaths) {
                 if (new File(path).exists()) {
-                    LogBridge.w(TAG, "检测到特征文件命中");
+                    LogBridge.d(TAG, "检测到特征文件命中");
                     return true;
                 }
             }
@@ -1320,7 +1321,7 @@ public final class SecurityCore {
             };
             for (String path : xposedPaths) {
                 if (new File(path).exists()) {
-                    LogBridge.w(TAG, "检测到注入框架特征文件");
+                    LogBridge.d(TAG, "检测到注入框架特征文件");
                     return true;
                 }
             }
@@ -1331,7 +1332,7 @@ public final class SecurityCore {
                 for (java.util.Map.Entry<String, String> entry : System.getenv().entrySet()) {
                     if (entry.getKey().contains(upper) ||
                         entry.getValue().contains(lower)) {
-                        LogBridge.w(TAG, "检测到注入框架环境变量");
+                        LogBridge.d(TAG, "检测到注入框架环境变量");
                         return true;
                     }
                 }
@@ -1358,7 +1359,7 @@ public final class SecurityCore {
             };
             for (String path : emulatorFiles) {
                 if (new File(path).exists()) {
-                    LogBridge.w(TAG, "检测到模拟器特征");
+                    LogBridge.d(TAG, "检测到模拟器特征");
                     return true;
                 }
             }
@@ -1699,63 +1700,22 @@ public final class SecurityCore {
         sReported = true;
 
         String typeName = getTypeName(tamperType);
-        LogBridge.w(TAG, "⚠️ 检测到篡改行为: " + typeName + " - " + detail);
-
-        LogCollector.getInstance().error(TAG,
-            "⚠️ 反编译检测: " + typeName + " | " + detail);
-
+        // 【2026-10-28 单通道】同一篡改事件原写 3 处：缓冲摘要 + 缓冲结构化 + tamper_logs/*.log 文件。
+        //   现只保留一条结构化缓冲记录（含 ⚠️ 前缀，便于按关键字检索）。
         reportToLocalMonitor(tamperType, typeName, detail);
-
-        writeTamperLogToFile(tamperType, typeName, detail);
     }
 
     public static void reportSuspicious(int tamperType, String detail) {
         String typeName = getTypeName(tamperType);
-        LogBridge.w(TAG, "⚠️ 检测到可疑环境: " + typeName + " - " + detail);
-
         LogCollector.getInstance().warn(TAG,
             "可疑环境: " + typeName + " | " + detail);
-    }
-
-    private static void writeTamperLogToFile(int tamperType, String typeName, String detail) {
-        try {
-            if (sAppContext == null) return;
-
-            StringBuilder logBuilder = new StringBuilder();
-            logBuilder.append("\n===== TAMPER DETECTED =====\n");
-            logBuilder.append("Time: ").append(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US)
-                .format(new java.util.Date())).append("\n");
-            logBuilder.append("Type: ").append(typeName).append(" (").append(tamperType).append(")\n");
-            logBuilder.append("Detail: ").append(detail).append("\n");
-            logBuilder.append("Package: ").append(BuildConfig.APPLICATION_ID).append("\n");
-            logBuilder.append("Version: ").append(BuildConfig.VERSION_NAME).append("\n");
-            logBuilder.append("Device: ").append(Build.MODEL).append("\n");
-            logBuilder.append("Brand: ").append(Build.BRAND).append("\n");
-            logBuilder.append("SDK: ").append(Build.VERSION.SDK_INT).append("\n");
-            logBuilder.append("Build: ").append(BuildConfig.IS_DEBUG ? "debug" : "release").append("\n");
-            logBuilder.append("Process: ").append(android.os.Process.myPid()).append("\n");
-            logBuilder.append("==========================\n\n");
-
-            java.io.File dir = new java.io.File(sAppContext.getFilesDir(), "tamper_logs");
-            if (!dir.exists()) dir.mkdirs();
-
-            java.io.File logFile = new java.io.File(dir, "tamper_" + System.currentTimeMillis() + ".log");
-            java.io.FileWriter writer = new java.io.FileWriter(logFile, true);
-            writer.write(logBuilder.toString());
-            writer.close();
-
-            LogBridge.d(TAG, "篡改日志已写入: " + logFile.getAbsolutePath());
-
-        } catch (Exception e) {
-            LogBridge.e(TAG, "写入篡改日志失败: " + e.getMessage());
-        }
     }
 
     private static void reportToLocalMonitor(int tamperType, String typeName, String detail) {
         try {
 
             StringBuilder sb = new StringBuilder();
-            sb.append("[TAMPER] ").append(typeName).append("\n");
+            sb.append("[TAMPER] ⚠️ 反编译检测: ").append(typeName).append("\n");
             sb.append("Detail: ").append(detail).append("\n");
             sb.append("Package: ").append(BuildConfig.APPLICATION_ID).append("\n");
             sb.append("Version: ").append(BuildConfig.VERSION_NAME).append("\n");
@@ -1934,9 +1894,40 @@ public final class SecurityCore {
 
     private static volatile String sExpectedDexB64;
 
+    /** 【2026-10-27】verifyOnStart 幂等化：首个调用者执行，其余等待并复用结果。 */
+    private static final java.util.concurrent.atomic.AtomicBoolean sVerifyStarted =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static final java.util.concurrent.CountDownLatch sVerifyLatch =
+            new java.util.concurrent.CountDownLatch(1);
+    private static volatile boolean sVerifyResult = true;
+
     private SecurityCheck() {}
 
     public static boolean verifyOnStart(Context ctx) {
+        // 【2026-10-27 去重复执行】原实现被两处各调一次：
+        //   MyApplication.initSecurity()（"init-security" 后台线程）
+        //   MainActivity.onCreate → AppExecutors.io(...)
+        // 两者同时在跑 → 签名校验 + 包名校验 + classes*.dex 全量 SHA-256 各做两遍，
+        //   dex 哈希是整包读一遍，重复执行白耗启动时间，日志里每条校验结果也固定出现两行。
+        // 现改为幂等：首个调用者执行，其余调用者等它结束直接复用结果。
+        if (!sVerifyStarted.compareAndSet(false, true)) {
+            try {
+                sVerifyLatch.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return sVerifyResult;
+        }
+        try {
+            sVerifyResult = doVerifyOnStart(ctx);
+            return sVerifyResult;
+        } finally {
+            sVerifyLatch.countDown();
+        }
+    }
+
+    /** 签名/包名/dex 校验的实际执行体，只允许经 {@link #verifyOnStart} 进入（保证幂等）。 */
+    private static boolean doVerifyOnStart(Context ctx) {
         if (BuildConfig.IS_DEBUG) {
             LogBridge.i(TAG, "🔓 调试版：跳过签名校验");
             return true;
@@ -1974,11 +1965,11 @@ public final class SecurityCore {
                     "包名校验失败, expected=" + EXPECTED_PKG + " current=" + pkgName
                 );
             } catch (Throwable t) {
-                LogBridge.w(TAG, "篡改上报失败: " + t.getMessage());
+
             }
             allPassed = false;
         } else {
-            LogBridge.i(TAG, "✅ 包名校验通过");
+            LogBridge.d(TAG, "✅ 包名校验通过");
         }
 
         if (!verifyDexIntegrity(ctx)) {
@@ -1989,7 +1980,7 @@ public final class SecurityCore {
                     "DEX完整性校验失败"
                 );
             } catch (Throwable t) {
-                LogBridge.w(TAG, "篡改上报失败: " + t.getMessage());
+
             }
             // 【2026-10-21 P0 修复（I1-01）】与签名校验口径对齐：dex 不匹配即阻断。
             //   误报风险评估：classes.dex 位于已签名 APK 内，安装后不可变；
@@ -2059,7 +2050,7 @@ public final class SecurityCore {
             //   （实测 release 日志里出现过完整 Base64），等于把比对基准重新公开，抵消了
             //   "期望值只存在于 .so" 的改造。前缀足够区分包是否被换签名。
             String sigB64 = Base64.encodeToString(shaBytes, Base64.NO_WRAP);
-            LogBridge.i(TAG, "当前签名 SHA256=" + sigB64.substring(0, Math.min(12, sigB64.length())) + "…");
+            LogBridge.d(TAG, "当前签名 SHA256=" + sigB64.substring(0, Math.min(12, sigB64.length())) + "…");
 
             boolean ok;
             try {
@@ -2073,7 +2064,7 @@ public final class SecurityCore {
                 toastAndExit(appCtx, "签名校验失败，APK 被修改");
                 return false;
             }
-            LogBridge.i(TAG, "✅ 签名校验通过");
+            LogBridge.d(TAG, "✅ 签名校验通过");
             return true;
         } catch (Exception e) {
             LogBridge.e(TAG, "verify error", e);
@@ -2124,7 +2115,7 @@ public final class SecurityCore {
                 LogBridge.e(TAG, "❌ dex hash 不匹配！expected=" + expected + " current=" + currentB64);
                 return false;
             }
-            LogBridge.i(TAG, "✅ dex 完整性校验通过（classes*.dex SHA-256 匹配）");
+            LogBridge.d(TAG, "✅ dex 完整性校验通过（classes*.dex SHA-256 匹配）");
             return true;
         } catch (Exception e) {
             LogBridge.e(TAG, "verify dex error", e);
@@ -2233,7 +2224,7 @@ public final class SecurityCore {
         }
 
         mInitialized = true;
-        LogBridge.i(TAG, "安全管理器初始化完成，签名哈希: " +
+        LogBridge.d(TAG, "安全管理器初始化完成，签名哈希: " +
             (mExpectedSignatureHash != null ? mExpectedSignatureHash.substring(0, 16) + "..." : "unknown"));
     }
 
@@ -2256,9 +2247,14 @@ public final class SecurityCore {
         checkRuntimeEnvironment(report);
 
         if (report.hasAnyThreat()) {
-            LogBridge.w(TAG, "安全检测完成: " + report.getSummary());
+            // 【2026-10-27 去日志双写】原先这里把 getSummary() 全文（= ⚠️ 逐项威胁列表）再打一遍，
+            // 而每一项威胁在各自的 check 里已经单独打过 ⚠️ 行了 → 同一批内容在缓冲里出现两遍；
+            // 再叠加 MyApplication 层的「安全检测发现风险: <同一份 summary>」，一次命中变三行。
+            // 现在：逐项明细由各 check 负责，这里只给一行结论 + 计数。
+            LogBridge.w(TAG, "安全检测完成：发现 " + report.threats.size()
+                    + " 项风险（明细见上方 ⚠️ 行）");
         } else {
-            LogBridge.i(TAG, "安全检测完成: " + report.getSummary());
+            LogBridge.i(TAG, "安全检测完成：未发现风险");
         }
 
         mLastReport.update(report);
@@ -2468,7 +2464,9 @@ public final class SecurityCore {
         if (suFound || isTestKeyBuild() || hasWriteAccess("/system")) {
             report.rootDetected = true;
             report.threats.add("检测到 [CHK-05] 权限");
-            LogBridge.w(TAG, "⚠️ 检测到 [CHK-05] 环境");
+            // 【2026-10-27 去日志双写】文案与 threats 条目保持一致（原来这里写「环境」、
+            // 汇总里写「权限」，同一次检测出现两种叫法，排查时误以为是两个问题）。
+            LogBridge.w(TAG, "⚠️ 检测到 [CHK-05] 权限（root / 测试密钥 / 系统可写）");
         }
     }
 

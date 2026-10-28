@@ -38,6 +38,23 @@ import okhttp3.Response;
  */
 public class M3u8AdStripper {
 
+    /** 【2026-10-28】最近一次剥离的「命中算法 + 耗时」，由 WebServerManager 汇总行读取，
+     *   避免算法内部再各打一条日志。 */
+    private static volatile String sLastAlgoName = "-";
+    private static volatile long sLastCostMs = -1;
+
+    /** 命中算法名（如「主算法成功」「未命中」），无记录时返回 "-" */
+    public static String getLastAlgoName() { return sLastAlgoName; }
+
+    /** 最近一次剥离耗时（ms），无记录时返回 -1 */
+    public static long getLastCostMs() { return sLastCostMs; }
+
+    private static void recordResult(String algoName, long startTime) {
+        sLastAlgoName = algoName;
+        sLastCostMs = System.currentTimeMillis() - startTime;
+    }
+
+
     private static final String TAG = "M3u8AdStripper";
 
     // 【测试开关】禁用所有4层广告剥离算法，仅测试DNS拦截
@@ -123,8 +140,6 @@ public class M3u8AdStripper {
             }
             String decoded = new String(data, "UTF-8");
             if (decoded.contains("#EXTM3U")) {
-                LogBridge.i(TAG, "十进制 m3u8 解码成功：" + lines.length
-                        + " 行 → " + decoded.length() + " 字节");
                 return decoded;
             }
             LogBridge.w(TAG, "十进制解码后仍无 #EXTM3U，放弃解码");
@@ -160,6 +175,57 @@ public class M3u8AdStripper {
      * 【2026-10-23 修复5】同上，另支持自定义 User-Agent。
      * 为空时用默认 Mozilla UA（历史行为），非空时透传（源9 videoUsableUrl 下发的防盗链表）。
      */
+    /**
+     * 【2026-10-27】字节级下载（供格式识别探针用）。
+     *
+     * <p>与 {@link #downloadContent} 区别：返回原始字节而非 UTF-8 字符串，
+     * 避免 mp4/flv 等二进制容器被字符串化后魔数错位，导致「按扩展名之外的真内容」判定失效。
+     */
+    public static byte[] downloadBytes(String url, int maxBytes, String referer, String userAgent) {
+        if (url == null || url.isEmpty()) return null;
+        java.net.HttpURLConnection conn = null;
+        try {
+            conn = (java.net.HttpURLConnection) new java.net.URL(url)
+                    .openConnection(java.net.Proxy.NO_PROXY);
+            conn.setConnectTimeout(DOWNLOAD_CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(DOWNLOAD_READ_TIMEOUT_MS);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent",
+                    (userAgent != null && !userAgent.isEmpty())
+                            ? userAgent : "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36");
+            if (referer != null && !referer.isEmpty()) {
+                conn.setRequestProperty("Referer", referer);
+            }
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                LogBridge.w(TAG, "下载失败: HTTP " + code + " url="
+                        + url.substring(0, Math.min(80, url.length())));
+                return null;
+            }
+            java.io.InputStream is = conn.getInputStream();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int read;
+            while ((read = is.read(buf)) != -1) {
+                if (maxBytes > 0 && out.size() >= maxBytes) break;
+                int toCopy = (maxBytes > 0)
+                        ? Math.min(read, maxBytes - out.size()) : read;
+                out.write(buf, 0, toCopy);
+            }
+            try { is.close(); } catch (Throwable ignored) {}
+            return out.toByteArray();
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "下载异常 " + t.getClass().getSimpleName()
+                    + ": " + t.getMessage() + " url="
+                    + (url != null ? url.substring(0, Math.min(80, url.length())) : "null"));
+            return null;
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
     public static String downloadContent(String url, int maxBytes, String referer, String userAgent) {
         if (url == null || url.isEmpty()) return null;
         java.net.HttpURLConnection conn = null;
@@ -246,22 +312,17 @@ public class M3u8AdStripper {
         int segmentCount = countSegments(content);
         int discontinuityCount = countOccurrences(content, "#EXT-X-DISCONTINUITY");
 
-        LogBridge.i(TAG, "========== 广告剥离流程开始 ==========");
-        LogBridge.i(TAG, "输入: 分片数=" + segmentCount + ", DISCONTINUITY数=" + discontinuityCount
-                + ", baseUrl=" + (baseUrl != null ? baseUrl.substring(0, Math.min(50, baseUrl.length())) : "null"));
 
         // 【自动识别2】是点播（有ENDLIST）？
         boolean isVod = content.contains("#EXT-X-ENDLIST");
         if (!isVod) {
-            LogBridge.i(TAG, "【自动识别】直播流（无 ENDLIST），跳过广告剥离，仅转相对URL为绝对URL");
             String result = content;
             if (!TextUtils.isEmpty(baseUrl)) {
                 result = resolveAllUrls(content, baseUrl);
             }
-            LogBridge.i(TAG, "========== 广告剥离流程结束（直播跳过）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("直播跳过", startTime);
             return result;
         }
-        LogBridge.i(TAG, "【自动识别】点播流（有 ENDLIST），进入广告剥离");
 
         // 【测试开关】如果禁用所有算法，只转相对URL为绝对，直接返回
         if (DISABLE_ALL_STRIP_ALGORITHMS) {
@@ -269,66 +330,53 @@ public class M3u8AdStripper {
             if (!TextUtils.isEmpty(baseUrl)) {
                 content = resolveAllUrls(content, baseUrl);
             }
-            LogBridge.i(TAG, "========== 广告剥离流程结束（测试模式-禁用算法）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("测试模式-禁用算法", startTime);
             return content;
         }
 
         // 先把相对URL转绝对（确保后续同源判定准确）
         if (!TextUtils.isEmpty(baseUrl)) {
             content = resolveAllUrls(content, baseUrl);
-            LogBridge.d(TAG, "相对URL已转为绝对URL");
-        }
+            }
 
         // 【自动选择算法⓪】拼接缝插播广告（【2026-10-19 新增】同源同目录、无文本特征的插播广告）
-        LogBridge.i(TAG, "【算法选择⓪】尝试 拼接缝插播广告识别");
         String seamResult = stripBySeamSplice(content);
         if (seamResult != null && !seamResult.equals(content)) {
             int seamStripped = segmentCount - countSegments(seamResult);
-            LogBridge.i(TAG, "【算法选择⓪】拼接缝算法成功！剔除广告分片 " + seamStripped + " 个");
-            LogBridge.i(TAG, "========== 广告剥离流程结束（拼接缝成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("拼接缝成功", startTime);
             recordRemovedWindows(content, seamResult, baseUrl);
             return seamResult;
         }
-        LogBridge.i(TAG, "【算法选择⓪】拼接缝未命中，继续主算法");
 
         // 【自动选择算法①】DISCONTINUITY 切块 + 同源判定（主算法）
-        LogBridge.i(TAG, "【算法选择①】尝试 DISCONTINUITY 切块 + 同源判定（主算法）");
         String result = stripByDiscontinuity(content);
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
-            LogBridge.i(TAG, "【算法选择①】主算法成功！剔除广告分片 " + strippedCount + " 个");
-            LogBridge.i(TAG, "========== 广告剥离流程结束（主算法成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("主算法成功", startTime);
             recordRemovedWindows(content, result, baseUrl);
             return result;
         }
-        LogBridge.i(TAG, "【算法选择①】主算法未命中，降级到备用算法");
 
         // 【自动选择算法②】按时长异常检测广告块（备用算法）
-        LogBridge.i(TAG, "【算法选择②】尝试 时长异常检测（备用算法）");
         result = stripByDurationAnomaly(content);
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
-            LogBridge.i(TAG, "【算法选择②】时长异常算法成功！剔除广告分片 " + strippedCount + " 个");
             recordRemovedWindows(content, result, baseUrl);
-            LogBridge.i(TAG, "========== 广告剥离流程结束（时长异常成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("时长异常成功", startTime);
             return result;
         }
-        LogBridge.i(TAG, "【算法选择②】时长异常算法未命中");
+        LogBridge.d(TAG, "【算法选择②】时长异常算法未命中");
 
         // 【自动选择算法③】按广告关键词/URL 路径过滤
-        LogBridge.i(TAG, "【算法选择③】尝试 广告关键词/URL 路径过滤");
         result = stripByAdKeyword(content);
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
-            LogBridge.i(TAG, "【算法选择③】关键词过滤成功！剔除广告分片 " + strippedCount + " 个");
             recordRemovedWindows(content, result, baseUrl);
-            LogBridge.i(TAG, "========== 广告剥离流程结束（关键词过滤成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("关键词过滤成功", startTime);
             return result;
         }
-        LogBridge.i(TAG, "【算法选择③】关键词过滤未命中");
 
         // 【自动选择算法④】按广告时长前缀过滤（常见广告时长 15s/30s/45s/60s）
-        LogBridge.i(TAG, "【算法选择④】尝试 广告时长前缀过滤（15/30/45/60s）");
         java.util.List<String> durationPrefixes = new java.util.ArrayList<>();
         durationPrefixes.add("15");
         durationPrefixes.add("30");
@@ -337,16 +385,14 @@ public class M3u8AdStripper {
         result = stripByDurationPrefix(content, durationPrefixes);
         if (result != null && !result.equals(content)) {
             int strippedCount = segmentCount - countSegments(result);
-            LogBridge.i(TAG, "【算法选择④】时长前缀过滤成功！剔除广告分片 " + strippedCount + " 个");
             recordRemovedWindows(content, result, baseUrl);
-            LogBridge.i(TAG, "========== 广告剥离流程结束（时长前缀成功）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+            recordResult("时长前缀成功", startTime);
             return result;
         }
-        LogBridge.i(TAG, "【算法选择④】时长前缀过滤未命中");
 
         // 【自动选择算法⑤】都失败 → 返回原文，不影响播放
         LogBridge.i(TAG, "【算法选择⑤】所有算法均未命中，返回原文，不影响播放");
-        LogBridge.i(TAG, "========== 广告剥离流程结束（未命中）耗时=" + (System.currentTimeMillis() - startTime) + "ms ==========");
+        recordResult("未命中", startTime);
         return content;
     }
 
@@ -443,7 +489,7 @@ public class M3u8AdStripper {
             }
             // 剥离只删不改：结果必须是原文的子序列。对不上说明解析/改写异常，宁可不登记。
             if (j != after.size()) {
-                LogBridge.w(TAG, "【广告时间窗】剥离结果与原文对不上，跳过登记");
+                LogBridge.i(TAG, "【广告时间窗】剥离结果与原文对不上，跳过登记");
                 return;
             }
             // 去掉零时长窗口（分片缺 EXTINF 时无法定位）
@@ -464,7 +510,7 @@ public class M3u8AdStripper {
                         ss / 60, ss % 60, (valid.get(i)[1] - valid.get(i)[0]) / 1000));
             }
             sAdWindows.put(baseUrl, flat);
-            LogBridge.i(TAG, "【广告时间窗】登记 " + valid.size()
+            LogBridge.d(TAG, "【广告时间窗】登记 " + valid.size()
                     + " 段（按实际剔除差异）→ 播放轴起点: " + sb);
         } catch (Throwable t) {
             LogBridge.w(TAG, "【广告时间窗】差异登记失败 " + t.getMessage());
@@ -551,7 +597,7 @@ public class M3u8AdStripper {
                     && !line.contains("IV=")) {
                 lines[i] = line + ",IV=" + ZERO_IV_HEX;
                 changed = true;
-                LogBridge.i(TAG, "【防诱饵】注入零 IV → " + lines[i].substring(0, Math.min(120, lines[i].length())));
+
             }
         }
         if (!changed) return content;
@@ -583,8 +629,8 @@ public class M3u8AdStripper {
                 } catch (Throwable ignored) {
                 }
                 if (len >= 0 && len < TINY_BYTERANGE_THRESHOLD && !url.startsWith("#")) {
-                    LogBridge.w(TAG, "【防诱饵】剔除碎分片条目 len=" + len + "B url="
-                            + url.substring(0, Math.min(60, url.length())));
+
+
                     removed++;
                     i += 3;
                     continue;
@@ -595,7 +641,7 @@ public class M3u8AdStripper {
             i++;
         }
         if (removed > 0) {
-            LogBridge.i(TAG, "【防诱饵】共剔除碎分片 " + removed + " 个（阈值 <"
+            LogBridge.d(TAG, "【防诱饵】共剔除碎分片 " + removed + " 个（阈值 <"
                     + TINY_BYTERANGE_THRESHOLD + " 字节）");
         }
         return sb.toString();
@@ -767,13 +813,12 @@ public class M3u8AdStripper {
             }
             if (tiny && segs > 0 && sum > 0 && sum <= SEAM_AD_BLOCK_MAX_SEC) {
                 adIdx.add(bi);
-                LogBridge.i(TAG, "【拼接缝】块#" + bi + " 判为插播广告：分片=" + segs
-                        + " 块时长=" + String.format(java.util.Locale.US, "%.2f", sum)
-                        + "s（含 <1s 的拼接缝分片）");
+
+
+
             }
         }
         if (adIdx.isEmpty()) return null;
-        LogBridge.i(TAG, "【拼接缝】命中插播广告块 " + adIdx.size() + " 个（共 " + blocks.length + " 块）");
         return filterBlocks(content, blocks, adIdx);
     }
 
@@ -875,8 +920,6 @@ public class M3u8AdStripper {
         //   却被剔除 68/369 片 ≈ 4.5 分钟正片（用户报障「内容缺失」）。
         //   判据：有效块 ≥ 20 且「除首尾外时长 18~32s」占 ≥90% → 视为分块存储，跳过剥离。
         if (isUniformChunkedStorage(blockSegCounts, blockDurations)) {
-            LogBridge.i(TAG, "【算法选择①】判定为等长分块存储（" + blocks.length
-                    + " 块等长，非广告插播），跳过剥离以保护正片");
             return content;
         }
 
@@ -903,8 +946,6 @@ public class M3u8AdStripper {
             }
         }
         double dominantUrlLenRatio = validBlockCount > 0 ? (double) dominantUrlLenCount / validBlockCount : 0;
-        LogBridge.d(TAG, "【算法选择①】URL长度统计: 主流长度=" + dominantUrlLen + ", 占比=" + String.format("%.1f%%", dominantUrlLenRatio * 100));
-        LogBridge.d(TAG, "【算法选择①】块统计: 有效块=" + validBlockCount + ", 平均分片数=" + avgSegCount + ", 平均时长=" + avgDuration + "s");
 
         // 【2026-10-17 优化】块大小一致性检测：如果所有有效块的分片数都接近平均值，
         // 说明这是正常的视频分片（编码器按固定大小切分），不是广告+正片混合结构，直接跳过剥离。
@@ -921,9 +962,6 @@ public class M3u8AdStripper {
                 }
             }
             double sizeRatio = maxSeg > 0 ? (double) maxSeg / minSeg : 1.0;
-            LogBridge.d(TAG, "【算法选择①】块大小范围: min=" + minSeg + ", max=" + maxSeg
-                    + ", 比值=" + String.format("%.1f", sizeRatio)
-                    + ", 小块数=" + smallBlockCount + ", 大块数=" + largeBlockCount);
 
             // 【2026-10-17 优化2】统计3分片小块占比：广告混合结构中广告块通常是3分片，
             // 但正片块应该是50+分片。如果3分片块占比>40%且最大块<30分片，
@@ -933,8 +971,6 @@ public class M3u8AdStripper {
                 if (blockSegCounts[bi] == 3) threeSegBlockCount++;
             }
             double threeSegRatio = validBlockCount > 0 ? (double) threeSegBlockCount / validBlockCount : 0;
-            LogBridge.d(TAG, "【算法选择①】3分片块占比: " + threeSegBlockCount + "/" + validBlockCount
-                    + " = " + String.format("%.1f%%", threeSegRatio * 100) + ", 最大块=" + maxSeg);
 
             // 【2026-10-17 优化3】文件名跳变检测：相邻块的文件名前缀不一致（如正片000073→广告943290），
             // 说明是不同CDN源，极可能是广告插入，不跳过一致性检测
@@ -971,10 +1007,6 @@ public class M3u8AdStripper {
                         if (commonRatio < 0.7) {
                             filenameJumpCount++;
                             if (filenameJumpCount <= 3) {
-                                LogBridge.d(TAG, "【算法选择①】文件名跳变: 块" + (bi-1) + "->" + bi 
-                                    + " 公共前缀=" + commonLen + "/" + minLen + "(" + String.format("%.0f%%", commonRatio * 100) + ")"
-                                    + " " + prevBlockFirstFile.substring(0, Math.min(16, prevBlockFirstFile.length())) 
-                                    + " -> " + fileName.substring(0, Math.min(16, fileName.length())));
                             }
                         }
                         filenameCompareCount++;
@@ -987,12 +1019,8 @@ public class M3u8AdStripper {
             double jumpRatio = filenameCompareCount > 0 ? (double) filenameJumpCount / filenameCompareCount : 0;
             if (jumpRatio > 0.5) {
                 filenameJump = false;
-                LogBridge.d(TAG, "【算法选择①】文件名跳变占比=" + String.format("%.0f%%", jumpRatio * 100) 
-                    + " >50%，判定为随机哈希命名，禁用跳变信号");
             } else if (filenameJumpCount > 0) {
                 filenameJump = true;
-                LogBridge.d(TAG, "【算法选择①】文件名跳变占比=" + String.format("%.0f%%", jumpRatio * 100) 
-                    + "，存在广告插入跳变");
             }
             boolean uniformBlockSize = sizeRatio < 5.0 && !filenameJump;
             boolean noClearAdPattern = (smallBlockCount < validBlockCount * 0.1)
@@ -1000,10 +1028,6 @@ public class M3u8AdStripper {
             // 新增：3分片小块占比高且无大段正片（max<30），判定为正常分片
             boolean normalSmallSegmentVideo = threeSegRatio > 0.4 && maxSeg < 30;
             if ((uniformBlockSize && noClearAdPattern) || normalSmallSegmentVideo) {
-                LogBridge.i(TAG, "【算法选择①】块大小一致性检测通过（比值=" + String.format("%.1f", sizeRatio)
-                        + "，3分片占比=" + String.format("%.1f%%", threeSegRatio * 100)
-                        + "，max=" + maxSeg
-                        + "），判定为正常视频分片，跳过DISCONTINUITY算法");
                 return null;
             }
         }
@@ -1048,7 +1072,6 @@ public class M3u8AdStripper {
         }
         boolean hashFilenameDominant = totalNonEmptyBlocks > 0 && (hashFilenameCount * 2 > totalNonEmptyBlocks);
         if (hashFilenameDominant) {
-            LogBridge.d(TAG, "全局统计：哈希文件名块=" + hashFilenameCount + "/" + totalNonEmptyBlocks + "，该源命名方式为哈希，禁用维度7");
         }
 
         for (int i = 0; i < blocks.length; i++) {
@@ -1257,9 +1280,9 @@ public class M3u8AdStripper {
                 int startSec = cumulativeDuration.intValue();
                 int min = startSec / 60;
                 int sec = startSec % 60;
-                LogBridge.i(TAG, "  [广告块" + i + "] 位置=" + min + "分" + sec + "秒, 时长=" +
-                        blockDurations[i] + "s, 评分=" + adScore + " (分片数=" + blockSegCounts[i] +
-                        ", 文件名连续=" + blockFilenameContinuous[i] + ")");
+
+
+
             }
             // 【2026-10-16 优化3】识别为广告块后，将URL加入缓存，重复出现直接拦截
             if (isAdBlock && adUrlCache.size() < AD_URL_CACHE_MAX) {
@@ -1372,7 +1395,7 @@ public class M3u8AdStripper {
 
         // 熔断：拟剔除分片超过阈值，放弃剥离
         if (finalAdCount > MAX_STRIP_SEGMENTS) {
-            LogBridge.w(TAG, "熔断：拟剔除 " + finalAdCount + " 分片 > " + MAX_STRIP_SEGMENTS + "，放弃剥离");
+            LogBridge.i(TAG, "熔断：拟剔除 " + finalAdCount + " 分片 > " + MAX_STRIP_SEGMENTS + "，放弃剥离");
             return content;
         }
 
@@ -1382,7 +1405,6 @@ public class M3u8AdStripper {
         // }
 
         if (finalAdCount > 0) {
-            LogBridge.i(TAG, "广告剥离完成：剔除 " + finalAdCount + " 个分片");
         }
 
         // 拼接结果
@@ -1480,19 +1502,11 @@ public class M3u8AdStripper {
                 }
             }
             double normalDurationRatio = (double) normalDurationCount / validBlockCount;
-            LogBridge.d(TAG, "【算法选择②】时长范围: min=" + minDuration + "s, max=" + maxDuration
-                    + "s, 比值=" + String.format("%.1f", durationRatio)
-                    + ", 正常时长块=" + normalDurationCount + "/" + validBlockCount
-                    + " (" + String.format("%.1f%%", normalDurationRatio * 100) + ")"
-                    + ", 明显短块=" + veryShortBlockCount);
             // 条件1：max/min比值 < 2.5（时长差异不大，更严格）
             // 条件2：大部分块（>80%）的时长在平均值±30%范围内（时长分布集中）
             // 条件3：没有明显短块（<平均70%）
             // 满足条件1+条件3，或条件2+条件3，才判定为正常视频分片
             if ((durationRatio < 2.5 || normalDurationRatio > 0.8) && veryShortBlockCount == 0) {
-                LogBridge.i(TAG, "【算法选择②】时长一致性检测通过（比值=" + String.format("%.1f", durationRatio)
-                        + "，正常时长占比=" + String.format("%.1f%%", normalDurationRatio * 100)
-                        + "），判定为正常视频分片，跳过时长异常算法");
                 return null;
             }
         }
@@ -1515,7 +1529,7 @@ public class M3u8AdStripper {
                 int startSec = cumulativeDuration.intValue();
                 int min = startSec / 60;
                 int sec = startSec % 60;
-                LogBridge.i(TAG, "  [广告块" + originalBlockIndex + "] 位置=" + min + "分" + sec + "秒, 时长=" + duration.intValue() + "秒, 平均=" + avgDuration.intValue() + "秒");
+
             }
             cumulativeDuration = cumulativeDuration.add(duration);
         }
@@ -1564,7 +1578,7 @@ public class M3u8AdStripper {
                 }
 
                 removedSegments += segCount;
-                LogBridge.d(TAG, "过滤广告块 " + i + "（" + segCount + " 分片）");
+
             } else {
                 keepBlocks.add(blocks[i]);
             }
@@ -1572,12 +1586,12 @@ public class M3u8AdStripper {
 
         // 熔断
         if (removedSegments > MAX_STRIP_SEGMENTS) {
-            LogBridge.w(TAG, "熔断：剔除 " + removedSegments + " 分片 > " + MAX_STRIP_SEGMENTS);
+            LogBridge.i(TAG, "熔断：剔除 " + removedSegments + " 分片 > " + MAX_STRIP_SEGMENTS);
             return original;
         }
 
         if (removedSegments > 0) {
-            LogBridge.i(TAG, "时长异常检测：剔除 " + removedSegments + " 个广告分片");
+            LogBridge.d(TAG, "时长异常检测：剔除 " + removedSegments + " 个广告分片");
         }
 
         String result = TextUtils.join("#EXT-X-DISCONTINUITY", keepBlocks);
@@ -1884,13 +1898,13 @@ public class M3u8AdStripper {
                 String blockWithoutEndlist = block.replace("#EXT-X-ENDLIST", "");
                 content = content.replace(blockWithoutEndlist, "");
                 removedBlocks++;
-                LogBridge.d(TAG, "【算法④】按时长过滤广告块：时长=" + blockDuration +
-                        "s, 匹配=" + matchedDuration + "s, 分片数=" + segCount);
+
+
             }
         }
 
         if (removedBlocks > 0) {
-            LogBridge.i(TAG, "【算法④】按时长过滤广告块 " + removedBlocks + " 个");
+            LogBridge.d(TAG, "【算法④】按时长过滤广告块 " + removedBlocks + " 个");
         }
         return content;
     }
@@ -1924,7 +1938,7 @@ public class M3u8AdStripper {
 
             if (item.contains("#EXT-X-DISCONTINUITY") || item.contains("#EXTINF")) {
                 content = content.replaceAll(item, "");
-                LogBridge.d(TAG, "按广告列表过滤片段: " + item.substring(0, Math.min(50, item.length())));
+
             } else if (isValidDuration(item)) {
                 hasDurationItem = true;
             }
@@ -2013,7 +2027,7 @@ public class M3u8AdStripper {
         for (String tag : SCTE35_AD_TAGS) {
             if (content.contains(tag)) {
                 hasScte35 = true;
-                LogBridge.i(TAG, "【算法③】检测到 SCTE-35 广告标记: " + tag);
+
                 break;
             }
         }
@@ -2031,13 +2045,13 @@ public class M3u8AdStripper {
             // SCTE-35 标记处理
             if (trimmed.startsWith("#EXT-X-CUE-OUT")) {
                 inAdBreak = true;
-                LogBridge.d(TAG, "【算法③】SCTE-35 广告段开始");
+
                 i++;
                 continue;
             }
             if (trimmed.startsWith("#EXT-X-CUE-IN")) {
                 inAdBreak = false;
-                LogBridge.d(TAG, "【算法③】SCTE-35 广告段结束");
+
                 i++;
                 continue;
             }
@@ -2078,7 +2092,7 @@ public class M3u8AdStripper {
         }
 
         if (removedCount > 0) {
-            LogBridge.i(TAG, "【算法③】按关键词/SCTE-35过滤广告分片 " + removedCount + " 个");
+            LogBridge.d(TAG, "【算法③】按关键词/SCTE-35过滤广告分片 " + removedCount + " 个");
         }
         return result.toString();
     }

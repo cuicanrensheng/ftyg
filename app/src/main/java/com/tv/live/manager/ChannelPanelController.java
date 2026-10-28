@@ -479,7 +479,7 @@ public class ChannelPanelController {
         // loadHuyaTogetherWatchChannels();
 
         // preloadSdkFixedGroups();
-        LogBridge.i("ChannelPanel", "⏱️【链路-面板】setChannels 主源落地+首次渲染 耗时 "
+        LogBridge.d("ChannelPanel", "⏱️【链路-面板】setChannels 主源落地+首次渲染 耗时 "
                 + (System.currentTimeMillis() - t0) + "ms，频道=" + this.channelSourceList.size());
     }
 
@@ -625,7 +625,7 @@ public class ChannelPanelController {
         }
 
         scheduleIncrementalRefresh();
-        LogBridge.i("ChannelPanel", "⏱️【链路-面板】" + tag + " 合并+分组刷新 耗时 "
+        LogBridge.d("ChannelPanel", "⏱️【链路-面板】" + tag + " 合并+分组刷新 耗时 "
                 + (System.currentTimeMillis() - t0) + "ms（UI 去抖刷新 " + MERGE_REFRESH_DEBOUNCE_MS + "ms 后执行）");
     }
 
@@ -678,7 +678,7 @@ public class ChannelPanelController {
                 // 右侧 EPG 是全量合并视图，不能用 currentGroupName 过滤（否则会收窄成只有当前组）。
                 // 合并列表构建后按「正在播对象名」增量刷新（复用 setFilteredChannels 的名字高亮）。
                 syncEpgList();
-                LogBridge.i("ChannelPanel", "⏱️【链路-面板】ListView 增量刷新(notifyDataSetChanged) 耗时 "
+                LogBridge.d("ChannelPanel", "⏱️【链路-面板】ListView 增量刷新(notifyDataSetChanged) 耗时 "
                         + (System.currentTimeMillis() - tUi) + "ms，频道=" + channelSourceList.size());
             }
         };
@@ -858,7 +858,7 @@ public class ChannelPanelController {
     private void enableLine2Fallback(String reason) {
         if (line2FallbackEnabled) return;
         line2FallbackEnabled = true;
-        LogBridge.w("ChannelPanel", "【第二路兜底】第一路失效(" + reason
+        LogBridge.i("ChannelPanel", "【第二路兜底】第一路失效(" + reason
                 + ")，启用第二路固定分组显示");
         String[] line2Fixed = HuyaTogetherWatchGroupManager.GROUP_NAMES;
         String[] allFixed = new String[line2Fixed.length + 1];
@@ -923,7 +923,7 @@ public class ChannelPanelController {
                     currentGroupChannelList.add(c);
                 }
             }
-            LogBridge.d("ChannelPanel", "【调试】固定分组[" + groupName + "]快路径过滤后=" + currentGroupChannelList.size() + " 总频道=" + channelSourceList.size());
+
             channelListManager.setChannelsByGroup(channelSourceList, groupName, currentPlayIndex);
             return;
         }
@@ -956,7 +956,7 @@ public class ChannelPanelController {
                         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
                         loadedFixedGroups.add(groupName);
                         if (channels == null || channels.isEmpty()) {
-                            LogBridge.w("ChannelPanel", "虎牙固定分组[" + groupName + "]无频道");
+                            LogBridge.d("ChannelPanel", "虎牙固定分组[" + groupName + "]无频道");
                             groupListManager.setGroups(channelSourceList, false);
                             return;
                         }
@@ -990,8 +990,8 @@ public class ChannelPanelController {
                                 }
                                 added++;
                             }
-                            LogBridge.d("ChannelPanel", "虎牙固定分组[" + groupName + "]加载完成，本组="
-                                    + channels.size() + " 条，并入全部列表新增 " + added + " 个，总计 " + channelSourceList.size());
+
+
 
                             if (!twRoomIds.isEmpty()) {
                                 com.tv.live.util.HuyaSDKParser.preloadRooms(twRoomIds);
@@ -1003,8 +1003,8 @@ public class ChannelPanelController {
                         // 【方案C】直接用本组自己的列表渲染（不经过 channelSourceList 过滤）
                         currentGroupChannelList.clear();
                         currentGroupChannelList.addAll(channels);
-                        LogBridge.d("ChannelPanel", "【调试】固定分组[" + groupName + "]渲染(独立源)="
-                                + channels.size() + " 条");
+
+
                         channelListManager.setFilteredChannels(channels, getPlayingChannelName());
                         // 已经用缓存渲染过就不再强制回到第 0 行，避免焦点跳动
                         if (!hadCached) {
@@ -1015,7 +1015,7 @@ public class ChannelPanelController {
                     @Override
                     public void onError(String errMsg) {
                         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-                        LogBridge.w("ChannelPanel", "虎牙固定分组[" + groupName + "]加载失败: " + errMsg);
+
 
                     }
                 });
@@ -1051,8 +1051,8 @@ public class ChannelPanelController {
         cacheFixedGroupChannels(groupName, channels);
         currentGroupChannelList.clear();
         currentGroupChannelList.addAll(channels);
-        LogBridge.d("ChannelPanel", "【调试】固定分组[" + groupName + "]渲染(第三条线路·独立源)="
-                + channels.size() + " 条");
+
+
         channelListManager.setFilteredChannels(channels, getPlayingChannelName());
     }
 
@@ -1255,7 +1255,7 @@ public class ChannelPanelController {
         } else if (hasLiveList) {
             // 兜底（保持旧行为）：既无有效下标、也无当前频道对象
             currentPlayIndex = channelSourceList.size() - 1;
-            LogBridge.w("ChannelPanelController", "切台: 无有效当前频道，下标已重置为最后一个有效索引 " + currentPlayIndex);
+            LogBridge.d("ChannelPanelController", "切台: 无有效当前频道，下标已重置为最后一个有效索引 " + currentPlayIndex);
             cur = channelSourceList.get(currentPlayIndex);
             route1Valid = true;
         } else {

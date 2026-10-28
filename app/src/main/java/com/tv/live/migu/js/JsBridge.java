@@ -11,12 +11,18 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.tv.live.util.LogBridge;
 
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import okhttp3.Dns;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -44,6 +50,22 @@ import okhttp3.Response;
 public final class JsBridge {
 
     private static final String TAG = "MiguJsBridge";
+
+    /**
+     * 【2026-10-26 IPv4-only DNS】雷电/逍遥等模拟器、以及部分真机/盒子网络没有可用 IPv6 出口，
+     * 但很多 CDN（如 vd.l.qq.com）解析出 AAAA。OkHttp 的 Happy Eyeballs 会先试 IPv6，
+     * 连上后被 NAT/运营商 RST，表现为「curl 能通、App 内 OkHttp 却 EOFException
+     * source exhausted prematurely」（同 URL 用 {@code curl -4} 100% 成功，{@code curl -6} 秒失败）。
+     * 这里只取 IPv4 地址，与 curl 默认行为对齐，彻底规避该问题；无 IPv4 时回退系统解析。
+     */
+    private static final Dns DNS_IPV4_ONLY = hostname -> {
+        List<InetAddress> all = Dns.SYSTEM.lookup(hostname);
+        List<InetAddress> v4 = new ArrayList<>();
+        for (InetAddress a : all) {
+            if (a instanceof Inet4Address) v4.add(a);
+        }
+        return v4.isEmpty() ? all : v4;
+    };
 
     /**
      * 【2026-10-26 默认 UA】JS 桥发请求时若插件没显式指定 User-Agent，就用这个。
@@ -85,6 +107,9 @@ public final class JsBridge {
                 .retryOnConnectionFailure(false)
                 .followRedirects(true)
                 .followSslRedirects(true)
+                // 【2026-10-26 IPv4-only DNS】模拟器/部分真机无 IPv6 出口，OkHttp 试 AAAA 被 RST
+                // 导致 EOF；仅解析 IPv4 与 curl 行为对齐（见 DNS_IPV4_ONLY 注释）。
+                .dns(DNS_IPV4_ONLY)
                 .build();
     }
 
@@ -155,17 +180,29 @@ public final class JsBridge {
     private static void applyHeaders(Request.Builder rb, Map<String, String> headers) {
         // 【2026-10-26】插件没给 UA 时补默认 UA（否则 okhttp/4.x 会被站点拒绝）
         boolean hasUa = false;
+        boolean hasAcceptEncoding = false;
         if (headers != null) {
             for (String k : headers.keySet()) {
                 if (k != null && "user-agent".equalsIgnoreCase(k.trim())) {
                     hasUa = true;
-                    break;
+                } else if (k != null && "accept-encoding".equalsIgnoreCase(k.trim())) {
+                    hasAcceptEncoding = true;
                 }
             }
         }
         if (!hasUa) {
             try {
                 rb.header("User-Agent", DEFAULT_UA);
+            } catch (Throwable ignored) {
+            }
+        }
+        // 【2026-10-26 禁 gzip】与工程 NetUtil 既有红线「全站禁 gzip（identity）」同口径：
+        // OkHttp 默认带 Accept-Encoding: gzip 并透明解压，在部分网络（如模拟器 NAT）下
+        // 解压环节会触发「source exhausted prematurely」EOF。强制 identity 让服务器返回
+        // 未压缩响应，彻底绕开解压；插件未显式指定时才补，不影响已自带编码的调用。
+        if (!hasAcceptEncoding) {
+            try {
+                rb.header("Accept-Encoding", "identity");
             } catch (Throwable ignored) {
             }
         }

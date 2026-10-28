@@ -308,7 +308,7 @@ public class VodControlBar extends LinearLayout {
             ((TextView) v).setTextColor(has ? 0xFF111111 : 0xFFFFFFFF);
             if (has) {
                 lastFocusedButton = (TextView) v;
-                LogBridge.i(TAG, "焦点=" + label);
+                LogBridge.d(TAG, "焦点=" + label);
             }
         });
         return tv;
@@ -333,7 +333,6 @@ public class VodControlBar extends LinearLayout {
     public void restoreFocus() {
         postDelayed(() -> {
             boolean ok = requestFocus();
-            LogBridge.i(TAG, "焦点交回控制栏（原生恢复上次子项）成功=" + ok);
         }, 60);
     }
 
@@ -379,7 +378,7 @@ public class VodControlBar extends LinearLayout {
         if (btnPlay != null) btnPlay.setVisibility(vod ? View.VISIBLE : View.GONE);
         applyMiguAdjustments();
         keepFocusVisible();
-        LogBridge.i(TAG, "控制栏形态=" + (vod ? "点播" : "直播") + (miguMode ? "（咪咕·回看）" : ""));
+        LogBridge.d(TAG, "控制栏形态=" + (vod ? "点播" : "直播") + (miguMode ? "（咪咕·回看）" : ""));
     }
 
     /**
@@ -390,7 +389,7 @@ public class VodControlBar extends LinearLayout {
         this.miguMode = migu;
         applyMiguAdjustments();
         keepFocusVisible();
-        LogBridge.i(TAG, "控制栏咪咕分支=" + migu);
+        LogBridge.d(TAG, "控制栏咪咕分支=" + migu);
     }
 
     /** 应用咪咕形态差异（幂等；非咪咕时恢复成标准点播/直播形态） */
@@ -414,7 +413,7 @@ public class VodControlBar extends LinearLayout {
             if (f.getVisibility() == View.VISIBLE) return;
             View target = pickDefaultFocusTarget();
             if (target != null && target.requestFocus()) {
-                LogBridge.i(TAG, "【焦点保持】原焦点按钮已隐藏 → 焦点移到 " + describeButton(target));
+                LogBridge.d(TAG, "【焦点保持】原焦点按钮已隐藏 → 焦点移到 " + describeButton(target));
             }
         } catch (Throwable ignored) {
         }
@@ -491,7 +490,7 @@ public class VodControlBar extends LinearLayout {
         //   控制栏本来就在显示（例如刚关掉抽屉）时再抢焦点，会把用户刚回位的焦点
         //   从"上一频道/频道列表"抢到"暂停"胶囊（用户实测）。
         if (wasVisible) {
-            LogBridge.i(TAG, "控制栏已可见，不重置焦点");
+            LogBridge.d(TAG, "控制栏已可见，不重置焦点");
             return;
         }
         // 【2026-10-17 修复「焦点先从上一频道跳到播放」】原来是 postDelayed(150) 才 requestFocus：
@@ -501,13 +500,11 @@ public class VodControlBar extends LinearLayout {
         //   不会有中间焦点帧；同步失败（布局未完成）才退回延迟兜底。
         final View target = pickDefaultFocusTarget();
         final boolean nowOk = (target != null) && target.requestFocus();
-        LogBridge.i(TAG, "默认焦点请求(即时)=" + describeButton(target) + " 成功=" + nowOk);
         if (!nowOk) {
             postDelayed(() -> {
                 if (getVisibility() != View.VISIBLE) return;
                 View t = pickDefaultFocusTarget();
                 boolean ok = (t != null) && t.requestFocus();
-                LogBridge.i(TAG, "默认焦点请求(延迟)=" + describeButton(t) + " 成功=" + ok);
             }, 150);
         }
     }

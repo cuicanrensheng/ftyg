@@ -121,11 +121,11 @@ public class LiveSourceLoader {
                 sources = java.util.Collections.singletonList(effectiveUrl == null ? "" : effectiveUrl);
                 LogBridge.i(TAG, "【切源】用户已显式选择源：" + effectiveUrl + "，仅加载该源（不做跨源兜底）");
             }
-            LogBridge.i(TAG, "LOAD: source count=" + sources.size() + " LIVE_URL='" + UrlConfig.LIVE_URL + "' LIVE_URL_2='" + UrlConfig.LIVE_URL_2 + "'");
+            LogBridge.d(TAG, "LOAD: source count=" + sources.size() + " LIVE_URL='" + UrlConfig.LIVE_URL + "' LIVE_URL_2='" + UrlConfig.LIVE_URL_2 + "'");
             for (int i = 0; i < sources.size(); i++) {
                 String url = sources.get(i);
                 if (url == null || url.trim().isEmpty()) {
-                    LogBridge.w(TAG, "LOAD: source #" + (i+1) + " is null/empty, skipping");
+                    LogBridge.d(TAG, "LOAD: source #" + (i+1) + " is null/empty, skipping");
                     continue;
                 }
 
@@ -142,7 +142,6 @@ public class LiveSourceLoader {
                                 if (channels.size() >= MIN_CHANNELS_FOR_FALLBACK) {
                                     saveFallback(racedContent);
                                 }
-                                LogBridge.d(TAG, "【镜像竞速】源1 加载成功，共 " + channels.size() + " 个频道");
                                 postSuccess(callback, "【镜像竞速】源1 加载成功", channels);
                                 return;
                             }
@@ -150,7 +149,7 @@ public class LiveSourceLoader {
                             LogBridge.w(TAG, "【镜像竞速】胜出内容解析失败：" + pe.getMessage());
                         }
                     }
-                    LogBridge.w(TAG, "【镜像竞速】源1 全部镜像未在限时内返回有效数据，转常规链路");
+                    LogBridge.d(TAG, "【镜像竞速】源1 全部镜像未在限时内返回有效数据，转常规链路");
 
                     continue;
                 }
@@ -165,31 +164,31 @@ public class LiveSourceLoader {
                 // 【2026-10-21】源2（内置源2，外链 M3U）：加载出口追加 4K影视 4 个点播分组
                 final boolean isSource2 = isSource2Url(url);
                 String acceleratedUrl = (isChanxiang || isAsset || isRenyibo || isMigu || isAfhgrj || isRyb || isJz) ? url : getAcceleratedUrl(url);
-                LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 开始加载：" + acceleratedUrl);
-                LogBridge.d(TAG, "LOAD: source #" + (i+1) + " downloading: " + acceleratedUrl);
+
+
                 try {
                     String rawContent;
                     long tDlStart = System.currentTimeMillis();
                     if (isChanxiang) {
-                        LogBridge.i(TAG, "【畅享】走内置畅享源分支，本地实时生成 M3U");
+                        LogBridge.d(TAG, "【畅享】走内置畅享源分支，本地实时生成 M3U");
                         rawContent = com.tv.live.chanxiang.ChanxiangSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isAsset) {
-                        LogBridge.i(TAG, "【内置】走 assets 内置源分支：" + url);
+                        LogBridge.d(TAG, "【内置】走 assets 内置源分支：" + url);
                         rawContent = readAssetSource(url.substring("asset://".length()));
                     } else if (isRenyibo) {
-                        LogBridge.i(TAG, "【爱其意】走内置源5分支，本地实时拉取频道并生成 M3U");
+
                         rawContent = com.tv.live.renyibo.RenYiBoSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isMigu) {
-                        LogBridge.i(TAG, "【咪咕】走内置源6分支，取官方频道目录生成 M3U（地址为 miguhd:// 惰性解析）");
+                        LogBridge.d(TAG, "【咪咕】走内置源6分支，取官方频道目录生成 M3U（地址为 miguhd:// 惰性解析）");
                         rawContent = com.tv.live.migu.MiguSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isAfhgrj) {
-                        LogBridge.i(TAG, "【影视源7】走内置源7分支，抓 5 个分组生成 M3U（地址为 afhgrj:// 惰性解析）");
+                        LogBridge.d(TAG, "【影视源7】走内置源7分支，抓 5 个分组生成 M3U（地址为 afhgrj:// 惰性解析）");
                         rawContent = com.tv.live.afhgrj.AfhgrjSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isRyb) {
-                        LogBridge.i(TAG, "【源8 renyibo】走内置源8分支，抓 8 个分组生成 M3U（地址为 ryb:// 惰性解析）");
+                        LogBridge.d(TAG, "【源8 renyibo】走内置源8分支，抓 8 个分组生成 M3U（地址为 ryb:// 惰性解析）");
                         rawContent = com.tv.live.ryb.RybSourceLoader.loadAllLiveAsM3u(context);
                     } else if (isJz) {
-                        LogBridge.i(TAG, "【源9 橘汁】走内置源9分支，按关键词搜片生成 M3U（地址为 juzhi:// 惰性解析）");
+                        LogBridge.d(TAG, "【源9 橘汁】走内置源9分支，按关键词搜片生成 M3U（地址为 juzhi:// 惰性解析）");
                         rawContent = com.tv.live.juzhi.JzSourceLoader.loadM3u(context);
                     } else {
                         rawContent = downloadRawContent(acceleratedUrl);
@@ -211,16 +210,16 @@ public class LiveSourceLoader {
                     }
                     long dlMs = System.currentTimeMillis() - tDlStart;
                     if (rawContent == null || rawContent.isEmpty()) {
-                        LogBridge.e(TAG, "LOAD: source #" + (i+1) + " download returned empty/null");
+
                         throw new IOException("下载为空");
                     }
                     long tParseStart = System.currentTimeMillis();
                     List<Channel> channels;
                     channels = PlaylistParser.parseContent(rawContent);
-                    LogBridge.i(TAG, "【网络】解析完成，频道数="
-                            + (channels == null ? 0 : channels.size()));
+
+
                     if (channels == null || channels.isEmpty()) {
-                        LogBridge.e(TAG, "LOAD: source #" + (i+1) + " parsed 0 channels");
+
                         throw new IOException("解析后频道数=0");
                     }
                     // 【2026-10-11 海报】源7：Channel 直接绑定海报，Channel 直达 OTT，不依赖 M3U tvg-logo
@@ -235,19 +234,19 @@ public class LiveSourceLoader {
                     saveLiveSourceCache(rawContent);
                     if (channels.size() >= MIN_CHANNELS_FOR_FALLBACK) {
                         saveFallback(rawContent);
-                        LogBridge.d(TAG, "【网络】永久兜底已更新，频道数 " + channels.size());
+
                     } else {
-                        LogBridge.w(TAG, "【网络】返回频道数过少（" + channels.size() + " < " + MIN_CHANNELS_FOR_FALLBACK + "），不覆盖永久兜底");
+                        LogBridge.d(TAG, "【网络】返回频道数过少（" + channels.size() + " < " + MIN_CHANNELS_FOR_FALLBACK + "），不覆盖永久兜底");
                     }
-                    LogBridge.i(TAG, "⏱️【链路-主源】源#" + (i + 1) + " HTTP下载 " + dlMs
+                    LogBridge.d(TAG, "⏱️【链路-主源】源#" + (i + 1) + " HTTP下载 " + dlMs
                             + "ms + 解析 " + (System.currentTimeMillis() - tParseStart)
                             + "ms，频道=" + channels.size());
-                    LogBridge.d(TAG, "【网络】直播源 #" + (i + 1) + " 加载成功，共 " + channels.size() + " 个频道");
+
                     postSuccess(callback, "LOAD: source #" + (i + 1) + " SUCCESS", channels);
                     return;
                 } catch (Exception e) {
                     lastErrorMsg = "源#" + (i + 1) + "(" + url + "): " + e.getMessage();
-                    LogBridge.e(TAG, "【网络】直播源 #" + (i + 1) + " 失败：" + e.getMessage());
+
                 }
             }
 
@@ -322,8 +321,6 @@ public class LiveSourceLoader {
             c.setLogoUrl(poster);
             bound++;
         }
-        LogBridge.i(TAG, "【影视源7】海报绑定完成：共 " + bound + " 部绑定成功"
-                + (noPoster > 0 ? "，" + noPoster + " 部无海报数据" : ""));
     }
 
     // ------------------------------------------------------------------
@@ -400,7 +397,7 @@ public class LiveSourceLoader {
         if (!m3u.endsWith("\n")) sb.append('\n');
         sb.append(body);
         if (!body.endsWith("\n")) sb.append('\n');
-        LogBridge.i(TAG, "【4K影视】源2 已追加点播分组，共 " + added + " 个频道");
+        LogBridge.d(TAG, "【4K影视】源2 已追加点播分组，共 " + added + " 个频道");
         return sb.toString();
     }
 
@@ -425,8 +422,6 @@ public class LiveSourceLoader {
             c.setLogoUrl(poster);
             bound++;
         }
-        LogBridge.i(TAG, "【4K影视】海报绑定完成：共 " + bound + " 部绑定成功"
-                + (noPoster > 0 ? "，" + noPoster + " 部无海报数据" : ""));
     }
 
     public String getAcceleratedUrl(String originalUrl) {
@@ -489,7 +484,6 @@ public class LiveSourceLoader {
             sb.append(normalizeBranch(refAndPath));
             return sb.toString();
         } catch (Exception e) {
-            e.printStackTrace();
             return githubUrl;
         }
     }
@@ -510,7 +504,6 @@ public class LiveSourceLoader {
         try {
             return "https://ghproxy.com/" + githubUrl;
         } catch (Exception e) {
-            e.printStackTrace();
             return githubUrl;
         }
     }
@@ -521,7 +514,6 @@ public class LiveSourceLoader {
             return githubUrl.replace("raw.githubusercontent.com", "raw.gitmirror.com")
                     .replace("raw.github.com", "raw.gitmirror.com");
         } catch (Exception e) {
-            e.printStackTrace();
             return githubUrl;
         }
     }
@@ -586,7 +578,6 @@ public class LiveSourceLoader {
 
             return null;
         } catch (Exception e) {
-            e.printStackTrace();
             return null;
         }
     }
@@ -613,13 +604,13 @@ public class LiveSourceLoader {
                         continue;
                     }
                     String content = resp.body().string();
-                    LogBridge.d(TAG, "下载成功 attempt=" + attempt + " size=" + content.length()
-                            + " url=" + urlStr.substring(0, Math.min(80, urlStr.length())));
+
+
                     return content;
                 }
             } catch (Exception e) {
                 lastError = e.getClass().getSimpleName() + ": " + e.getMessage();
-                LogBridge.w(TAG, "下载异常 attempt=" + attempt + "/" + DOWNLOAD_MAX_RETRIES
+                LogBridge.d(TAG, "下载异常 attempt=" + attempt + "/" + DOWNLOAD_MAX_RETRIES
                         + " url=" + urlStr + " err=" + lastError);
             }
             if (attempt < DOWNLOAD_MAX_RETRIES) {
@@ -702,8 +693,8 @@ public class LiveSourceLoader {
                     continue;
                 }
                 if (content != null) {
-                    LogBridge.d(TAG, "【镜像竞速】胜出镜像 elapsed="
-                            + (System.currentTimeMillis() - startMs) + "ms（其余请求作废）");
+
+
                     winner = true;
                     return content;
                 }
@@ -740,7 +731,6 @@ public class LiveSourceLoader {
         for (String candidate : candidates) {
             try {
                 in = context.getAssets().open(candidate);
-                LogBridge.i(TAG, "【内置】assets 命中：" + candidate);
                 break;
             } catch (IOException notFound) {
 
@@ -822,7 +812,7 @@ public class LiveSourceLoader {
         String frag = fragment(context, CCTV_GROUP_ASSET);
         if (frag.isEmpty()) return m3u;
         int n = countExtinf(frag);
-        LogBridge.i(TAG, "【央视分组】已补入直播频道 " + n + " 个（源4 补齐直播源）");
+        LogBridge.d(TAG, "【央视分组】已补入直播频道 " + n + " 个（源4 补齐直播源）");
         return m3u + (m3u.endsWith("\n") ? "" : "\n") + frag + "\n";
     }
 
@@ -844,7 +834,7 @@ public class LiveSourceLoader {
         if (!m3u.endsWith("\n")) sb.append('\n');
         if (!cctv.isEmpty()) sb.append(cctv).append('\n');
         if (!weishi.isEmpty()) sb.append(weishi).append('\n');
-        LogBridge.i(TAG, "【央视分组】已补入央视 " + c + " + 卫视 " + w + " 个（源7/源8）");
+        LogBridge.d(TAG, "【央视分组】已补入央视 " + c + " + 卫视 " + w + " 个（源7/源8）");
         return sb.toString();
     }
 

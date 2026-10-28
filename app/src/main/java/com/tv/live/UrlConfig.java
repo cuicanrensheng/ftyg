@@ -122,6 +122,13 @@ public final class UrlConfig {
     public static String EPG_URL    = "";
     public static String EPG_URL_2  = "";
 
+    /**
+     * 【2026-10-28 日志清理】fillPublicFields 会被「init-urlconfig-early」与「init-security」
+     * 两条启动链各调一次（赋值本身幂等）。原先靠 sReadyLogged 一次性闸门打印 8 行
+     * 「源N 就绪 / URL 配置解密完成」清单，该清单只说明"解密成功"，无排障价值，
+     * 已连同闸门变量一起删除。配置真出问题会在 SecurityCore 侧报错。
+     */
+
     public static void fillPublicFields() {
         // 【修复】这里在 init-urlconfig-early 后台线程执行，SecurityCore.init() 可达数秒，
         //         晚于 MainActivity.onCreate 恢复的用户选择（epg_history / live_history 的 isDefault）。
@@ -132,26 +139,19 @@ public final class UrlConfig {
         //     排障所需的"第 N 路源是否就绪、是内置还是外链"信息完整保留。
         if (TextUtils.isEmpty(LIVE_URL)) LIVE_URL = getLiveUrl();
         if (TextUtils.isEmpty(LIVE_URL_1_RAW)) LIVE_URL_1_RAW = getLiveUrl();
-        LogBridge.i(TAG, "源1 就绪 " + srcKind(LIVE_URL));
 
         if (TextUtils.isEmpty(LIVE_URL_2)) LIVE_URL_2 = getLiveUrl2();
         if (TextUtils.isEmpty(LIVE_URL_2_RAW)) LIVE_URL_2_RAW = getLiveUrl2();
-        LogBridge.i(TAG, "源2 就绪 " + srcKind(LIVE_URL_2));
 
         if (TextUtils.isEmpty(LIVE_URL_3_RAW)) LIVE_URL_3_RAW = LIVE_URL_CHANXIANG;
-        LogBridge.i(TAG, "源3 就绪 " + srcKind(LIVE_URL_CHANXIANG));
 
         if (TextUtils.isEmpty(LIVE_URL_4_RAW)) LIVE_URL_4_RAW = LIVE_URL_4;
-        LogBridge.i(TAG, "源4 就绪 " + srcKind(LIVE_URL_4));
 
         if (TextUtils.isEmpty(LIVE_URL_5_RAW)) LIVE_URL_5_RAW = LIVE_URL_5;
-        LogBridge.i(TAG, "源5 就绪 " + srcKind(LIVE_URL_5));
 
         if (TextUtils.isEmpty(LIVE_URL_6_RAW)) LIVE_URL_6_RAW = LIVE_URL_6;
-        LogBridge.i(TAG, "源6 就绪 " + srcKind(LIVE_URL_6));
 
         if (TextUtils.isEmpty(LIVE_URL_7_RAW)) LIVE_URL_7_RAW = LIVE_URL_7;
-        LogBridge.i(TAG, "源7 就绪 " + srcKind(LIVE_URL_7));
 
         // 【2026-10-19】源8 已换为 renyibo.com（原 4kvm 站点全站 404，kvm4 代码已移除）。
         if (TextUtils.isEmpty(LIVE_URL_8_RAW)) LIVE_URL_8_RAW = LIVE_URL_8;
@@ -160,12 +160,6 @@ public final class UrlConfig {
         String e1 = getEpgUrl();   if (e1 != null) { if (TextUtils.isEmpty(EPG_URL)) EPG_URL = e1; if (TextUtils.isEmpty(EPG_URL_1_RAW)) EPG_URL_1_RAW = e1; }
         String e2 = getEpgUrl2();  if (e2 != null) { if (TextUtils.isEmpty(EPG_URL_2)) EPG_URL_2 = e2; if (TextUtils.isEmpty(EPG_URL_2_RAW)) EPG_URL_2_RAW = e2; }
 
-        LogBridge.i(TAG, "URL 配置解密完成，SecurityCore.isLoaded=" + SecurityCore.isLoaded() +
-                   " | RAW[L1=" + (TextUtils.isEmpty(LIVE_URL_1_RAW) ? "null" : "ok") +
-                   ", L2=" + (TextUtils.isEmpty(LIVE_URL_2_RAW) ? "null" : "ok") +
-                   ", E1=" + (TextUtils.isEmpty(EPG_URL_1_RAW)  ? "null" : "ok") +
-                   ", E2=" + (TextUtils.isEmpty(EPG_URL_2_RAW)  ? "null" : "ok") +
-                   "]");
     }
 
     /**

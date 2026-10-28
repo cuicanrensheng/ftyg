@@ -268,7 +268,7 @@ public class EpisodePanel extends LinearLayout {
                 }
             }
         }
-        LogBridge.i(TAG, "选集第 " + (page + 1) + "/" + pages + " 页，排序=" + (desc ? "倒序" : "正序"));
+        LogBridge.d(TAG, "选集第 " + (page + 1) + "/" + pages + " 页，排序=" + (desc ? "倒序" : "正序"));
     }
 
     /**
@@ -357,7 +357,7 @@ public class EpisodePanel extends LinearLayout {
             View firstCell = cellAt(0, 0);
             if (firstCell != null) btnOrder.setNextFocusDownId(firstCell.getId());
         }
-        LogBridge.i(TAG, "【选集】焦点已锁定在内（返回键才回控制栏）");
+        LogBridge.d(TAG, "【选集】焦点已锁定在内（返回键才回控制栏）");
     }
 
     /** 撤掉 grid 的"临时焦点持有者"身份（此时焦点应已在某个格子上，撤掉不会丢失焦点） */
@@ -480,7 +480,7 @@ public class EpisodePanel extends LinearLayout {
     private void turnPage(int delta) {
         int target = page + delta;
         if (target < 0 || target >= pageCount()) {
-            LogBridge.i(TAG, "已到" + (delta > 0 ? "最后一页" : "第一页"));
+            LogBridge.d(TAG, "已到" + (delta > 0 ? "最后一页" : "第一页"));
             return;
         }
         page = target;
@@ -511,7 +511,7 @@ public class EpisodePanel extends LinearLayout {
             if (target == null && !cells.isEmpty()) target = cells.get(0);
             if (target == null) return;
             if (target.requestFocus()) {
-                LogBridge.i(TAG, "焦点落到第" + (currentIdx + 1) + "集");
+                LogBridge.d(TAG, "焦点落到第" + (currentIdx + 1) + "集");
             }
         }, delayMs);
     }

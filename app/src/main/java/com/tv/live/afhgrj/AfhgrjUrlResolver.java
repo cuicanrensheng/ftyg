@@ -195,7 +195,7 @@ public final class AfhgrjUrlResolver {
                 d.content = o.optString("ct");
                 sDetailCache.put(d.vodId, d);
             }
-            LogBridge.i(TAG, "源7(影视) 详情缓存载入 " + sDetailCache.size() + " 条");
+            LogBridge.d(TAG, "源7(影视) 详情缓存载入 " + sDetailCache.size() + " 条");
         } catch (Throwable t) {
             LogBridge.w(TAG, "详情缓存读取失败: " + t.getMessage());
         }
@@ -243,7 +243,7 @@ public final class AfhgrjUrlResolver {
         sResolvedCacheTs.keySet().removeIf(k -> k.startsWith(prefix));
         // 【2026-10-16】播放失败时清除上次生效线路，让下次解析尝试下一条线路（只有源失效才自动切换）
         sWorkingSid.remove(vodId);
-        LogBridge.i(TAG, "源7(影视) 已失效落地缓存 vodId=" + vodId);
+        LogBridge.d(TAG, "源7(影视) 已失效落地缓存 vodId=" + vodId);
     }
 
    // ------------------------------------------------------------------
@@ -382,7 +382,6 @@ public final class AfhgrjUrlResolver {
                 f.delete();
                 return;
             }
-            LogBridge.i(TAG, "源7(影视) 落地缓存加载完成，共 " + sResolvedCache.size() + " 条");
         } catch (Throwable t) {
             LogBridge.w(TAG, "源7(影视) 落地缓存加载失败：" + t.getMessage());
         }
@@ -512,7 +511,6 @@ public final class AfhgrjUrlResolver {
                 br.close();
             }
             if (loaded > 0) {
-                LogBridge.i(TAG, "源7(影视) 集数/sid 详情缓存加载完成，共 " + loaded + " 部（省详情页联网）");
             }
         } catch (Throwable t) {
             LogBridge.w(TAG, "源7(影视) 详情缓存加载失败：" + t.getMessage());
@@ -649,8 +647,6 @@ public final class AfhgrjUrlResolver {
         String cachedUrl = popResolvedCache(cacheKey);
         if (cachedUrl != null) {
             if (isResolvedFresh(cacheKey) || isM3u8Alive(cachedUrl)) {
-                LogBridge.i(TAG, "源7(影视) 命中落地缓存：" + afhgrjUrl
-                        + " → " + cachedUrl.substring(0, Math.min(110, cachedUrl.length())));
                 return cachedUrl;
             }
             // 校验不通：丢弃该条，走下面的完整链路（详情页已由磁盘缓存短路，只剩播放页+探活）
@@ -702,17 +698,17 @@ public final class AfhgrjUrlResolver {
             String pageUrl = BASE + "/yplay/" + vodId + "-" + cand + "-" + nid + "/";
             String html = getText(pageUrl);
             if (TextUtils.isEmpty(html)) {
-                LogBridge.w(TAG, "源7(影视) 播放页取空：" + pageUrl);
+                LogBridge.d(TAG, "源7(影视) 播放页取空：" + pageUrl);
                 continue;
             }
             String m3u8 = extractPlayerUrl(html);
             if (TextUtils.isEmpty(m3u8)) {
-                LogBridge.w(TAG, "源7(影视) 未解析到 player_aaaa url：" + pageUrl);
+                LogBridge.d(TAG, "源7(影视) 未解析到 player_aaaa url：" + pageUrl);
                 continue;
             }
             // 【2026-10-13 线路体检】逐条 sid 打印 host + 直链，供 PC 逐线抽帧判定广告/水印。
-            LogBridge.i(TAG, "源7(影视) 线路体检 vodId=" + vodId + " sid=" + cand
-                    + " host=" + hostOf(m3u8) + " url=" + m3u8);
+
+
             if (firstM3u8 == null) {
                 firstM3u8 = m3u8;
                 firstSid = cand;
@@ -731,7 +727,7 @@ public final class AfhgrjUrlResolver {
                 bestM3u8 = m3u8;
                 bestSid = cand;
                 bestKbps = 0;
-                LogBridge.i(TAG, "源7(影视) 沿用上条线路 sid=" + cand + "（禁用测速择优）host=" + hostOf(m3u8));
+
                 break;
             }
             // ⓪ 【2026-10-13 水印规避】该线路正片带博彩烧录水印（如 ly166 系）→
@@ -741,22 +737,22 @@ public final class AfhgrjUrlResolver {
                     wmFallbackM3u8 = m3u8;
                     wmFallbackSid = cand;
                 }
-                LogBridge.w(TAG, "源7(影视) 线路带烧录水印，降级为兜底 sid=" + cand
-                        + " host=" + hostOf(m3u8));
+
+
                 continue;
             }
             // 【2026-10-16】取消测速机制：直接采用第一条可用的干净线路，不测速
             bestM3u8 = m3u8;
             bestSid = cand;
             bestKbps = 0;
-            LogBridge.i(TAG, "源7(影视) 直接采用第一条干净线路 sid=" + cand
-                    + "（已取消测速）host=" + hostOf(m3u8));
+
+
             break;
         }
 
         // 【2026-10-13 水印规避】没有任何干净线路可用 → 回退到带水印线路（保证仍有画面）
         if (bestM3u8 == null && wmFallbackM3u8 != null) {
-            LogBridge.w(TAG, "源7(影视) 全部线路带水印或不可达，回退带水印线路 sid=" + wmFallbackSid);
+            LogBridge.i(TAG, "源7(影视) 全部线路带水印或不可达，回退带水印线路 sid=" + wmFallbackSid);
             bestM3u8 = wmFallbackM3u8;
             bestSid = wmFallbackSid;
             bestKbps = 0;
@@ -769,8 +765,6 @@ public final class AfhgrjUrlResolver {
                         + "（" + (bestKbps == Integer.MAX_VALUE ? "白名单" : bestKbps + " KB/s")
                         + "）：" + vodId + "-" + nid);
             }
-            LogBridge.i(TAG, "源7(影视) 解析成功 " + vodId + "-" + bestSid + "-" + nid
-                    + " → " + bestM3u8.substring(0, Math.min(110, bestM3u8.length())));
             putResolvedCache(resolvedKey(afhgrjUrl), bestM3u8);
             return bestM3u8;
         }
@@ -1055,7 +1049,7 @@ public final class AfhgrjUrlResolver {
             }
         }
         if (minSid == Integer.MAX_VALUE) {
-            LogBridge.w(TAG, "源7(影视) 未找到播放源 vodId=" + vodId);
+            LogBridge.i(TAG, "源7(影视) 未找到播放源 vodId=" + vodId);
             return null;
         }
 
@@ -1082,9 +1076,6 @@ public final class AfhgrjUrlResolver {
         sSidCache.put(vodId, toIntArray(allSids));
         sEpisodeCacheTs.put(vodId, System.currentTimeMillis());
         persistEpisodeCache();
-        LogBridge.i(TAG, "源7(影视) 集数解析成功 vodId=" + vodId + " sid=" + minSid
-                + " 共 " + items.size() + " 集（播放源 " + allSids.size() + " 条："
-                + allSids + "）");
         return items;
     }
 

@@ -368,22 +368,23 @@ public final class NowTvSourceApi {
                 return new ChannelSourceInfo(out, backUrl, back);
             }
             backUrl = data.optString("backUrl", "").trim();
-            LogBridge.i(TAG, "服务端下发 tvId=" + tvId
-                    + " path=" + data.optString("path", "")
-                    + " backUrl=" + abbreviate(backUrl));
+            // 【2026-10-27 去日志双写】原来这里先打一条「path=… backUrl=…」，解析完再打一条
+            // 「→ 直播源 N 条 / 回看源 M 条」，同一份下发结果两行。现合并为解析完成后的一条。
+            final String channelPath = data.optString("path", "");
 
             JSONArray labels = data.optJSONArray("sourceLabels");
             if (labels == null) labels = data.optJSONArray("sourceLabelList");
             parseLabels(labels, out);
             parseLabels(data.optJSONArray("backSourceLabels"), back);
 
-            LogBridge.i(TAG, "服务端下发 tvId=" + tvId + " → 直播源 " + out.size()
-                    + " 条 / 回看源 " + back.size() + " 条");
+            LogBridge.i(TAG, "服务端下发 tvId=" + tvId + " path=" + channelPath
+                    + " → 直播源 " + out.size() + " 条 / 回看源 " + back.size() + " 条"
+                    + " backUrl=" + abbreviate(backUrl));
             for (int i = 0; i < out.size(); i++) {
-                LogBridge.i(TAG, "  源[" + i + "] " + out.get(i));
+                LogBridge.d(TAG, "  源[" + i + "] " + out.get(i));
             }
             for (int i = 0; i < back.size(); i++) {
-                LogBridge.i(TAG, "  回看源[" + i + "] " + back.get(i));
+                LogBridge.d(TAG, "  回看源[" + i + "] " + back.get(i));
             }
         } catch (Throwable t) {
             LogBridge.w(TAG, "解析 sourceLabels 失败：" + t.getClass().getSimpleName()
@@ -435,7 +436,7 @@ public final class NowTvSourceApi {
             JSONObject root = new JSONObject(body);
             JSONObject data = root.optJSONObject("data");
             if (data == null) {
-                LogBridge.w(TAG, "当前节目单无 data，tvId=" + tvId
+                LogBridge.d(TAG, "当前节目单无 data，tvId=" + tvId
                         + " body=" + abbreviate(body));
                 return null;
             }
@@ -443,7 +444,7 @@ public final class NowTvSourceApi {
                     optLongSafe(data, "st"), optLongSafe(data, "et"),
                     optLongSafe(data, "nst"), optLongSafe(data, "net"),
                     data.optString("t", ""), data.optString("nt", ""));
-            LogBridge.i(TAG, "当前节目单 tvId=" + tvId + " → " + e);
+            LogBridge.d(TAG, "当前节目单 tvId=" + tvId + " → " + e);
             return e.valid() ? e : null;
         } catch (Throwable t) {
             LogBridge.w(TAG, "当前节目单解析失败 tvId=" + tvId + "："
@@ -536,7 +537,7 @@ public final class NowTvSourceApi {
         for (SourceLabel l : labels) {
             if (TextUtils.isEmpty(l.source)) continue;
             if (com.tv.live.migu.MiguUrlResolver.isHttpUrl(l.source)) continue;  // 网页，跳过
-            LogBridge.w(TAG, "仅剩非预期协议源 → " + l.source);
+            LogBridge.d(TAG, "仅剩非预期协议源 → " + l.source);
             return l.source;
         }
 
@@ -609,7 +610,7 @@ public final class NowTvSourceApi {
 
         String body = httpGet(buildUrl(hostUser(), API_PAGE_CATE, publicParams(ctx)));
         if (TextUtils.isEmpty(body)) {
-            LogBridge.w(TAG, "首页分类表为空（host=" + hostUser() + "）");
+            LogBridge.i(TAG, "首页分类表为空（host=" + hostUser() + "）");
             return out;
         }
         try {
@@ -671,7 +672,7 @@ public final class NowTvSourceApi {
         List<Category> categories = fetchCategories(ctx);
         if (categories.isEmpty()) {
             // 分类表不可用 → 退化为「单次无参查询」（服务端默认返回央视 19 条）
-            LogBridge.w(TAG, "分类表不可用，退化为单次无参频道查询");
+            LogBridge.i(TAG, "分类表不可用，退化为单次无参频道查询");
             categories = new ArrayList<>();
             categories.add(new Category(0, "", ""));
         } else if (maxCategories > 0 && categories.size() > maxCategories) {
@@ -702,8 +703,8 @@ public final class NowTvSourceApi {
                     added++;
                 }
             }
-            LogBridge.i(TAG, "分类[" + (cate.title.isEmpty() ? "默认" : cate.title)
-                    + "] tagId=" + cate.id + " 返回 " + list.size() + " 条，新增 " + added);
+
+
         }
         LogBridge.i(TAG, "服务端下发频道表共 " + out.size() + " 个（"
                 + taken + " 个分类）");
@@ -899,7 +900,7 @@ public final class NowTvSourceApi {
             String decoded = decodeEPG((String) dataObj);
             if (TextUtils.isEmpty(decoded)) {
                 root.put("data", JSONObject.NULL);
-                LogBridge.w(TAG, "响应 hasEncryption=true 但解码为空");
+                LogBridge.i(TAG, "响应 hasEncryption=true 但解码为空");
                 return root.toString();
             }
             String t = decoded.trim();
@@ -910,8 +911,6 @@ public final class NowTvSourceApi {
             } else {
                 root.put("data", t);
             }
-            LogBridge.i(TAG, "响应解包 hasEncryption=true，data "
-                    + ((String) dataObj).length() + " → " + decoded.length() + " 字节");
             return root.toString();
         } catch (Throwable t) {
             LogBridge.w(TAG, "响应解包失败：" + t.getClass().getSimpleName() + " " + t.getMessage());

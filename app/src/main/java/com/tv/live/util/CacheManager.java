@@ -105,7 +105,6 @@ public class CacheManager {
             return totalBytes;
 
         } catch (IOException e) {
-            e.printStackTrace();
 
             try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
             fos = null;
@@ -135,7 +134,6 @@ public class CacheManager {
         try {
             return new FileInputStream(cacheFile);
         } catch (IOException e) {
-            e.printStackTrace();
             return null;
         }
     }
@@ -161,7 +159,6 @@ public class CacheManager {
             }
             return sb.toString();
         } catch (IOException e) {
-            e.printStackTrace();
             return null;
         } finally {
             if (reader != null) {
@@ -192,7 +189,6 @@ public class CacheManager {
             fos.flush();
             success = true;
         } catch (IOException e) {
-            e.printStackTrace();
         } finally {
             if (fos != null) {
                 try { fos.close(); } catch (IOException ignored) {}
@@ -353,7 +349,7 @@ public class CacheManager {
         List<FileEntry> all = new ArrayList<>();
         for (File root : candidates) beforeBytes += walkAndCollect(root, all, true);
 
-        LogBridge.i(TAG, "扫描到应用缓存目录 " + candidates.size() + " 个, 共 " + all.size()
+        LogBridge.d(TAG, "扫描到应用缓存目录 " + candidates.size() + " 个, 共 " + all.size()
                 + " 个文件, 当前占用 = " + human(beforeBytes));
 
         long deletedStep1 = 0L;
@@ -402,8 +398,6 @@ public class CacheManager {
         long after = 0L;
         for (File root : candidates) after += walkSize(root);
         long cost = System.currentTimeMillis() - start;
-        LogBridge.i(TAG, "✅ 清理完成: " + human(beforeBytes) + " → " + human(after)
-                + "  节省 " + human(beforeBytes - after) + "  耗时 " + cost + "ms");
     }
 
     /**
@@ -550,9 +544,6 @@ public class CacheManager {
     private static final long HARD_EXO_TMP_BYTES          =  5L * 1024 * 1024;
     private static final long EXO_TMP_FILE_AGE_MS         =  6L * 60 * 60 * 1000;
 
-    private static final int  KEEP_LAST_CRASH_LOGS        =  3;
-    private static final long CRASH_LOG_AGE_MS            =  7L * 24 * 60 * 60 * 1000;
-
     private static final long JS_PARSER_PLUGIN_AGE_MS     =  14L * 24 * 60 * 60 * 1000;
 
     private static final String[] DEAD_TV_CACHE_KEYS = new String[]{
@@ -664,30 +655,7 @@ public class CacheManager {
             }
         }
 
-        int  crashSaved = 0;
-        long crashFreed = 0;
-        File crashDir = new File(filesDir, "crash_logs");
-        if (crashDir.isDirectory()) {
-            long now = System.currentTimeMillis();
-            List<File> list = listFilesSortedByMtimeDesc(crashDir);
-
-            for (int i = 0; i < list.size(); i++) {
-                File f = list.get(i);
-                if (!f.isFile()) continue;
-                if (now - f.lastModified() > CRASH_LOG_AGE_MS) {
-                    long sz = f.length();
-                    if (f.delete()) { crashFreed += sz; crashSaved++; list.remove(i); i--; }
-                }
-            }
-
-            for (int i = KEEP_LAST_CRASH_LOGS; i < list.size(); i++) {
-                File f = list.get(i);
-                if (f.isFile()) {
-                    long sz = f.length();
-                    if (f.delete()) { crashFreed += sz; crashSaved++; }
-                }
-            }
-        }
+        // 【2026-10-28】crash_logs 目录随崩溃文件日志一并删除，本分支不再需要。
 
         int  apkSaved = 0;
         long apkFreed = 0;
@@ -814,7 +782,6 @@ public class CacheManager {
                 .append("  耗时 ").append(cost).append("ms\n");
         if (tvSaved    > 0) sb.append("  · 业务缓存(EPG/直播源)  : -").append(human(tvFreed)).append(" 文件数=").append(tvSaved).append("\n");
         if (exoSaved   > 0) sb.append("  · ExoPlayer 临时分片    : -").append(human(exoFreed)).append(" 文件数=").append(exoSaved).append("\n");
-        if (crashSaved > 0) sb.append("  · Crash 日志            : -").append(human(crashFreed)).append(" 文件数=").append(crashSaved).append("\n");
         if (apkSaved   > 0) sb.append("  · 更新遗留 APK          : -").append(human(apkFreed)).append(" 文件数=").append(apkSaved).append("\n");
         if (jsSaved    > 0) sb.append("  · JsParser 过期插件     : -").append(human(jsFreed)).append(" 文件数=").append(jsSaved).append("\n");
         if (rtSaved    > 0) sb.append("  · 运行时 traces/drops   : -").append(human(rtFreed)).append(" 文件数=").append(rtSaved).append("\n");
@@ -1044,7 +1011,6 @@ public class CacheManager {
         try {
             initializeKey();
             mInitialized = true;
-            LogBridge.i(TAG, "安全存储初始化完成");
         } catch (Exception e) {
             LogBridge.e(TAG, "安全存储初始化失败: " + e.getMessage());
         }
@@ -1071,7 +1037,6 @@ public class CacheManager {
             KEY_ALIAS, null);
         mSecretKey = entry.getSecretKey();
 
-        LogBridge.d(TAG, "加密密钥已就绪");
     }
 
     @RequiresApi(Build.VERSION_CODES.M)
@@ -1192,7 +1157,7 @@ public class CacheManager {
         mPrefs.edit().clear().apply();
         mCache.clear();
         mCacheValid.clear();
-        LogBridge.i(TAG, "已清除所有安全存储数据");
+        LogBridge.d(TAG, "已清除所有安全存储数据");
     }
 
     public boolean contains(String key) {
@@ -1311,7 +1276,7 @@ public class CacheManager {
                 generateLegacyKey();
             }
             initialized = true;
-            LogBridge.i(TAG, "✅ EncryptedStorage 初始化成功");
+            LogBridge.d(TAG, "✅ EncryptedStorage 初始化成功");
         } catch (Exception e) {
             LogBridge.e(TAG, "❌ EncryptedStorage 初始化失败: " + e.getMessage());
         }
@@ -1339,12 +1304,11 @@ public class CacheManager {
                             .build());
 
             keyGenerator.generateKey();
-            LogBridge.i(TAG, "✅ 生成新的 AES-256 密钥");
+            LogBridge.d(TAG, "✅ 生成新的 AES-256 密钥");
         }
 
         KeyStore.SecretKeyEntry keyEntry = (KeyStore.SecretKeyEntry) keyStore.getEntry(KEY_ALIAS, null);
         secretKey = keyEntry.getSecretKey();
-        LogBridge.i(TAG, "✅ 加载 AES-256 密钥成功");
     }
 
     private void generateLegacyKey() throws Exception {
@@ -1365,7 +1329,7 @@ public class CacheManager {
         byte[] keyBytes = digest.digest(deviceKey.getBytes("UTF-8"));
 
         secretKey = new SecretKeySpec(keyBytes, "AES");
-        LogBridge.w(TAG, "✅ 使用降级方案生成密钥（安全性较低）");
+        LogBridge.i(TAG, "✅ 使用降级方案生成密钥（安全性较低）");
     }
 
     private String getDeviceKeyMaterial() {
@@ -1482,7 +1446,7 @@ public class CacheManager {
 
     public void clearAll() {
         prefs.edit().clear().apply();
-        LogBridge.i(TAG, "已清除所有加密存储数据");
+        LogBridge.d(TAG, "已清除所有加密存储数据");
     }
 
     public boolean isInitialized() {
@@ -1522,7 +1486,7 @@ public class CacheManager {
                 generateLegacyKey();
             }
 
-            LogBridge.i(TAG, "✅ 密钥已重新生成");
+            LogBridge.d(TAG, "✅ 密钥已重新生成");
             return true;
         } catch (Exception e) {
             LogBridge.e(TAG, "❌ 密钥重新生成失败: " + e.getMessage());

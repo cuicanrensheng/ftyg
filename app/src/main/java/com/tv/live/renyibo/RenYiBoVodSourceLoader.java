@@ -142,7 +142,7 @@ public final class RenYiBoVodSourceLoader {
                     String fragment = buildVodM3uFragment();
                     final int real = sLastRealCount;
                     if (real < MIN_REAL_ITEMS) {
-                        LogBridge.w(TAG, "源5点播：真实条目仅 " + real + " 条（< "
+                        LogBridge.i(TAG, "源5点播：真实条目仅 " + real + " 条（< "
                                 + MIN_REAL_ITEMS + "，疑似残表），本次结果不写入缓存");
                         return null;
                     }
@@ -219,7 +219,7 @@ public final class RenYiBoVodSourceLoader {
             homeWritten++;
         }
         if (homeWritten > 0) {
-            LogBridge.i(TAG, "源5点播：分组[" + HOME_GROUP + "]内置 " + homeWritten + " 部（首页推荐明文）");
+            LogBridge.d(TAG, "源5点播：分组[" + HOME_GROUP + "]内置 " + homeWritten + " 部（首页推荐明文）");
             sb.append(homeSb);
         }
 
@@ -259,7 +259,7 @@ public final class RenYiBoVodSourceLoader {
             } finally {
                 pool.shutdownNow();
             }
-            LogBridge.i(TAG, "源5点播：分类并行抓取完成，命中 " + realByCat.size()
+            LogBridge.d(TAG, "源5点播：分类并行抓取完成，命中 " + realByCat.size()
                     + "/" + RenYiBoVodCatalog.CATEGORIES.length + " 个分类");
         }
 
@@ -280,7 +280,7 @@ public final class RenYiBoVodSourceLoader {
                         written++;
                     }
                     if (written > 0) {
-                        LogBridge.i(TAG, "源5点播：分类[" + cat.name + "] type_id=" + cat.typeId
+                        LogBridge.d(TAG, "源5点播：分类[" + cat.name + "] type_id=" + cat.typeId
                                 + " 真实接口合并后 " + written + " 条");
                         sb.append(catSb);
                         continue;
@@ -304,13 +304,13 @@ public final class RenYiBoVodSourceLoader {
                         "分类入口(type_id=" + cat.typeId + ")");
                 written = 1;
             }
-            LogBridge.i(TAG, "源5点播：分类[" + cat.name + "] type_id=" + cat.typeId
-                    + " 内置 " + written + " 条，筛选维度 " + cat.filters.length + " 组");
+
+
             sb.append(catSb);
         }
         // 【2026-10-13 海报加速】一次 build 打一条聚合统计（避免每条刷屏）
         if (sThumbUsedCount > 0 || sPosterFallbackCount > 0 || sMirrorRewrites > 0) {
-            LogBridge.i(TAG, "源5点播：海报加速统计——使用缩略图 vod_pic_thumb " + sThumbUsedCount
+            LogBridge.d(TAG, "源5点播：海报加速统计——使用缩略图 vod_pic_thumb " + sThumbUsedCount
                     + " 条，回退原图 vod_pic " + sPosterFallbackCount
                     + " 条，图床镜像重写 " + sMirrorRewrites + " 次");
         }
@@ -336,11 +336,11 @@ public final class RenYiBoVodSourceLoader {
             if (!canSendRealRequest()) break;
             List<String[]> pageList = fetchCategoryPageReal(cat.typeId, page, cat.classFilter);
             if (pageList == null) {
-                LogBridge.w(TAG, "源5点播：分组[" + cat.name + "] 第" + page + "页接口失败，停止拉取");
+
                 break;
             }
             if (pageList.isEmpty()) {
-                LogBridge.i(TAG, "源5点播：分组[" + cat.name + "] 第" + page + "页无数据，停止拉取（总页数已尽）");
+
                 break;
             }
             int added = 0;
@@ -353,11 +353,11 @@ public final class RenYiBoVodSourceLoader {
                     added++;
                 }
             }
-            LogBridge.i(TAG, "源5点播：分组[" + cat.name + "] 拉取第" + page + "页 共" + pageList.size()
-                    + "条（淘出新片 " + added + " 条）");
+
+
         }
         List<String[]> merged = new ArrayList<>(dedup.values());
-        LogBridge.i(TAG, "源5点播：分组[" + cat.name + "] 多页合并去重后共 " + merged.size() + " 条");
+
         return merged;
     }
 
@@ -513,14 +513,14 @@ public final class RenYiBoVodSourceLoader {
         }
         if (page != 1) {
             // 本期只有第 1 页的静态数据（首页推荐同源），后续页待加密接口补齐
-            LogBridge.i(TAG, "源5点播：type_id=" + typeId + " 第 " + page
-                    + " 页待加密接口补齐，返回空（不发请求）");
+
+
             return out;
         }
         for (String[] v : RenYiBoVodCatalog.homeVideos()) {
             if (parseIntSafe(v[3], 0) == typeId) out.add(v);
         }
-        LogBridge.i(TAG, "源5点播：type_id=" + typeId + " 第 1 页返回内置 " + out.size() + " 条");
+
         return out;
     }
 
@@ -601,12 +601,17 @@ public final class RenYiBoVodSourceLoader {
             for (String[] h : RenYiBoVodCatalog.DART_HEADERS) {
                 rb.header(h[0], h[1]);
             }
-            LogBridge.i(TAG, "源5点播：POST VOD（授权实测）body_len=" + cipherBody.length());
+            // 【2026-10-27 降噪】原来「发出」和「响应」各打一条 info，实测同秒 18 条爆发（并发批量取流）→
+            // 合并为响应后一条，请求体长度并入同一行。
             try (Response resp = NetUtil.getInstance().getClient().newCall(rb.build()).execute()) {
                 int code = resp.code();
                 String body = (resp.body() == null) ? "" : resp.body().string();
-                LogBridge.i(TAG, "源5点播：POST VOD resp code=" + code
-                        + " body_len=" + body.length());
+                // 【2026-10-28 只留错误】成功（200 且响应非空）不再记录：一次点播页会并发 19 个
+                //   POST VOD，全 200 时这 19 条无排障价值；失败/空响应仍以 w 记录。
+                if (!resp.isSuccessful() || body.isEmpty()) {
+                    LogBridge.w(TAG, "源5点播：POST VOD req_len=" + cipherBody.length()
+                            + " resp code=" + code + " body_len=" + body.length());
+                }
                 if (!resp.isSuccessful() || body.isEmpty()) return null;
                 return body;
             }
@@ -641,7 +646,7 @@ public final class RenYiBoVodSourceLoader {
         String vodId = vodIdOfScheme(rawUrl);
         RenYiBoVodCatalog.Category cat = RenYiBoVodCatalog.byTypeId(typeId);
         if (vodId.isEmpty()) {
-            LogBridge.w(TAG, "源5点播：分类入口[" + (cat == null ? typeId : cat.name)
+            LogBridge.i(TAG, "源5点播：分类入口[" + (cat == null ? typeId : cat.name)
                     + "]无具体剧集，返回 null");
             return null;
         }
@@ -691,7 +696,7 @@ public final class RenYiBoVodSourceLoader {
                     LogBridge.i(TAG, "源5点播：选中服务端解析线路 [" + selLine[0] + "]，HTTP 解析首集");
                     resolved = VodLineResolver.resolveToken(firstSeg);
                 } else {
-                    LogBridge.i(TAG, "源5点播：选中解析页面线路 [" + selLine[0] + "]，开始WebView解析: " + firstSeg);
+                    LogBridge.d(TAG, "源5点播：选中解析页面线路 [" + selLine[0] + "]，开始WebView解析: " + firstSeg);
                     resolved = (sAppContext == null) ? null
                             : WebVideoResolver.get(sAppContext).resolve(
                                     firstSeg != null ? firstSeg : selLine[4]);
@@ -700,7 +705,6 @@ public final class RenYiBoVodSourceLoader {
                     userUrl = resolved;
                     // 缓存解析结果到线路表，避免重复解析
                     selLine[3] = resolved;
-                    LogBridge.i(TAG, "源5点播：解析型线路解析成功 [" + selLine[0] + "] -> " + resolved);
                 } else {
                     if (resolved != null && !resolved.isEmpty()) {
                         LogBridge.w(TAG, "源5点播：解析结果带烧录水印 [" + selLine[0] + "]，弃用");
@@ -708,23 +712,23 @@ public final class RenYiBoVodSourceLoader {
                     // 【2026-10-24 禁用测速自动换线】解析失败/带水印 → 不再测速选线，
                     //   按官方①–⑥顺序顺次尝试其余官方解析线路；全部不可用则落到
                     //   video_detail 自带直链（extractPlayUrl，优先干净 host）。
-                    LogBridge.w(TAG, "源5点播：解析型线路不可用 [" + selLine[0] + "]，按官方优先顺延");
+                    LogBridge.i(TAG, "源5点播：解析型线路不可用 [" + selLine[0] + "]，按官方优先顺延");
                     for (int j = 1; j < lines.size(); j++) {
                         int k = (idx + j) % lines.size();
                         String[] alt = lines.get(k);
                         String tok = firstSegPlayable(alt[4]);
                         if (tok == null || !VodLineResolver.isOfficialToken(tok)) continue;
-                        LogBridge.i(TAG, "源5点播：顺延尝试官方解析线路 [" + alt[0] + "]");
+
                         String altResolved = VodLineResolver.resolveToken(tok);
                         if (altResolved == null || altResolved.isEmpty()) continue;
                         if (isWatermarkHost(altResolved)) {
-                            LogBridge.w(TAG, "源5点播：顺延解析结果带水印 [" + alt[0] + "]，跳过");
+
                             continue;
                         }
                         alt[3] = altResolved;   // 缓存解析结果，避免重复解析
                         userUrl = altResolved;
                         sVodLineSel.put(vodId, k);
-                        LogBridge.i(TAG, "源5点播：顺延官方线路解析成功 [" + alt[0] + "] -> " + altResolved);
+
                         break;
                     }
                 }
@@ -735,14 +739,12 @@ public final class RenYiBoVodSourceLoader {
             // 播放中彻底失效的轮转兜底由 tryNextVodLineAuto 承担（失效换线，非测速换线）。
             if (userUrl != null && !userUrl.isEmpty()) {
                 u = userUrl;
-                LogBridge.i(TAG, "源5点播：起播采用选中线路 [" + selLine[0] + "]（官方优先·禁用测速换线）");
             }
         }
         if (u == null) {
             u = extractPlayUrl(obj);
         }
         if (u != null) {
-            LogBridge.i(TAG, "源5点播：video_detail 解析命中 play=" + u);
             return u;
         }
         LogBridge.i(TAG, "源5点播：video_detail 可解析但无直链 play，data_len="
@@ -765,7 +767,7 @@ public final class RenYiBoVodSourceLoader {
             List<Channel.EpgItem> items = buildVodEpisodeItems(vodId, vd);
             if (items != null && !items.isEmpty()) {
                 sVodEpisodeCache.put(vodId, items);
-                LogBridge.i(TAG, "源5点播：起播顺带缓存选集 vodId=" + vodId
+                LogBridge.d(TAG, "源5点播：起播顺带缓存选集 vodId=" + vodId
                         + " 共 " + items.size() + " 项");
             }
         } catch (Throwable t) {
@@ -884,8 +886,6 @@ public final class RenYiBoVodSourceLoader {
                 return null;
             }
             sVodEpisodeCache.put(vodId, items);
-            LogBridge.i(TAG, "源5点播：EPG 选集解析成功 vodId=" + vodId
-                    + " 共 " + items.size() + " 项");
             return items;
         }
     }
@@ -964,16 +964,13 @@ public final class RenYiBoVodSourceLoader {
                 sVodLineSel.remove(vodId);
                 LogBridge.w(TAG, "源5点播：原选线路带烧录水印，已复位为默认干净线路");
             }
-            LogBridge.i(TAG, "源5点播：线路表就绪 vodId=" + vodId + " 共 " + lines.size()
-                    + " 条，默认线路[" + lines.get(0)[0] + "]"
-                    + (offCount > 0 ? "（官方路线 " + offCount + " 条列 ① 档）" : "")
-                    + (wmCount > 0 ? "（其中 " + wmCount + " 条带烧录水印已降级为兜底）" : ""));
+
             // 【2026-10-13 线路体检】把全部线路（名/host/直链）逐条打日志，
             //   供 PC 端逐线拉 m3u8 抽帧、判定哪条线路正片带广告/水印（无水印者定为默认线）。
             for (int li = 0; li < lines.size(); li++) {
                 String[] ln = lines.get(li);
-                LogBridge.i(TAG, "源5点播：线路#" + li + " [" + ln[0] + "] code=" + ln[1]
-                        + " host=" + hostOf(ln[3]) + " url=" + ln[3]);
+
+
             }
         }
     }
@@ -992,7 +989,7 @@ public final class RenYiBoVodSourceLoader {
                 //   但「带明确视频扩展名的 URL」即便路径含 /play/ 也是真直链（防误伤）。
                 if (!looksLikeVideoFile(url)
                         && (isParsePage(url) || VodLineResolver.isResolvableToken(url))) {
-                    LogBridge.i(TAG, "源5点播：发现解析型线路 [" + q + "] 待解析=" + truncUrl(url));
+
                     return new String[]{ q, "" };  // 直链为空，标记为待解析
                 }
                 return new String[]{ q, url };
@@ -1000,7 +997,7 @@ public final class RenYiBoVodSourceLoader {
             // 【2026-10-17 增加线路】服务端解析 token（deja-/ZY-/yzx-/NBY-/co_/Ace_Net-/48B b64）
             //   由爱其意自带解析服务器直出直链（见 VodLineResolver 全图），播时惰性解析。
             if (VodLineResolver.isResolvableToken(url)) {
-                LogBridge.i(TAG, "源5点播：发现服务端解析线路 [" + q + "] token=" + truncUrl(url));
+
                 return new String[]{ q, "" };  // 直链为空，标记为待解析
             }
         }
@@ -1190,7 +1187,7 @@ public final class RenYiBoVodSourceLoader {
             for (String[] ln : lines) {
                 if (ln[0] != null && ln[0].contains("畅享") && ln[0].contains("白天")) {
                     fixedLine = ln[4];
-                    LogBridge.i(TAG, "源5点播：固定主线路 → " + ln[0]);
+
                     break;
                 }
             }
@@ -1217,7 +1214,7 @@ public final class RenYiBoVodSourceLoader {
                     // 优先找"畅享(白天用)"线路
                     if (name != null && name.contains("畅享") && name.contains("白天")) {
                         preferBest = u;
-                        LogBridge.i(TAG, "源5点播：无线路表时固定主线路 → " + name);
+
                         break;
                     }
                     if (isWatermarkHost(firstHttpM3u8(u))) {
@@ -1301,12 +1298,12 @@ public final class RenYiBoVodSourceLoader {
                         if (wmUrl == null) wmUrl = u;
                         continue;
                     }
-                    LogBridge.i(TAG, "源5点播：取直链[" + e.optString("name", "")
-                            + "/" + e.optString("code", "") + "] -> " + u);
+
+
                     return u;
                 }
                 if (wmUrl != null) {
-                    LogBridge.w(TAG, "源5点播：全部线路带烧录水印，回退兜底直链 -> " + wmUrl);
+                    LogBridge.i(TAG, "源5点播：全部线路带烧录水印，回退兜底直链 -> " + wmUrl);
                     return wmUrl;
                 }
             }
@@ -1432,8 +1429,6 @@ public final class RenYiBoVodSourceLoader {
             boolean failed = hit[1] == null;
             long ttl = failed ? FILTER_FAIL_TTL_MS : FILTER_CACHE_TTL_MS;
             if (now - at < ttl) {
-                LogBridge.i(TAG, "源5筛选：命中缓存 " + key
-                        + (failed ? "（失败冷却）" : " 共 " + ((List<String[]>) hit[1]).size() + " 条"));
                 cb.onResult(!failed, failed ? null : (List<String[]>) hit[1]);
                 return;
             }
@@ -1448,7 +1443,7 @@ public final class RenYiBoVodSourceLoader {
                     // 第 1 页就失败 = 接口失败；后续页失败视为「页已尽」（与骨架口径不同：
                     // 骨架把任何 null 当停页，这里第 1 页 null 必须报失败，否则 UI 无法区分空结果与失败）
                     if (page == 1) ok = false;
-                    LogBridge.w(TAG, "源5筛选：" + key + " 第" + page + "页失败/无页"
+                    LogBridge.d(TAG, "源5筛选：" + key + " 第" + page + "页失败/无页"
                             + (page == 1 ? "（判定接口失败）" : "（停止翻页）"));
                     break;
                 }
@@ -1637,17 +1632,17 @@ public final class RenYiBoVodSourceLoader {
             tried.add(idx);
             if (isDirect) {
                 if (isWatermarkHost(u)) {
-                    LogBridge.w(TAG, "源5点播：失效换线·跳过水印线路 [" + ln[0] + "]");
+
                     continue;
                 }
                 long sp = probeSpeed(u);
                 if (sp > 0) {
                     sVodLineSel.put(vodId, idx);
-                    LogBridge.i(TAG, "源5点播：失效换线成功 → [" + ln[0]
-                            + "]（直链，速度=" + sp + "KB/s）");
+
+
                     return u;
                 }
-                LogBridge.w(TAG, "源5点播：失效换线·直链不可达 [" + ln[0] + "]");
+                LogBridge.d(TAG, "源5点播：失效换线·直链不可达 [" + ln[0] + "]");
             } else {
                 if (parseTried >= MAX_AUTO_LINE_TRIES) break;
                 String tok = firstSegPlayable(ln[4]);
@@ -1655,19 +1650,19 @@ public final class RenYiBoVodSourceLoader {
                     continue;   // WebView 页面型不在自动换线链处理（起播链自有通路）
                 }
                 parseTried++;
-                LogBridge.i(TAG, "源5点播：失效换线·尝试解析 [" + ln[0] + "] " + tok);
+
                 String resolved = VodLineResolver.resolveToken(tok);
                 if (resolved != null && !resolved.isEmpty()) {
                     if (isWatermarkHost(resolved)) {
-                        LogBridge.w(TAG, "源5点播：失效换线·解析结果带水印 [" + ln[0] + "]，跳过");
+                        LogBridge.d(TAG, "源5点播：失效换线·解析结果带水印 [" + ln[0] + "]，跳过");
                         continue;
                     }
                     ln[3] = resolved;   // 缓存解析结果，避免重复解析
                     sVodLineSel.put(vodId, idx);
-                    LogBridge.i(TAG, "源5点播：失效换线成功 → [" + ln[0] + "]（解析型）");
+
                     return resolved;
                 }
-                LogBridge.w(TAG, "源5点播：失效换线·解析失败 [" + ln[0] + "]");
+                LogBridge.d(TAG, "源5点播：失效换线·解析失败 [" + ln[0] + "]");
             }
         }
         LogBridge.w(TAG, "源5点播：失效换线本轮（" + (directRound ? "直链" : "解析型")

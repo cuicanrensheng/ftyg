@@ -160,7 +160,6 @@ public class VariantManager {
                 currentResolutionLabel = currentLine.get(0).getDisplayLabel();
             }
         }
-        LogBridge.d(TAG, "【虎牙】切换到线路 " + lineIndex + ", 当前线路清晰度: " + getAvailableResolutions());
     }
 
     public void switchToResolution(int targetHeight, String... matchLabelOpt) {
@@ -248,7 +247,7 @@ public class VariantManager {
         if (!list.isEmpty()) {
             callback.dLog("解析到 " + list.size() + " 个清晰度");
         } else {
-            LogBridge.w(TAG, "未解析到任何清晰度流，可能是直播源本身不支持多码率或网络被拦截");
+            LogBridge.i(TAG, "未解析到任何清晰度流，可能是直播源本身不支持多码率或网络被拦截");
         }
     }
 

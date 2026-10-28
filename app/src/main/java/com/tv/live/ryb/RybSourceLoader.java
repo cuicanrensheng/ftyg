@@ -134,7 +134,7 @@ public final class RybSourceLoader {
                         List<Card> part = f.get(30, TimeUnit.SECONDS);
                         if (part != null && !part.isEmpty()) cards.addAll(part);
                     } catch (Throwable t) {
-                        LogBridge.w(TAG, "分组[" + gname + "]抓取异常 " + t.getClass().getSimpleName());
+                        LogBridge.d(TAG, "分组[" + gname + "]抓取异常 " + t.getClass().getSimpleName());
                     }
                 }
                 int before = total;
@@ -153,7 +153,7 @@ public final class RybSourceLoader {
                     m3u.append(RybUrlResolver.SCHEME).append(c.slug).append("\n");
                     total++;
                 }
-                LogBridge.i(TAG, "分组[" + gname + "]抓到 " + (total - before) + " 部");
+
             }
 
             if (total == 0) {
@@ -211,7 +211,6 @@ public final class RybSourceLoader {
 
             out.add(c);
         }
-        LogBridge.d(TAG, "列表页 " + url + " → " + out.size() + " 部");
         return out;
     }
 

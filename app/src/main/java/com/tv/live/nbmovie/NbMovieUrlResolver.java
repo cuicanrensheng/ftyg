@@ -212,9 +212,6 @@ public final class NbMovieUrlResolver {
             if (info != null && info.lineCount() > 0) {
                 info.ts = System.currentTimeMillis();
                 sInfoCache.put(vodId, info);
-                LogBridge.i(TAG, "详情解析成功 vodId=" + vodId + " 标题=" + info.title
-                        + " 线路=" + info.lineCount()
-                        + " 首线集数=" + info.lines.get(0).eps.size());
                 return info;
             }
             LogBridge.w(TAG, "详情解析：无 play_urls vodId=" + vodId);
@@ -399,7 +396,7 @@ public final class NbMovieUrlResolver {
         String cacheKey = vodId + "@" + lineIdx + "-" + epIdx;
         String[] hit = sUrlCache.get(cacheKey);
         if (hit != null && System.currentTimeMillis() - parseLong(hit[1]) < URL_TTL_MS) {
-            LogBridge.i(TAG, "命中解析缓存 " + cacheKey);
+            LogBridge.d(TAG, "命中解析缓存 " + cacheKey);
             sLastResolvedUrl = hit[0];
             return hit[0];
         }
@@ -438,7 +435,6 @@ public final class NbMovieUrlResolver {
         sCurEp.put(vodId, epIdx);
         sUrlCache.put(cacheKey, new String[]{url, String.valueOf(System.currentTimeMillis())});
         sLastResolvedUrl = url;
-        LogBridge.i(TAG, "解析成功 " + cacheKey + " -> " + url);
         return url;
     }
 
@@ -517,16 +513,16 @@ public final class NbMovieUrlResolver {
         for (int step = 1; step < size; step++) {
             int idx = (cur + step) % size;
             String raw = SCHEME + vodId + "@" + (idx + 1) + "-" + (ep + 1);
-            LogBridge.i(TAG, "失效换线：试第" + (idx + 1) + "条线路 vodId=" + vodId + " → " + raw);
+
             String url = resolve(raw);
             if (!TextUtils.isEmpty(url)) {
                 // 直接写选区（不清缓存：刚解析出的新 key 要保留，供同片后续集复用）
                 sSelectedLine.put(vodId, idx);
-                LogBridge.i(TAG, "失效换线成功 vodId=" + vodId + " 第" + (cur + 1)
-                        + "条 → 第" + (idx + 1) + "条");
+
+
                 return raw;
             }
-            LogBridge.w(TAG, "失效换线：第" + (idx + 1) + "条线路不可用 vodId=" + vodId);
+
         }
         LogBridge.w(TAG, "失效换线失败：所有线路均不可用 vodId=" + vodId);
         return null;
@@ -541,7 +537,6 @@ public final class NbMovieUrlResolver {
         }
         sInfoCache.remove(vodId);
         sFailAt.remove(vodId);
-        LogBridge.i(TAG, "已作废缓存 vodId=" + vodId);
     }
 
     private static long parseLong(String s) {

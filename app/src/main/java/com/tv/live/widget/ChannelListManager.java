@@ -176,7 +176,7 @@ public class ChannelListManager {
 
         lvChannelList.setAdapter(adapter);
         lvChannelList.setSelection(selectedPosition);
-        LogBridge.i("ChannelList", "⏱️【链路-列表】setChannels 构建adapter 耗时 "
+        LogBridge.d("ChannelList", "⏱️【链路-列表】setChannels 构建adapter 耗时 "
                 + (System.currentTimeMillis() - t0) + "ms，行数=" + names.size());
     }
 

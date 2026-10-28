@@ -185,7 +185,7 @@ public class HuyaSDKParser {
         }
 
         if (best == null) {
-            LogBridge.w(TAG, "【适配选择】没有 <= " + targetHeight + "p 的流，退回选择最高码率");
+            LogBridge.d(TAG, "【适配选择】没有 <= " + targetHeight + "p 的流，退回选择最高码率");
             best = valid.get(0);
             for (HuyaStreamInfo s : valid) {
                 if (s.bitRate > best.bitRate) best = s;
@@ -381,7 +381,7 @@ public class HuyaSDKParser {
             for (int i = 0; i < n; i++) {
                 if (alive[i]) result.add(streams.get(i));
             }
-            LogBridge.i(TAG, "【探活】候选 " + n + " 条线路，可用 " + result.size() + " 条（宽限 2000ms）");
+            LogBridge.d(TAG, "【探活】候选 " + n + " 条线路，可用 " + result.size() + " 条（宽限 2000ms）");
             return result;
         }
 
@@ -455,7 +455,7 @@ public class HuyaSDKParser {
         public static boolean probeSingleWithGrace(String url) {
             if (url == null || url.trim().isEmpty()) return false;
             boolean ok = checkSingleWithGrace(url);
-            LogBridge.i(TAG, "【探活·宽限】默认流 " + (ok ? "通过" : "失败"));
+            LogBridge.d(TAG, "【探活·宽限】默认流 " + (ok ? "通过" : "失败"));
             return ok;
         }
     }

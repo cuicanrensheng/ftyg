@@ -234,11 +234,9 @@ public final class CodecWarmupProbe {
     }
 
     private static void log(Context context, String msg) {
+        // 【2026-10-27 日志单写】原为 LogBridge.i + collector.addLog 双写（预热结果固定两行），
+        //   LogBridge.i 已经同时写 logcat 与环形缓冲，保留它即可。
         LogBridge.i(TAG, msg);
-        try {
-            LogCollector.getInstance().addLog(TAG, msg);
-        } catch (Throwable ignored) {
-        }
     }
 
     public static final class Result {

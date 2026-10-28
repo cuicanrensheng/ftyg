@@ -213,7 +213,7 @@ public class CapsuleChoicePanel extends LinearLayout {
             v.setNextFocusDownId((i == focusables.size() - 1)
                     ? v.getId() : focusables.get(i + 1).getId());
         }
-        LogBridge.i(TAG, "【抽屉】焦点已锁定在内，共 "
+        LogBridge.d(TAG, "【抽屉】焦点已锁定在内，共 "
                 + focusables.size() + " 行（返回键才回控制栏）");
     }
 
@@ -226,11 +226,11 @@ public class CapsuleChoicePanel extends LinearLayout {
             View v = rows.get(i);
             if (v != null && v.isFocusable()) {
                 v.requestFocus();
-                LogBridge.i(TAG, "【抽屉】焦点移动 " + fromIndex + " → " + i);
+
                 return;
             }
         }
-        LogBridge.i(TAG, "【抽屉】焦点已到头（index=" + fromIndex + " dir=" + dir + "），保持在原行");
+        LogBridge.d(TAG, "【抽屉】焦点已到头（index=" + fromIndex + " dir=" + dir + "），保持在原行");
     }
 
     /** 清晰度 / 倍速：单行胶囊（左对齐，像列表而不是按钮组） */
@@ -316,7 +316,7 @@ public class CapsuleChoicePanel extends LinearLayout {
             if (contentH > listMax) {
                 scroll.setLayoutParams(new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, listMax));
-                LogBridge.i(TAG, "线路/清晰度列表限高 " + listMax + "px，启用内部滚动");
+                LogBridge.d(TAG, "线路/清晰度列表限高 " + listMax + "px，启用内部滚动");
             }
         }
         root.addView(this, lp);
@@ -328,7 +328,7 @@ public class CapsuleChoicePanel extends LinearLayout {
         postDelayed(() -> {
             View target = initialFocusTarget();
             boolean ok = target != null && target.requestFocus();
-            LogBridge.i(TAG, "抽屉显示 " + items.size() + " 项，抢焦点=" + ok);
+            LogBridge.d(TAG, "抽屉显示 " + items.size() + " 项，抢焦点=" + ok);
         }, 150);
     }
 
@@ -347,17 +347,16 @@ public class CapsuleChoicePanel extends LinearLayout {
     public void close() {
         if (closed) return;
         closed = true;
-        LogBridge.i(TAG, "close() 1 removeCallbacks");
+        // 【2026-10-27 降噪】原来 close() 内 4 条 info（1 removeCallbacks / 2 onClose / 3 removeView /
+        // 4 done），一次关抽屉就刷 4 条；实测一轮操作峰值 90 条/10s。改为末尾一条 d 级汇总。
         handler.removeCallbacksAndMessages(null);
         // 【2026-10-17】先 onClose（把焦点还给触发按钮）再移除视图。
         // 反过来的话：removeView 会删掉焦点所有者 → 系统立刻把焦点丢给控制栏第一颗按钮
         // （‹ 上一频道 / ‹ 上一集），要到 60ms 后才被「焦点回位」纠正 —— 用户看到的就是
         // 「按返回键焦点跳到上一频道」。
-        LogBridge.i(TAG, "close() 2 onClose（先还焦点）");
         if (onClose != null) onClose.onClose();
-        LogBridge.i(TAG, "close() 3 removeView");
         if (host != null) host.removeView(this);
-        LogBridge.i(TAG, "close() 4 done");
+        LogBridge.d(TAG, "close() done（已还焦点并移除视图）");
     }
 
     public boolean isShowing() {
@@ -365,7 +364,7 @@ public class CapsuleChoicePanel extends LinearLayout {
     }
 
     private void pick(int index) {
-        LogBridge.i(TAG, "抽屉选中 index=" + index + " " + items.get(index).label);
+        LogBridge.d(TAG, "抽屉选中 index=" + index + " " + items.get(index).label);
         if (onPick != null) onPick.onPick(index);
         // 【2026-10-18 两级导航】一级菜单 keepOpen：pick 后保持显示，由宿主叠加二级面板；
         // BACK 由宿主逐层关闭（close → onClose → 栈管理 → 露出本层并 resumeFocus）

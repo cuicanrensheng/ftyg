@@ -253,7 +253,7 @@ public final class MiguUrlResolver {
                 respText = resp.body().string();
             }
             if (TextUtils.isEmpty(respText)) {
-                LogBridge.w(TAG, "playurl 响应为空 pid=" + pid);
+                LogBridge.i(TAG, "playurl 响应为空 pid=" + pid);
                 return null;
             }
 
@@ -273,8 +273,6 @@ public final class MiguUrlResolver {
                 LogBridge.w(TAG, "ddCalcu 计算失败 pid=" + pid);
                 return null;
             }
-            LogBridge.i(TAG, "咪咕源6 解析成功 pid=" + pid
-                    + " → " + finalUrl.substring(0, Math.min(110, finalUrl.length())));
             return finalUrl;
 
         } catch (Throwable t) {

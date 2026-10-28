@@ -232,7 +232,7 @@ public final class HuyaRenYiBoLineManager {
             } catch (Throwable ignored) {
             }
         }
-        LogBridge.i(TAG, "任意播频道清单就绪：" + out.size() + " 个（本地静态清单，零请求）");
+        LogBridge.d(TAG, "任意播频道清单就绪：" + out.size() + " 个（本地静态清单，零请求）");
         return out;
     }
 
@@ -254,7 +254,7 @@ public final class HuyaRenYiBoLineManager {
         try {
             String base = SecurityCore.secureString(SecurityCore.C_HUYA_PHP);
             if (TextUtils.isEmpty(base)) {
-                LogBridge.w(TAG, "端点前缀为空（SO 常量缺失？）");
+                LogBridge.i(TAG, "端点前缀为空（SO 常量缺失？）");
                 return null;
             }
             URL url = new URL(base + roomId);
@@ -280,8 +280,6 @@ public final class HuyaRenYiBoLineManager {
             int bizCode = jo.optInt("code", -1);
             String playUrl = jo.optString("url", "");
             if (bizCode == CODE_OK && !TextUtils.isEmpty(playUrl)) {
-                LogBridge.i(TAG, "⚡任意播解析成功 roomId=" + roomId
-                        + " url=" + playUrl.substring(0, Math.min(70, playUrl.length())));
                 return playUrl;
             }
             LogBridge.w(TAG, "任意播解析失败 roomId=" + roomId

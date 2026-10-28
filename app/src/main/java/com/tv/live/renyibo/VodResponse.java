@@ -67,7 +67,7 @@ public final class VodResponse {
             System.arraycopy(a, 0, buf, 0, a.length);
             System.arraycopy(d2, 0, buf, a.length, d2.length);
             if (buf.length < 32) {
-                LogBridge.w(TAG, "信封解密缓冲过短 len=" + buf.length);
+                LogBridge.d(TAG, "信封解密缓冲过短 len=" + buf.length);
                 return null;
             }
             byte[] iv = new byte[16];
@@ -75,8 +75,6 @@ public final class VodResponse {
             System.arraycopy(buf, 0, iv, 0, 16);
             System.arraycopy(buf, 16, ct, 0, ct.length);
             String plain = VodCrypto.decryptToString(ct, iv);
-            LogBridge.i(TAG, "信封解密成功：SEG1 token 数=" + a.length
-                    + " buf=" + buf.length + " 明文头=" + trunc(plain, 80));
             return new JSONObject(plain);
         } catch (Exception e) {
             LogBridge.w(TAG, "信封解密失败 " + e.getMessage());

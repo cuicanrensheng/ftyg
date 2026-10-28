@@ -28,14 +28,12 @@ public class BootJobService extends JobService {
 
             success = startActivityDirectly();
             if (success) {
-                LogBridge.d(TAG, "JobScheduler 直接启动成功");
                 jobFinished(params, false);
                 return;
             }
 
             success = startActivityAsLauncher();
             if (success) {
-                LogBridge.d(TAG, "JobScheduler Launcher 方式启动成功");
                 jobFinished(params, false);
                 return;
             }
@@ -43,7 +41,6 @@ public class BootJobService extends JobService {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 success = startWithForegroundService();
                 if (success) {
-                    LogBridge.d(TAG, "JobScheduler 前台服务方式启动成功");
                     jobFinished(params, false);
                     return;
                 }

@@ -125,7 +125,7 @@ public final class JzApi {
             LogBridge.i(TAG, "baseUrl 刷新 → " + fetched);
         } else if (TextUtils.isEmpty(sBaseUrl)) {
             sBaseUrl = JzProtocol.fallbackBaseUrl();
-            LogBridge.w(TAG, "OSS 不可达，用兜底 baseUrl = " + JzProtocol.fallbackBaseUrl());
+            LogBridge.i(TAG, "OSS 不可达，用兜底 baseUrl = " + JzProtocol.fallbackBaseUrl());
         } else {
             LogBridge.w(TAG, "OSS 刷新失败，沿用 " + sBaseUrl);
         }
@@ -144,12 +144,11 @@ public final class JzApi {
                     JSONObject jo = new JSONObject(resp.body().string().trim());
                     String domain = jo.optString("domain", "").trim();
                     if (jo.optBoolean("enabled", false) && !TextUtils.isEmpty(domain)) {
-                        LogBridge.i(TAG, "OSS 命中 " + domain);
                         return domain;
                     }
                 }
             } catch (Throwable t) {
-                LogBridge.w(TAG, "OSS 异常 " + t.getClass().getSimpleName() + " " + url);
+                LogBridge.d(TAG, "OSS 异常 " + t.getClass().getSimpleName() + " " + url);
             }
         }
         return null;
@@ -200,7 +199,7 @@ public final class JzApi {
                 }
                 byte[] raw = resp.body().bytes();
                 ApiResult r = ApiResult.parse(raw);
-                LogBridge.i(TAG, "RSARequest code=" + r.code + " msg=" + r.msg
+                LogBridge.d(TAG, "RSARequest code=" + r.code + " msg=" + r.msg
                         + " data_len=" + (r.data == null ? 0 : r.data.length));
                 if (r.code != 200 || r.data == null) return false;
 
@@ -211,11 +210,10 @@ public final class JzApi {
                 String s5 = JzProtocol.str(r.data, 5);
                 String key = s1 + s2 + s4 + s5;
                 if (TextUtils.isEmpty(key)) {
-                    LogBridge.w(TAG, "RSAPublic 为空");
+                    LogBridge.i(TAG, "RSAPublic 为空");
                     return false;
                 }
                 JzProtocol.setSecondLevelPublic(key);
-                LogBridge.i(TAG, "secondLevelPublic 协商成功 len=" + key.length());
                 return true;
             }
         } catch (Throwable t) {
@@ -291,14 +289,14 @@ public final class JzApi {
                 }
                 ApiResult r = ApiResult.parse(resp.body().bytes());
                 if (r.code != 200) {
-                    LogBridge.w(TAG, "POST " + path + " code=" + r.code + " msg=" + r.msg);
+
                     return null;
                 }
                 return r.data;
             }
         } catch (Throwable t) {
-            LogBridge.w(TAG, "POST " + path + " 异常 " + t.getClass().getSimpleName()
-                    + ": " + t.getMessage());
+
+
             return null;
         }
     }
@@ -359,16 +357,16 @@ public final class JzApi {
                 int code = jo.optInt("code", -1);
                 String data = jo.optString("data", "");
                 if (code != 200 || TextUtils.isEmpty(data)) {
-                    LogBridge.w(TAG, "GET " + path + " code=" + code + " msg=" + jo.optString("msg"));
+
                     return null;
                 }
                 String plain = decryptPayload(data);
-                LogBridge.i(TAG, "GET " + path + " ok, 明文 " + plain.length() + "B");
+
                 return plain;
             }
         } catch (Throwable t) {
-            LogBridge.w(TAG, "GET " + path + " 异常 " + t.getClass().getSimpleName()
-                    + ": " + t.getMessage());
+
+
             return null;
         }
     }

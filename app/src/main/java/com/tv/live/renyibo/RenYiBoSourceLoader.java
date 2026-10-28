@@ -170,7 +170,7 @@ public final class RenYiBoSourceLoader {
             String vod = RenYiBoVodSourceLoader.loadVodFragmentCached(context);
             if (!TextUtils.isEmpty(vod)) {
                 out.append(vod);
-                LogBridge.i(TAG, "任意播(爱其意)源5：已追加影视点播分组（"
+                LogBridge.d(TAG, "任意播(爱其意)源5：已追加影视点播分组（"
                         + RenYiBoVodSourceLoader.categorySummary().size() + " 个分类 + 首页推荐）");
             }
         } catch (Throwable t) {
@@ -213,7 +213,7 @@ public final class RenYiBoSourceLoader {
             //   判重用服务端原始 url（cctv5+ 与 cctv5 返回同一地址），行地址写协议串。
             if (!seen.add(it[1] + "|" + it[3])) {
                 dup++;
-                LogBridge.w(TAG, "跳过同名同流重复项：" + it[0] + " (" + it[1] + ")");
+
                 continue;
             }
             sb.append("#EXTINF:-1 tvg-id=\"").append(TVG_PREFIX).append(esc(it[0]))
@@ -238,7 +238,7 @@ public final class RenYiBoSourceLoader {
         for (String[] it : items) {
             if ("央视".equals(it[2])) mergedCctv++;
         }
-        LogBridge.i(TAG, "源5：卫视/教育/特色 已合并入央视分组，共 " + mergedCctv
+        LogBridge.d(TAG, "源5：卫视/教育/特色 已合并入央视分组，共 " + mergedCctv
                 + " 个频道（地方分组已删除）");
 
         // 【2026-10-13 磁盘缓存】点播分组已拆到 RenYiBoVodSourceLoader 独立缓存，

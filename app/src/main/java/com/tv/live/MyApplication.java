@@ -443,7 +443,7 @@ public class MyApplication extends Application {
                 } catch (Throwable ignored) {
                 }
                 if (appId == null || appId.length() == 0) {
-                    LogBridge.w("MyApplication", "Bugly 跳过：native 常量不可用（不影响功能）");
+                    LogBridge.d("MyApplication", "Bugly 跳过：native 常量不可用（不影响功能）");
                     return;
                 }
                 try {
@@ -493,14 +493,16 @@ public class MyApplication extends Application {
 
         try {
             SecurityCore.init();
-            LogCollector.getInstance().info("MyApplication", "SecurityCore 初始化成功");
+            // 【2026-10-27 去日志双写】SecurityCore.init 内部已打「SECURITY_INIT: Native SO loaded OK」
+            // 与「签名哈希已绑定 native，校验结果=…」，此处再打「SecurityCore 初始化成功」是同一事件第三行。
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "SecurityCore init failed: " + e.getMessage());
         }
 
         try {
+            // fillPublicFields 内部会打一条「URL 配置解密完成 …」（含 RAW 就绪位），
+            // 【2026-10-27 日志单写】这里不再重复打一条同义日志。
             UrlConfig.fillPublicFields();
-            LogCollector.getInstance().info("MyApplication", "URL 配置解密完成");
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "URL 配置解密失败: " + e.getMessage());
         }
@@ -520,7 +522,8 @@ public class MyApplication extends Application {
 
         try {
             DexProtector.init(this);
-            LogCollector.getInstance().info("MyApplication", "DEX 保护初始化完成");
+            // 【2026-10-27 去日志双写】DexProtector.init 内部已打 "DEX hash: …"，
+            // 此处再打「DEX 保护初始化完成」= 同一事件两行。
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "DEX 保护初始化失败: " + e.getMessage());
         }
@@ -532,7 +535,7 @@ public class MyApplication extends Application {
 
         try {
             SecurityGuard.init(this);
-            LogCollector.getInstance().info("MyApplication", "安全守卫初始化完成");
+            // 【2026-10-27 去日志双写】SecurityGuard.init 内部已打「安全守卫已启用」。
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "安全守卫初始化失败: " + e.getMessage());
         }
@@ -570,13 +573,11 @@ public class MyApplication extends Application {
             SecurityGuardManager guardManager = SecurityGuardManager.getInstance();
             guardManager.init(this);
 
-            SecurityGuardManager.SecurityReport report = guardManager.performFullSecurityCheck();
-            if (report.hasAnyThreat()) {
-                LogCollector.getInstance().warn("MyApplication",
-                    "安全检测发现风险: " + report.getSummary());
-            } else {
-                LogCollector.getInstance().info("MyApplication", "安全检测通过");
-            }
+            // 【2026-10-27 去日志双写】结果行统一由 SecurityCore.performFullSecurityCheck 输出：
+            //   逐项威胁 → 各 check 内的 ⚠️ 行；结论 → 「安全检测完成：发现 N 项风险」。
+            // 此处原来再打一条「安全检测发现风险: <同一份 summary>」，与 SecurityCore 的
+            // 「安全检测完成: <同一份 summary>」正文完全一致、间隔 0~1ms → 一次检测固定两行。
+            guardManager.performFullSecurityCheck();
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "安全检测初始化失败: " + e.getMessage());
         }
@@ -598,7 +599,7 @@ public class MyApplication extends Application {
         try {
             ExceptionReporter.init(this);
             ExceptionReporter.setEnabled(!BuildConfig.IS_DEBUG);
-            LogCollector.getInstance().info("MyApplication", "全局异常收集初始化完成");
+            // 【2026-10-27 去日志双写】ExceptionReporter.init 内部已打「initialized (policy…)」。
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "ExceptionReporter init failed: " + e.getMessage());
         }
@@ -611,16 +612,16 @@ public class MyApplication extends Application {
 
         try {
             CrashHandler.getInstance().init(this);
-            LogCollector.getInstance().info("MyApplication", "崩溃处理器初始化完成");
+            // 【2026-10-27 去日志双写】CrashHandler.init 内部已打「全局崩溃捕获器已初始化」。
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "CrashHandler init failed: " + e.getMessage());
         }
 
         try {
             LogServer.getInstance(this).start();
-            String ip = LogServer.getInstance(this).getDeviceIpAddress();
-            int port = LogServer.getInstance(this).getPort();
-            LogCollector.getInstance().info("MyApplication", "LogServer 启动成功: " + ip + ":" + port);
+            // 【2026-10-27 去日志双写】原此处打「LogServer 启动成功: ip:port」，而 LogServer 内部
+            // 还会打「starting on port …」和「HTTP Server listening on port …」→ 一次启动三行。
+            // 现收敛为 LogServer 内部那一条（绑定成功后才打，并带上本机 IP 便于直接访问 9527）。
         } catch (Throwable e) {
             LogBridge.w("MyApplication", "LogServer init failed (ignore): " + e.getMessage());
         }
@@ -652,10 +653,7 @@ public class MyApplication extends Application {
             LogBridge.w("MyApplication", "广告剥离代理启动失败 (ignore): " + e.getMessage());
         }
 
-        try {
-            BootReceiver.trimBootLog(this);
-        } catch (Throwable ignored) {
-        }
+        // 【2026-10-28 日志双写清理】BootReceiver.trimBootLog 已随 boot_logs.txt 旁路一起删除。
 
     }
 
@@ -770,7 +768,7 @@ public class MyApplication extends Application {
                 }
             }, grace);
         }
-        LogBridge.i("MyApplication", "【首帧优先】首帧已到，安排 " + tasks.size() + " 个启动期任务延后执行");
+        LogBridge.d("MyApplication", "【首帧优先】首帧已到，安排 " + tasks.size() + " 个启动期任务延后执行");
     }
 
     private void initHuyaStreamRepoDeferred(String reason) {

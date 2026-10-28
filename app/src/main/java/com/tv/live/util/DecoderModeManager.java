@@ -153,13 +153,12 @@ public class DecoderModeManager {
     public void setDecoderMode(int mode) {
         if (mDecoderMode == mode) return;
         mDecoderMode = mode;
-        LogBridge.d(TAG, "手动切换解码器模式：" + mode);
         if (player != null) performDecoderSwitch();
     }
 
     public void performDecoderSwitch() {
         if (isSwitching) {
-            LogBridge.w(TAG, "正在解码器切换中，忽略当前请求");
+            LogBridge.i(TAG, "正在解码器切换中，忽略当前请求");
             return;
         }
         isSwitching = true;

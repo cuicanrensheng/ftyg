@@ -287,7 +287,7 @@ public class HuyaStreamPlayer {
                     });
                     return;
                 }
-                LogBridge.i(TAG, "⚡【虎牙自研解析】拿到已探活播放地址, roomId=" + roomId
+                LogBridge.d(TAG, "⚡【虎牙自研解析】拿到已探活播放地址, roomId=" + roomId
                         + " url=" + url.substring(0, Math.min(70, url.length())));
                 callback.setPendingHeaders(null);
                 mHandler.post(() -> doPlay(url, initialSeekPosition));
@@ -373,7 +373,6 @@ public class HuyaStreamPlayer {
         ExoPlayer player = callback.getPlayer();
         String currentChannelName = callback.getCurrentChannelName();
 
-        LogBridge.d(TAG, "【普通源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
         if (isHlsUrl(url)) {
             fetchAndParseMasterPlaylistNormal(url);
@@ -421,7 +420,6 @@ public class HuyaStreamPlayer {
         ExoPlayer player = callback.getPlayer();
         String currentChannelName = callback.getCurrentChannelName();
 
-        LogBridge.d(TAG, "【虎牙源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
         SharedPreferences sp = callback.getSharedPrefs();
 
@@ -495,7 +493,6 @@ public class HuyaStreamPlayer {
         sPlaylistExecutor.execute(() -> {
             HttpURLConnection connection = null;
             try {
-                LogBridge.d(TAG, "【普通源】解析主播放列表: " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
 
                 URL url = new URL(masterUrl);
                 // 【2026-10-25 代理坑修复】绕过系统代理（失效代理会让预取超时，拖垮清晰度菜单）
@@ -509,7 +506,6 @@ public class HuyaStreamPlayer {
                 connection.setRequestProperty("Accept", "*/*");
 
                 int code = connection.getResponseCode();
-                LogBridge.d(TAG, "【普通源】主播放列表响应码: " + code);
 
                 if (code == HttpURLConnection.HTTP_OK) {
                     StringBuilder content = new StringBuilder();
@@ -521,7 +517,6 @@ public class HuyaStreamPlayer {
                         }
                     }
                     String playlist = content.toString();
-                    LogBridge.d(TAG, "【普通源】主播放列表长度: " + playlist.length());
                     variantManager.parseMasterPlaylist(playlist, masterUrl);
                 } else if (code == HttpURLConnection.HTTP_MOVED_TEMP
                         || code == HttpURLConnection.HTTP_MOVED_PERM) {
@@ -555,7 +550,6 @@ public class HuyaStreamPlayer {
         sPlaylistExecutor.execute(() -> {
             HttpURLConnection connection = null;
             try {
-                LogBridge.d(TAG, "【虎牙源】解析主播放列表: " + masterUrl.substring(0, Math.min(100, masterUrl.length())));
 
                 URL url = new URL(masterUrl);
                 // 【2026-10-25 代理坑修复】绕过系统代理（失效代理会让虎牙主清单预取超时）
@@ -585,7 +579,6 @@ public class HuyaStreamPlayer {
                 }
 
                 int code = connection.getResponseCode();
-                LogBridge.d(TAG, "【虎牙源】主播放列表响应码: " + code);
 
                 if (code == HttpURLConnection.HTTP_OK) {
                     StringBuilder content = new StringBuilder();
@@ -597,7 +590,6 @@ public class HuyaStreamPlayer {
                         }
                     }
                     String playlist = content.toString();
-                    LogBridge.d(TAG, "【虎牙源】主播放列表长度: " + playlist.length());
                     variantManager.parseMasterPlaylist(playlist, masterUrl);
                 } else if (code == HttpURLConnection.HTTP_MOVED_TEMP
                         || code == HttpURLConnection.HTTP_MOVED_PERM) {
@@ -1199,8 +1191,6 @@ public class HuyaStreamPlayer {
             StreamCache cached = sCache.get(roomLong);
             if (cached != null && cached.isValid()) {
                 String hit = cached.hls != null ? cached.hls : cached.flv;
-                LogBridge.d(TAGP, "命中缓存（" + ((System.currentTimeMillis() - cached.timestamp) / 1000)
-                        + "s）：" + cacheSafe(hit));
                 // 【2026-09-29】缓存里带着上次的线路/清晰度矩阵就一并回传
                 postSuccess(listener, cached.hls, cached.flv, cached.matrix);
                 return;
@@ -1218,7 +1208,7 @@ public class HuyaStreamPlayer {
                         collectFromMpApi(roomLong, cands, rates, multiLines);
                         int mpCount = cands.size();
                         if (cands.isEmpty()) {
-                            LogBridge.w(TAGP, "mp API 未取到候选，改用 PC 网页源");
+                            LogBridge.i(TAGP, "mp API 未取到候选，改用 PC 网页源");
                             collectFromWebPage(roomLong, cands, rates);
                         }
                         if (cands.isEmpty()) {
@@ -1267,12 +1257,12 @@ public class HuyaStreamPlayer {
                         Candidate bestAny = null;
                         for (Candidate c : uniq) {
                             if (System.currentTimeMillis() - t0 > TOTAL_BUDGET_MS) {
-                                LogBridge.w(TAGP, "探活超预算（" + TOTAL_BUDGET_MS + "ms），停止后续候选");
+                                LogBridge.d(TAGP, "探活超预算（" + TOTAL_BUDGET_MS + "ms），停止后续候选");
                                 break;
                             }
                             // 探活：403 是逐请求随机的（边缘节点直接拒），隔 ~180ms 重试一次即可抹平抖动
                             Probe r = probeRetry(c.url, PROBE_ATTEMPTS);
-                            LogBridge.i(TAGP, "探活 " + c.label + " [" + hostOf(c.url) + "] -> " + r);
+
 
                             // 【2026-09-29 关键修复】master playlist → 展开子播放列表并换成 SDK ctype 再探活。
                             //
@@ -1284,15 +1274,15 @@ public class HuyaStreamPlayer {
                             if (r.master && !TextUtils.isEmpty(r.masterUri)) {
                                 String fixed = applySdkCtype(r.masterUri);
                                 Probe r2 = probeRetry(fixed, PROBE_ATTEMPTS);
-                                LogBridge.i(TAGP, "  ↳ master展开+SDK ctype [" + hostOf(fixed)
-                                        + "] -> " + r2);
+
+
                                 if (r2.playable && probeStable(fixed, true)) {
-                                    LogBridge.i(TAGP, "✅ 采用 " + c.label
-                                            + "（master展开 + SDK ctype，主机 " + hostOf(fixed)
-                                            + "，耗时 " + (System.currentTimeMillis() - t0) + "ms）");
+
+
+
                                     StreamMatrix mx = buildMatrix(uniq, c, r.masterChildren, rates,
                                             multiLines, fixed, null);
-                                    LogBridge.i(TAGP, "【线路/清晰度】" + describeMatrix(mx));
+
                                     putCache(roomLong, fixed, null, mx);
                                     postSuccess(listener, fixed, null, mx);
                                     return;
@@ -1300,13 +1290,13 @@ public class HuyaStreamPlayer {
                             }
 
                             if (r.playable && probeStable(c.url, c.hls)) {
-                                LogBridge.i(TAGP, "✅ 采用 " + c.label + "（通道 " + (c.hls ? "HLS" : "FLV")
-                                        + "，主机 " + hostOf(c.url)
-                                        + "，耗时 " + (System.currentTimeMillis() - t0) + "ms）");
+
+
+
                                 String hls = c.hls ? c.url : null;
                                 String flv = c.hls ? null : c.url;
                                 StreamMatrix mx = buildMatrix(uniq, c, null, rates, multiLines, c.url, flv);
-                                LogBridge.i(TAGP, "【线路/清晰度】" + describeMatrix(mx));
+
                                 putCache(roomLong, hls, flv, mx);
                                 postSuccess(listener, hls, flv, mx);
                                 return;
@@ -1459,7 +1449,7 @@ public class HuyaStreamPlayer {
                 int k = html.indexOf("stream:");
                 if (k < 0) k = html.indexOf("\"stream\":");
                 if (k < 0) {
-                    LogBridge.w(TAGP, "PC 网页未找到 stream 字段");
+                    LogBridge.i(TAGP, "PC 网页未找到 stream 字段");
                     return;
                 }
                 int brace = html.indexOf('{', k);

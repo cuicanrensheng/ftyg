@@ -110,11 +110,10 @@ public final class JsPluginStore {
         }
 
         if (TextUtils.isEmpty(js)) {
-            LogBridge.w(TAG, "插件不可用：" + name);
+            LogBridge.i(TAG, "插件不可用：" + name);
             return "";
         }
         if (fromLocal) {
-            LogBridge.i(TAG, "插件命中热更版本：" + name + "（" + js.length() + " 字符）");
         }
         CACHE.put(name, js);
         return js;
@@ -254,7 +253,7 @@ public final class JsPluginStore {
         }
         long last = lastCheckAt(ctx);
         if (last > 0 && System.currentTimeMillis() - last < UPDATE_MIN_INTERVAL_MS) {
-            LogBridge.i(TAG, "热更检查间隔未到（<24h），跳过");
+            LogBridge.d(TAG, "热更检查间隔未到（<24h），跳过");
             return;
         }
         // 先落时间戳，避免异常/并发导致的重复请求
@@ -329,26 +328,24 @@ public final class JsPluginStore {
             byte[] raw = httpGetBytes(url);
             if (raw == null || raw.length == 0) continue;
             if (!TextUtils.isEmpty(remoteMd5) && !remoteMd5.equalsIgnoreCase(md5Hex(raw))) {
-                LogBridge.w(TAG, "热更下载内容 md5 不符，已丢弃：" + name);
+                LogBridge.d(TAG, "热更下载内容 md5 不符，已丢弃：" + name);
                 continue;
             }
             String plain = JsDecrypt.decrypt(new String(raw, java.nio.charset.StandardCharsets.UTF_8));
             if (TextUtils.isEmpty(plain)) {
-                LogBridge.w(TAG, "热更解密失败：" + name);
+                LogBridge.d(TAG, "热更解密失败：" + name);
                 continue;
             }
             if (writeLocalFile(ctx, name, plain)) {
                 state.put(name, remoteMd5);
                 updated++;
-                LogBridge.i(TAG, "插件已热更：" + name);
+
             }
             // 串行限速，避免给第三方服务造成压力
             sleepQuietly(300L);
         }
         writeState(ctx, state, System.currentTimeMillis());
         clearCache();
-        LogBridge.i(TAG, "插件热更完成：更新 " + updated + "，跳过(已最新) " + skipped
-                + "，未打包 " + absent);
     }
 
     /** 字节数组 → 16 进制小写 md5（与元数据清单同口径：对「下载到的密文文件字节」求 md5） */

@@ -149,7 +149,7 @@ public class VodDetailPanel {
         // 默认焦点：主 CTA。面板刚 addView 时可能还没完成布局 → requestFocus 失败，
         // 失败就再等一帧重试（否则焦点一直留在背后的网格，用户按方向键操作的是首页）
         panel.post(() -> requestDefaultFocus(0));
-        LogBridge.i(TAG, "详情页打开" + (animate ? "" : "（无淡入）") + "：" + channel.getName());
+        LogBridge.d(TAG, "详情页打开" + (animate ? "" : "（无淡入）") + "：" + channel.getName());
     }
 
     private void requestDefaultFocus(int attempt) {
@@ -158,7 +158,7 @@ public class VodDetailPanel {
         View cur = ctx.getCurrentFocus();
         if (cur != null && isInPanel(cur)) return;
         if (btnPlay.requestFocus()) {
-            LogBridge.i(TAG, "默认焦点 → 播放（第 " + attempt + " 次尝试）");
+            LogBridge.d(TAG, "默认焦点 → 播放（第 " + attempt + " 次尝试）");
             return;
         }
         // 详情页内容多，布局可能要几百毫秒才完成；太早 requestFocus 会一直失败
@@ -197,7 +197,7 @@ public class VodDetailPanel {
                 if (host != null) host.onDetailClose();
             }
         }).start();
-        LogBridge.i(TAG, "详情页关闭：" + channel.getName());
+        LogBridge.d(TAG, "详情页关闭：" + channel.getName());
     }
 
     /**
@@ -496,7 +496,7 @@ public class VodDetailPanel {
             ep.setLayoutParams(lp);
             applyEpStyle(ep, i == currentEpisodeIdx, false);
             ep.setOnClickListener(v -> {
-                LogBridge.i(TAG, "详情页选集 → 第" + (idx + 1) + "集");
+                LogBridge.d(TAG, "详情页选集 → 第" + (idx + 1) + "集");
                 hide();
                 if (host != null) host.onDetailPlayEpisode(channel, item);
             });
@@ -580,7 +580,7 @@ public class VodDetailPanel {
                 if (lp.height != target) {
                     lp.height = target;
                     epScroll.setLayoutParams(lp);
-                    LogBridge.i(TAG, "选集区高度自适应：" + target + "px（内容 " + contentH
+                    LogBridge.d(TAG, "选集区高度自适应：" + target + "px（内容 " + contentH
                             + " / 可用 " + avail + "，列数 " + epColumns + "）");
                 }
             } catch (Throwable ignored) {
@@ -760,7 +760,7 @@ public class VodDetailPanel {
             tvSynopsis.setText(d.content);
             tvSynopsis.setVisibility(View.VISIBLE);
         }
-        LogBridge.i(TAG, "详情已补全：" + channel.getName());
+        LogBridge.d(TAG, "详情已补全：" + channel.getName());
         // 详情与集数往往同一批解析完成：这里再探一次集数（仅在选择区还没显示时重建，避免打断焦点）
         if (epSection != null && epSection.getVisibility() != View.VISIBLE) {
             buildEpisodes();
@@ -789,11 +789,10 @@ public class VodDetailPanel {
                 }
                 List<Channel.EpgItem> items = epgOfChannel();
                 if (items == null || items.isEmpty()) return;   // 不是这部片的数据，继续等
-                LogBridge.i(TAG, "EPG 就绪 → 重建选集（" + items.size() + " 集）：" + channel.getName());
                 buildEpisodes();
             });
             mgr.registerEpgDataReadyListener(epgListener);
-            LogBridge.i(TAG, "集数未就绪 → 已注册 EPG 回调：" + channel.getName());
+            LogBridge.d(TAG, "集数未就绪 → 已注册 EPG 回调：" + channel.getName());
         } catch (Throwable t) {
             LogBridge.w(TAG, "注册 EPG 回调失败: " + t.getMessage());
             epgListener = null;
@@ -852,9 +851,9 @@ public class VodDetailPanel {
                                 currentEpisodeIdx < 0 ? 0 : currentEpisodeIdx,
                                 epCells.size() - 1));
                         focusCell(epCells.get(idx));
-                        LogBridge.i(TAG, "焦点：按钮行 ↓ → 选集第 " + (idx + 1) + " 集");
+                        LogBridge.d(TAG, "焦点：按钮行 ↓ → 选集第 " + (idx + 1) + " 集");
                     } else {
-                        LogBridge.i(TAG, "焦点：无选集，↓ 键吞掉");
+                        LogBridge.d(TAG, "焦点：无选集，↓ 键吞掉");
                     }
                     return true;
                 }
@@ -866,13 +865,13 @@ public class VodDetailPanel {
                         int prev = (rowIdx - 1) * epColumns + col;
                         if (prev >= 0 && prev < epCells.size()) {
                             focusCell(epCells.get(prev));
-                            LogBridge.i(TAG, "焦点：选集 ↑ → 上一行第 " + (prev + 1) + " 集");
+                            LogBridge.d(TAG, "焦点：选集 ↑ → 上一行第 " + (prev + 1) + " 集");
                             return true;
                         }
                     }
                     if (btnPlay != null) {
                         btnPlay.requestFocus();
-                        LogBridge.i(TAG, "焦点：选集 ↑ → 播放按钮");
+                        LogBridge.d(TAG, "焦点：选集 ↑ → 播放按钮");
                     }
                     return true;
                 }
@@ -907,7 +906,7 @@ public class VodDetailPanel {
             View next = android.view.FocusFinder.getInstance()
                     .findNextFocus(this, focused, direction);
             if (next == null || !isInside(next)) {
-                LogBridge.i(TAG, "详情页焦点边界：方向 " + direction
+                LogBridge.d(TAG, "详情页焦点边界：方向 " + direction
                         + " 无可用目标/越界 → 留在原地");
                 return focused;
             }

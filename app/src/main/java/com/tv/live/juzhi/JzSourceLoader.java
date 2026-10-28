@@ -80,7 +80,7 @@ public final class JzSourceLoader {
             String groupName = g[1];
             List<Drama> list = search(keyword);
             if (list == null || list.isEmpty()) {
-                LogBridge.w(TAG, "关键词[" + keyword + "] 无结果");
+                LogBridge.d(TAG, "关键词[" + keyword + "] 无结果");
                 continue;
             }
             groups++;
@@ -92,8 +92,8 @@ public final class JzSourceLoader {
                 added++;
             }
             count += added;
-            LogBridge.i(TAG, "[" + groupName + "] 关键词=" + keyword
-                    + " 返回=" + list.size() + " 新增=" + added);
+
+
         }
 
         // 直播频道（每个 list 条目 = 一张频道卡）
@@ -105,8 +105,6 @@ public final class JzSourceLoader {
             LogBridge.w(TAG, "点播与直播均无结果，本次按失败处理（不写缓存）");
             return null;
         }
-        LogBridge.i(TAG, "M3U 完成：" + groups + " 个点播组 / " + count
-                + " 条，直播 " + liveCount + " 条");
         return m3u.toString();
     }
 
@@ -144,7 +142,7 @@ public final class JzSourceLoader {
             cp.put("typeId1", String.valueOf(LIVE_TYPE_ID));
             byte[] catData = JzApi.post(JzProtocol.pathCategory(), cp);
             if (catData == null || catData.length == 0) {
-                LogBridge.w(TAG, "直播分组列表为空（category 无数据）");
+                LogBridge.i(TAG, "直播分组列表为空（category 无数据）");
                 return 0;
             }
             List<byte[]> groupBeans = JzProtocol.messages(catData, 1);   // DramaBeanPage.dramaBean
@@ -160,19 +158,19 @@ public final class JzSourceLoader {
                 byte[] dd = JzApi.post(JzProtocol.pathDetail(), dp);
                 List<byte[]> chans = (dd == null) ? new ArrayList<byte[]>()
                         : JzProtocol.messages(dd, 29);         // DramaDetailBean.videos
-                LogBridge.i(TAG, "  分组[" + gname + "] 频道=" + chans.size());
+
                 int chIdx = 0;
                 for (byte[] ch : chans) {
                     if (chIdx < 2) {
-                        LogBridge.i(TAG, "【诊断·频道】g=" + gname
-                                + " f2=" + JzProtocol.str(ch, 2)
-                                + " f3=" + JzProtocol.str(ch, 3)
-                                + " f4=" + JzProtocol.str(ch, 4)
-                                + " f7=" + JzProtocol.str(ch, 7)
-                                + " f8=" + JzProtocol.str(ch, 8)
-                                + " f10=" + JzProtocol.str(ch, 10)
-                                + " f11=" + JzProtocol.str(ch, 11)
-                                + " f13=" + JzProtocol.num(ch, 13, -1));
+
+
+
+
+
+
+
+
+
                     }
                     chIdx++;
                     String titleOld = JzProtocol.str(ch, 3);   // 真实频道名（titleOld）
@@ -210,17 +208,17 @@ public final class JzSourceLoader {
         try {
             String j1 = JzApi.getJson(JzProtocol.pathLiveList(),
                     "page=1&pagesize=200&typeId1=" + LIVE_TYPE_ID);
-            LogBridge.i(TAG, "【诊断·drama/list】len=" + (j1 == null ? "null" : j1.length()));
+            LogBridge.d(TAG, "【诊断·drama/list】len=" + (j1 == null ? "null" : j1.length()));
             if (j1 != null) {
                 org.json.JSONArray arr = new org.json.JSONObject(j1).optJSONArray("list");
-                LogBridge.i(TAG, "【诊断·drama/list】list.size=" + (arr == null ? -1 : arr.length()));
+                LogBridge.d(TAG, "【诊断·drama/list】list.size=" + (arr == null ? -1 : arr.length()));
                 if (arr != null) {
                     for (int i = 0; i < Math.min(3, arr.length()); i++) {
                         org.json.JSONObject g = arr.optJSONObject(i);
                         if (g == null) continue;
                         org.json.JSONArray vs = g.optJSONArray("videos");
-                        LogBridge.i(TAG, "【诊断·drama/list】[" + g.optString("name")
-                                + "] videos=" + (vs == null ? 0 : vs.length()));
+
+
                     }
                 }
             }
@@ -250,17 +248,17 @@ public final class JzSourceLoader {
                         String tagName = tag.optString("name", "");
                         if (tagName.contains("直播") || i < 2) {   // 只详列"直播"类与前 2 个
                             org.json.JSONArray secs = tag.optJSONArray("sections");
-                            LogBridge.i(TAG, "【诊断·tag/list】tag[" + tagName + "] typeId="
-                                    + tag.optInt("typeId", -1) + " sections="
-                                    + (secs == null ? 0 : secs.length()));
+
+
+
                             if (secs != null) {
                                 for (int s = 0; s < Math.min(5, secs.length()); s++) {
                                     org.json.JSONObject sec = secs.optJSONObject(s);
                                     if (sec == null) continue;
                                     org.json.JSONArray vl = sec.optJSONArray("vodList");
-                                    LogBridge.i(TAG, "【诊断·tag/list】  section["
-                                            + sec.optString("sectionName", "") + "] vodList="
-                                            + (vl == null ? 0 : vl.length()));
+
+
+
                                 }
                             }
                         }
@@ -278,14 +276,14 @@ public final class JzSourceLoader {
             p.put("pagesize", "50");
             p.put("typeId1", String.valueOf(LIVE_TYPE_ID));
             byte[] data = JzApi.post(JzProtocol.pathCategory(), p);
-            LogBridge.i(TAG, "【诊断·category】data.len=" + (data == null ? "null" : data.length));
+            LogBridge.d(TAG, "【诊断·category】data.len=" + (data == null ? "null" : data.length));
             if (data != null && data.length > 0) {
                 List<byte[]> pages = JzProtocol.messages(data, 1);   // DramaBeanPage.dramaBean
-                LogBridge.i(TAG, "【诊断·category】dramaBean数=" + pages.size());
+                LogBridge.d(TAG, "【诊断·category】dramaBean数=" + pages.size());
                 for (int i = 0; i < Math.min(5, pages.size()); i++) {
                     byte[] db = pages.get(i);
-                    LogBridge.i(TAG, "【诊断·category】[" + JzProtocol.str(db, 5)   // name = 5
-                            + "] id=" + JzProtocol.num(db, 3, 0));               // id = 3
+
+// id = 3
                 }
             }
         } catch (Throwable t) {
@@ -311,7 +309,7 @@ public final class JzSourceLoader {
 
         byte[] data = JzApi.post(JzProtocol.pathSearch(), params);
         if (data == null || data.length == 0) {
-            LogBridge.w(TAG, "search 响应为空 keyword=" + keyword);
+            LogBridge.i(TAG, "search 响应为空 keyword=" + keyword);
             return null;
         }
         List<Drama> out = new ArrayList<>();

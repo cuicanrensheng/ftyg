@@ -33,8 +33,11 @@ import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.datasource.DataSpec;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
-import androidx.media3.exoplayer.DefaultLoadControl;
+// 缓冲策略改用同包 DynamicLoadControl（media3 适配、可运行时按源类型换参），见 initPlayer / applyStreamBufferProfile。
+import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
+import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.hls.HlsMediaSource;
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
@@ -156,7 +159,139 @@ public class TVPlayerManager {
     // 主播放器构建用的渲染器工厂与缓冲策略（initPlayer 内赋值，试过升为字段供第二播放器复用，
     //   2026-10-26 双播放器实验移除后保留字段形态，避免改动 initPlayer 结构）
     private DefaultRenderersFactory factory;
-    private DefaultLoadControl optimizedLoadControl;
+    private DynamicLoadControl optimizedLoadControl;
+
+    // 【2026-10-27 卡顿诊断】播放性能采样字段（仅日志，不改播放逻辑）
+    private long mPerfLastPos = Long.MIN_VALUE;
+    private int mPerfLastDropped = 0;
+    private int mPerfLastSkipped = 0;
+    private long mPerfLastSample = 0;
+    private int mPerfSampleCount = 0;
+    private boolean mPerfSkipNext = false;
+    /**
+     * 【2026-10-27 日志降级】分片装载逐条打印总开关。
+     * 排查「分片被放到时间轴哪个槽位」时置 true 重编；平时保持 false，避免每片一条 TVChunkMap 刷屏。
+     */
+    private static final boolean VERBOSE_CHUNK_MAP = false;
+    /** 【2026-10-27 日志降级】基准回跳（live 窗口滑动造成的位置基准重算）累计次数，仅随心跳带出 */
+    private long mPerfRewindSkips = 0;
+    /** 最近一次采样得到的 live 缓冲余量（播放头距直播边缘的毫秒数）；Long.MAX_VALUE 表示尚未采样 */
+    private static volatile long sLatestLiveBufferBehindMs = Long.MAX_VALUE;
+
+    /**
+     * 【2026-10-27 方案1】最近一次已应用的 HLS targetDuration（ms），用于 live offset 自适应去重；
+     * -1 表示未设置/待重设（切台时由 applyStreamBufferProfile 重置，保证新源重新生效）。
+     */
+    private volatile long mLastLiveOffsetTdMs = -1;
+    /** 【2026-10-28 降噪】「等待直播窗口」每个 td 只打一次（原先 unset 时会 1.5s 一条刷屏） */
+    private volatile long mLastLiveOffsetWaitLogTdMs = -1;
+
+    /**
+     * 【2026-10-27 延迟 +10s（用户定）】普通源 HLS 直播的基准落后量（live offset）。
+     * 历史：6s → 20s → 30s（2.0.243 四版本 A/B 定稿）。本次在 30s 基础上再 +10s → 40s，
+     * 目的是把「可预取时长」从 ~30s 拉到 ~40s，让 10s 大分片源在「新片发布→清单可见」
+     * 最长 10-11s 的空窗面前仍有整片余量。代价：直播延迟约 40s（CCTV 类直播可接受）。
+     */
+    private static final long LIVE_OFFSET_BASE_MS = 40000;
+
+    /**
+     * 【2026-10-27】大分片源（td ≥ 8s）在「落后 2 片」之外的额外落后量。
+     * 目标 = max(2×td + 本值, LIVE_OFFSET_BASE_MS)：10s 分片 → max(30s, 40s) = 40s。
+     */
+    private static final long LIVE_OFFSET_EXTRA_MS = 10000;
+
+    /** live offset 目标上限（防超大 td 源把缓冲池撑爆）。 */
+    private static final long LIVE_OFFSET_MAX_MS = 70000;
+
+    private final Runnable mPerfSampler = new Runnable() {
+        @Override
+        public void run() {
+            try {
+                if (player != null && player.isPlaying()) {
+                    long pos = player.getCurrentPosition();
+                    long now = System.currentTimeMillis();
+                    long wallDelta = now - mPerfLastSample;
+                    long posDelta = pos - mPerfLastPos;
+                    DecoderCounters dc = player.getVideoDecoderCounters();
+                    int dropped = dc != null ? dc.droppedBufferCount : 0;
+                    int skipped = dc != null ? dc.skippedOutputBufferCount : 0;
+                    int droppedDelta = dropped - mPerfLastDropped;
+                    int skippedDelta = skipped - mPerfLastSkipped;
+                    // 首采样（哨兵）：仅建立基线，不判异常
+                    if (mPerfLastPos == Long.MIN_VALUE) {
+                        mPerfLastPos = pos;
+                        mPerfLastDropped = dropped;
+                        mPerfLastSkipped = skipped;
+                        mPerfLastSample = now;
+                        if (mHandler != null) mHandler.postDelayed(this, 2000);
+                        return;
+                    }
+                    mPerfSampleCount++;
+                    // 缓冲余量（已缓冲但未播放的毫秒数）：真卡顿时网络跟不上，余量趋近 0
+                    long bufferedBehind = 0;
+                    try {
+                        long bp = player.getBufferedPosition();
+                        bufferedBehind = bp - pos;
+                        sLatestLiveBufferBehindMs = bufferedBehind;
+                    } catch (Exception ignored) { }
+                    // 直播 live window 滑动 / period 切换会触发 discontinuity，使 content position
+                    // 基准回跳，并非真实卡顿 —— 跳过本次判据避免误报。
+                    // 【2026-10-27 修正】原实现只在 onPositionDiscontinuity 里「固定跳过 1 次」，
+                    //   假设回跳量≈1 个分片（~1s）。但 hwrr.jx 这类线 td=10~11s，一次滑窗回跳
+                    //   可达 -8s，且可能连跳两次（第一次吃掉 skip 标记，第二次就漏成
+                    //   `posAdvance=-7985ms <<<异常` 假警报，把真卡顿淹了）。
+                    //   现改为按量判：回跳量 > 大半个 td（0.6×td，未知 td 时 2s）即跳过。
+                    //   依据：负向回跳根本不可能是卡顿（卡顿只会停在原地，posAdvance≈0），
+                    //   只会是 live 窗口滑动的基准重算，故按量跳过是安全的。
+                    long tdForRewind = mLastLiveOffsetTdMs;
+                    long rewindSkipThresholdMs = tdForRewind > 0
+                            ? Math.max(2000L, (tdForRewind * 6) / 10)
+                            : 2000L;
+                    boolean baseRewind = posDelta < -rewindSkipThresholdMs;
+                    boolean skip = mPerfSkipNext || baseRewind;
+                    mPerfSkipNext = false;
+                    // 【2026-10-27 日志降级】基准回跳（live 窗口滑动）是常态而非异常：实测江西这几路
+                    //   每 10~12s 就滑一次窗，日志里 `posAdvance=-8000ms (跳过重判:…)` 与正常心跳
+                    //   1:1 交替刷屏，反而淹掉真异常。现改为只计数不打印，回跳次数随心跳带出
+                    //   （rewindSkips=N），需要核对机制是否存活时看这一个数就够。
+                    if (skip) mPerfRewindSkips++;
+                    // 异常：2s 内位置推进明显不足（< 应推进-800ms）「且」缓冲余量不足 或 掉帧/跳帧增长
+                    boolean abnormal = !skip && wallDelta > 0
+                            && (posDelta < wallDelta - 800)
+                            && (droppedDelta > 0 || skippedDelta > 0 || bufferedBehind < 2000);
+                    // 日志降级（2026-10-27）：
+                    //   · 异常 → 全字段详单 + `<<<异常`（唯一需要盯着看的行）
+                    //   · 正常 → 每 10 次采样（约 20s）一条**精简**心跳，只留判读必需字段
+                    //   · 基准回跳（skip）→ 完全不打印，仅计入 rewindSkips 随心跳带出
+                    if (abnormal) {
+                        LogBridge.i("TVPlayerPerf",
+                                "【播放诊断·异常】sample#" + mPerfSampleCount
+                                        + " wall=" + wallDelta + "ms posAdvance=" + posDelta + "ms"
+                                        + " bufBehind=" + bufferedBehind + "ms"
+                                        + " pos=" + pos + "ms"
+                                        + " dur=" + player.getDuration() + "ms"
+                                        + " liveOff=" + player.getCurrentLiveOffset() + "ms"
+                                        + " dropped+=" + droppedDelta + " skipped+=" + skippedDelta
+                                        + " rewindSkips=" + mPerfRewindSkips
+                                        + " <<<异常");
+                    } else if (!skip && mPerfSampleCount % 10 == 0) {
+                        LogBridge.i("TVPlayerPerf",
+                                "【播放诊断】sample#" + mPerfSampleCount
+                                        + " pos=" + pos + "ms"
+                                        + " bufBehind=" + bufferedBehind + "ms"
+                                        + " dropped+=" + droppedDelta
+                                        + " rewindSkips=" + mPerfRewindSkips);
+                    }
+                    mPerfLastPos = pos;
+                    mPerfLastDropped = dropped;
+                    mPerfLastSkipped = skipped;
+                    mPerfLastSample = now;
+                }
+            } catch (Exception ignored) {
+            }
+            if (mHandler != null) mHandler.postDelayed(this, 2000);
+        }
+    };
 
     private Player.Listener playerListener;
     // 【2026-10-22 P2-05】currentUrl 由 IO/主线程多线程读写（open 回调在主线程、URL 派发在后台），
@@ -168,6 +303,10 @@ public class TVPlayerManager {
     private int mDecoderMode = DECODER_MODE_AUTO;
 
     private boolean isSwitching = false;
+
+    /** 【2026-10-27 软解自动回退】本播放会话是否已武装软解回退。每次新起播/播放就绪后重新武装；
+     *   触发一次回退后即在本次会话内失效，避免软解仍失败时无限重建循环。 */
+    private boolean mSoftFallbackArmed = true;
     /** 【2026-10-22 P1-04】解码器切换看门狗·10s 条件复查：切换期旧卡顿看门狗已被摘除，
      *  若 10s 仍未就绪且无新播放事件兜底，此处补挂 startStuckDetection，避免切换后卡死无人兜底 */
     private final Runnable switchingCheckRunnable = new Runnable() {
@@ -176,9 +315,7 @@ public class TVPlayerManager {
             if (!isSwitching) return;
             boolean ready = (player != null && player.getPlaybackState() == Player.STATE_READY);
             if (ready) {
-                LogBridge.i(TAG, "【解码器切换】10s 条件复查：已就绪");
             } else {
-                LogBridge.w(TAG, "【解码器切换】10s 条件复查：仍未就绪，补挂卡顿看门狗");
                 startStuckDetection();
             }
         }
@@ -188,7 +325,7 @@ public class TVPlayerManager {
         @Override
         public void run() {
             if (!isSwitching) return;
-            LogBridge.w(TAG, "【解码器切换】30s 绝对兜底：强制解锁切换锁");
+            LogBridge.i(TAG, "【解码器切换】30s 绝对兜底：强制解锁切换锁");
             isSwitching = false;
         }
     };
@@ -200,6 +337,16 @@ public class TVPlayerManager {
     private int bufferCount = 0;
     private long totalStallTime = 0;
     private boolean isStalled = false;
+    /**
+     * 【2026-10-27 卡顿统计口径】本次装载是否已经真正「播起来过」（至少一次 isPlaying=true）。
+     * 依据：切台/冷启动从 setMediaSource 到首帧播出之间的 STATE_BUFFERING 属于**起播等待**，
+     * 不是播放中卡顿。旧口径把它算进「严重卡顿」，实测 20:58 台3 的「2591ms 卡顿」
+     * 其实是 2.6s 起播就绪，与真卡顿混在一个计数里导致切台测试误报。
+     * 现口径：只有 mPlaybackStarted=true 之后进入 BUFFERING 才开始计卡顿。
+     */
+    private boolean mPlaybackStarted = false;
+    /** 起播计时起点（setMediaSource 时刻）；0 = 无待结算的起播 */
+    private long mStartupBeginTime = 0;
     private long lastStallStartTime = 0;
 
     /**
@@ -415,20 +562,26 @@ public class TVPlayerManager {
      * 用于广告剥离效果监控和调试
      */
     private final MediaSourceEventListener mMediaSourceListener = new MediaSourceEventListener() {
-        @Override
-        public void onLoadStarted(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
-                                  LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData, int reason) {
-            if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
-                LogBridge.d(TAG, "开始加载 m3u8 清单: " + loadEventInfo.uri.toString().substring(0, Math.min(60, loadEventInfo.uri.toString().length())));
-            }
-        }
+        // 【2026-10-28 合并】onLoadStarted 的「开始加载 m3u8 清单」已删——它和下面的
+        //   「清单加载完成」是同一事件的一头一尾，现在只留完成行（带耗时/字节/完整频道号）。
 
         @Override
         public void onLoadCompleted(int windowIndex, MediaSource.MediaPeriodId mediaPeriodId,
                                     LoadEventInfo loadEventInfo, MediaLoadData mediaLoadData) {
             if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
-                LogBridge.d(TAG, "m3u8 清单加载完成: " + loadEventInfo.uri.toString().substring(0, Math.min(60, loadEventInfo.uri.toString().length()))
-                        + ", 大小=" + loadEventInfo.bytesLoaded + " bytes");
+                // 【2026-10-28】原截断 60 字，所有 CCTV 共用前缀 → 不同频道日志完全同文（假重复）。
+                //   放宽到 120 字可带出 3221225619/5647 这类频道号；同时补耗时，替代原「开始加载」行。
+                String mu = loadEventInfo.uri.toString();
+                LogBridge.d(TAG, "m3u8 清单 " + loadEventInfo.bytesLoaded + "B 耗时="
+                        + loadEventInfo.loadDurationMs + "ms url="
+                        + mu.substring(0, Math.min(120, mu.length())));
+            } else if (mediaLoadData.dataType == C.DATA_TYPE_MEDIA) {
+                // 【2026-10-27 快轮询自适应】媒体分片下载完成 → 回填分片耗时到 LiveSegmentSpeedMeter，
+                // 供 FastLivePlaylistTrackerFactory 在清单解析时按「下载耗时/发布间隔」自适应判定是否开快轮询。
+                // 只记 DATA_TYPE_MEDIA（分片本体），清单/初始化段不记，避免污染比值。
+                String host = loadEventInfo.uri != null ? loadEventInfo.uri.getHost() : null;
+                com.tv.live.LiveSegmentSpeedMeter.getInstance()
+                        .record(host, loadEventInfo.loadDurationMs);
             }
         }
 
@@ -658,9 +811,14 @@ public class TVPlayerManager {
             case "soft":   mDecoderMode = DECODER_MODE_SOFT;   break;
             default:       mDecoderMode = DECODER_MODE_AUTO;   break;
         }
-        LogBridge.i(TAG, "📺 启动时读取解码器设置: decoder_mode=" + savedMode + " -> mDecoderMode=" + mDecoderMode);
 
         hideChannelRunnable = () -> hideChannelNum();
+
+        // 【2026-10-27 卡顿诊断】2s 采样器：记录播放位置推进量 + 解码丢弃/跳过帧数，
+        // 用于区分「网络微停（位置推进 < 应推进量）」与「解码掉帧（dropped/skipped 增长）」，
+        // 二者都不会触发 STATE_BUFFERING，肉眼看到画面抖但日志无 rebuffer。仅打日志，不改播放逻辑。
+        mPerfLastSample = System.currentTimeMillis();
+        mHandler.postDelayed(mPerfSampler, 2000);
 
         stuckCheckRunnable = new Runnable() {
             @Override
@@ -825,32 +983,40 @@ public class TVPlayerManager {
         com.tv.live.util.CodecWarmupProbe.runIfEnabled(context);
     }
 
+    // ===================================================================================
+    // 【2026-10-27 日志单写统一】以下 5 个 helper 原先把同一句同时交给 LogBridge 与 LogCollector，
+    //   同一事件在 2000 条环形缓冲里固定占两格（实测「严重卡顿结束」每次都两行完全相同的 warn，
+    //   缓冲有效历史直接腰斩）。现统一为「一条事件 = 一条日志」，落点各自明确：
+    //     logPlayback      → 仅 playback（分类保留，UI「playback」筛选可用）
+    //     logPlaybackDebug → 仅 d 级（正式版只进 logcat，不进缓冲）
+    //     logWarn          → 仅 w 级（LogBridge.w 内部已写 logcat + 缓冲）
+    //     logError         → 需上报者走 collector.error（含 echo），否则走 LogBridge.e
+    //     logNetwork       → 仅 network（仅 debug 版收）
+    // ===================================================================================
+
     private void dLog(String msg) {
         if (sp.getBoolean("log_enable", false)) {
             LogBridge.d(TAG, msg);
-            com.tv.live.util.LogBridge.LogCollector.getInstance().addLog(TAG, msg);
         }
     }
 
     private void logPlayback(String msg) {
-        LogBridge.i(TAG, "[PLAY] " + msg);
+        // 单写：投递到 playback 分类即可，写入时由 writer 负责 echo 到 logcat
         com.tv.live.util.LogBridge.LogCollector.getInstance().playback(TAG, msg);
     }
 
-    // 【日志优化】debug 级播放日志：release 下不输出到 9527，但仍保留 playback 统计
+    // 【日志优化】debug 级播放日志：正式版只进 logcat，不进 9527 缓冲
     private void logPlaybackDebug(String msg) {
         LogBridge.d(TAG, "[PLAY] " + msg);
-        com.tv.live.util.LogBridge.LogCollector.getInstance().playback(TAG, msg);
     }
 
     private void logError(String msg) {
-        LogBridge.e(TAG, msg);
-
+        // 需要上报 → collector.error（记录 + 上报 + logcat echo，一条搞定）
+        // 外部资源类错误（404/timeout）→ 只记录不上报，保持 error 级别便于检索
         if (shouldReportPlaybackError(msg)) {
             com.tv.live.util.LogBridge.LogCollector.getInstance().error(TAG, msg);
         } else {
-
-            com.tv.live.util.LogBridge.LogCollector.getInstance().warn(TAG, "[播放过滤] " + msg);
+            LogBridge.e(TAG, "[播放过滤] " + msg);
         }
     }
 
@@ -877,13 +1043,13 @@ public class TVPlayerManager {
     }
 
     private void logWarn(String msg) {
+        // 单写：LogBridge.w 内部已写 logcat + 环形缓冲，不再额外调 collector.warn
         LogBridge.w(TAG, msg);
-        com.tv.live.util.LogBridge.LogCollector.getInstance().warn(TAG, msg);
     }
 
     private void logNetwork(String msg) {
         if (BuildConfig.IS_DEBUG) {
-            LogBridge.i(TAG, "[NET] " + msg);
+            // 单写：collector.network 内部 echo logcat，且仅在 debug 版收集
             com.tv.live.util.LogBridge.LogCollector.getInstance().network(TAG, msg);
         }
     }
@@ -907,8 +1073,6 @@ public class TVPlayerManager {
             try {
                 long t0 = android.os.SystemClock.elapsedRealtime();
                 initPlayer();
-                LogBridge.i(TAG, "🎬 播放器后台构建完成: "
-                        + (android.os.SystemClock.elapsedRealtime() - t0) + "ms");
             } catch (Throwable e) {
                 LogBridge.e(TAG, "后台构建播放器失败: " + e.getMessage(), e);
             } finally {
@@ -987,17 +1151,11 @@ public class TVPlayerManager {
         //      让播放中缓冲水位厚起来，扛住 TTFB 空窗与尖刺（不配 ABR，无 live offset
         //      副作用；固定画质下厚缓冲仅增加 CDN 波动容忍度，不拉长首帧——首帧由
         //      bufferForPlayback 单独控制）。
-        optimizedLoadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    12000,   // minBufferMs: 播放中水位（5000→12000，虎牙串行分片空窗下更抗耗）
-                    60000,   // maxBufferMs（12000→60000，给足重建空间，参考原版默认 50s）
-                    1200,    // bufferForPlaybackMs: 起播门槛（10-16 曾改 800 加快首帧；
-                             //   【2026-10-22】按 10.8 版口径改回 1200——冷启动首个分片播完后
-                             //   易出现等下一分片发布的瞬态卡顿，起播缓冲厚 0.4s 可缓解；
-                             //   09-15/09-19 两轮实测首帧仅晚约 0.2s，代价可忽略）
-                    2000     // bufferForPlaybackAfterRebufferMs（5000→2000，卡后快速恢复，避免 5s+ 黑帧）
-                )
-                .build();
+        // 【2026-10-27 切台卡顿专项 · 方案1】缓冲策略改用 DynamicLoadControl：
+        //   默认参数 = 下方这套既有调优值（12000/60000/1200/2000），行为与原 DefaultLoadControl 完全一致（零回归）；
+        //   切台时由 applyStreamBufferProfile() 按源类型热替换缓冲参数（虎牙/HLS 沿用默认厚缓冲，
+        //   非虎牙渐进式低延迟流收紧），播放器实例不重建（方案3：复用实例）。
+        optimizedLoadControl = new DynamicLoadControl(DynamicLoadControl.PROFILE_DEFAULT);
 
         trackSelector = new DefaultTrackSelector(context);
 
@@ -1006,6 +1164,46 @@ public class TVPlayerManager {
                 .setLoadControl(optimizedLoadControl)
                 .setTrackSelector(trackSelector)
                 .build();
+
+        // 【临时诊断 2026-10-27】分片装载对账：确认「下到的分片被放到时间轴哪个位置」，
+        //   用于定位「切台后 40s 内每片都卡、缓冲只有 2s、下载却只用 4.3s」的矛盾。
+        //   输出：分片序号 / 时间轴槽位(mediaStart~mediaEnd) / 字节数 / 当时窗口总长与播放位置。
+        // 【2026-10-27 日志降级】定位已完成（预取确实顶到窗口尾），默认关闭 VERBOSE_CHUNK_MAP，
+        //   避免每片一条刷屏；需要复现装载异常时把它改 true 重编即可，监听器本身保留（只读、零开销）。
+        try {
+            player.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onLoadCompleted(EventTime eventTime, LoadEventInfo info, MediaLoadData data) {
+                    try {
+                        if (!VERBOSE_CHUNK_MAP) return;
+                        if (data.trackType != C.TRACK_TYPE_VIDEO
+                                && data.trackType != C.TRACK_TYPE_AUDIO
+                                && data.trackType != C.TRACK_TYPE_DEFAULT) {
+                            return;
+                        }
+                        String path = info.uri == null ? "?" : info.uri.getLastPathSegment();
+                        long winDur = -1;
+                        try {
+                            if (!eventTime.timeline.isEmpty()) {
+                                androidx.media3.common.Timeline.Window w = new androidx.media3.common.Timeline.Window();
+                                eventTime.timeline.getWindow(
+                                        eventTime.timeline.getFirstWindowIndex(false), w);
+                                winDur = w.durationUs / 1000;
+                            }
+                        } catch (Throwable ignored) { }
+                        LogBridge.i("TVChunkMap",
+                                "装载 seg=" + path
+                                        + " 槽位=" + data.mediaStartTimeMs + "~" + data.mediaEndTimeMs + "ms"
+                                        + " 时长=" + (data.mediaEndTimeMs - data.mediaStartTimeMs) + "ms"
+                                        + " 字节=" + info.bytesLoaded
+                                        + " 窗口=" + winDur + "ms"
+                                        + " 位置=" + eventTime.currentPlaybackPositionMs + "ms"
+                                        + " 缓冲=" + (player.getBufferedPosition() - player.getCurrentPosition()) + "ms"
+                                        + " liveOff=" + player.getCurrentLiveOffset() + "ms");
+                    } catch (Throwable ignored) { }
+                }
+            });
+        } catch (Throwable ignored) { }
 
         try {
             List<MediaCodecInfo> h264Codecs = MediaCodecUtil.getDecoderInfos("video/avc", false, false);
@@ -1108,10 +1306,24 @@ public class TVPlayerManager {
             @Override
             public void onPlayerError(PlaybackException error) {
                 String errDetail = buildErrorDiagnostic(error);
-                LogBridge.e(TAG, errDetail);
+                // 【2026-10-27 日志单写】原为 LogBridge.e + collector.error 双写（同一串诊断占两格），
+                //   现只走 collector.error：一条记录 + 自动上报 + logcat echo。
                 com.tv.live.util.LogBridge.LogCollector.getInstance().error(TAG, "[ERR_DIAG] " + errDetail);
                 // 【2026-10-22 P1-04】统一收口：清掉 10s 复查 / 30s 兜底两个定时任务并解锁
                 clearSwitchingLock();
+
+                // 【2026-10-27 软解自动回退】解码器初始化失败（盒子无对应硬解 HAL / 硬解不可用）：
+                //   对齐 mytv 的 DECODER_INIT_FAILED→softDecode 自愈，避免某频道硬解失败就黑屏干等、
+                //   需用户手动改解码设置。当前非软解且本会话尚未回退过时，自动切软解并重播当前地址。
+                if (mSoftFallbackArmed && mDecoderMode != DECODER_MODE_SOFT
+                        && isDecoderInitFailure(error)) {
+                    logWarn("【软解自动回退】解码器初始化失败，自动切换至软解模式并重播: "
+                            + (currentUrl == null ? "(空)" : currentUrl));
+                    mSoftFallbackArmed = false; // 一次性：软解若仍失败不再回退，交由常规重试/换线兜底
+                    // 切到主线程执行（与手动解码切换路径一致），performDecoderSwitch 重建 player 并重播 currentUrl
+                    mHandler.post(() -> setDecoderMode(DECODER_MODE_SOFT));
+                    return;
+                }
 
                 Throwable rootCause = error.getCause();
                 boolean isRedirectError = false;
@@ -1128,7 +1340,6 @@ public class TVPlayerManager {
                 if (isSurfaceLostError(error)) {
                     String surfDetail = buildErrorDiagnostic(error);
                     logWarn("检测到 Surface 失效（MediaCodec/Surface 相关），触发重建流程");
-                    LogBridge.e(TAG, surfDetail);
                     com.tv.live.util.LogBridge.LogCollector.getInstance().error(TAG, "[ERR_DIAG] " + surfDetail);
                     handleSurfaceLost();
                     if (listener != null) {
@@ -1140,7 +1351,6 @@ public class TVPlayerManager {
                 if (isRedirectError) {
                     String redDetail = buildErrorDiagnostic(error);
                     logError("重定向错启: " + error.getMessage());
-                    LogBridge.e(TAG, redDetail);
                     com.tv.live.util.LogBridge.LogCollector.getInstance().error(TAG, "[ERR_DIAG] " + redDetail);
                     if (listener != null) {
                         listener.onPlayError(error.getMessage() + " | playUrl=" + (currentUrl == null ? "(空)" : currentUrl));
@@ -1187,6 +1397,8 @@ public class TVPlayerManager {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) {
+                    // 【2026-10-27 软解自动回退】播放就绪 = 本轮稳定，重新武装软解回退（下次解码失败可再自救）。
+                    mSoftFallbackArmed = true;
                     logPlaybackDebug("播放就绪 (STATE_READY)");
                     updateWakeLock(true);
                     // 【2026-10-17 启动体验】记录就绪时刻（BUFFERING 提示的抑制窗口用）
@@ -1273,7 +1485,9 @@ public class TVPlayerManager {
                     } catch (Exception ignored) {}
                     lastPositionUpdateTime = System.currentTimeMillis();
                     bufferCount++;
-                    if (!isStalled) {
+                    // 【2026-10-27 统计口径】起播等待（首帧尚未播出）不计入卡顿：
+                    //   这一段会在 onIsPlayingChanged 里结算成【起播耗时】，与播放中真卡顿分开统计。
+                    if (mPlaybackStarted && !isStalled) {
                         isStalled = true;
                         lastStallStartTime = System.currentTimeMillis();
                     }
@@ -1302,7 +1516,22 @@ public class TVPlayerManager {
                 if (isPlaying) {
                     logPlaybackDebug("开始播放");
                     lastPositionUpdateTime = System.currentTimeMillis();
-                    if (isStalled) {
+                    // 【2026-10-27 统计口径】首帧播出：结算起播耗时，并清掉起播期间的残留计时
+                    if (!mPlaybackStarted) {
+                        mPlaybackStarted = true;
+                        if (mStartupBeginTime > 0) {
+                            long startupCost = System.currentTimeMillis() - mStartupBeginTime;
+                            mStartupBeginTime = 0;
+                            // 起播快（<1s）只打 debug，避免日志噪音
+                            if (startupCost >= 1000) {
+                                logPlayback("【起播耗时】" + startupCost + "ms（起播等待不计入卡顿统计）");
+                            } else {
+                                logPlaybackDebug("【起播耗时】" + startupCost + "ms");
+                            }
+                        }
+                        isStalled = false;
+                        lastStallStartTime = 0;
+                    } else if (isStalled) {
                         isStalled = false;
                         long stallDuration = System.currentTimeMillis() - lastStallStartTime;
                         totalStallTime += stallDuration;
@@ -1344,7 +1573,15 @@ public class TVPlayerManager {
                 long oldMs = oldPosition.positionMs;
                 long newMs = newPosition.positionMs;
                 long jumpMs = newMs - oldMs;
-                LogBridge.i(TAG, "【位置不连续】原因=" + reasonStr + ", 旧位置=" + (oldMs/1000) + "s, 新位置=" + (newMs/1000) + "s, 跳跃=" + (jumpMs/1000) + "s");
+                // 【2026-10-27 分级】REMOVE 是「换台卸载旧源」的必然产物，每切一次台必打一条，
+                //   属预期噪音 → 降 d；SEEK/AUTO_TRANSITION/SKIP 才是有诊断价值的事件，保持 i。
+                if (reason == Player.DISCONTINUITY_REASON_REMOVE) {
+                    LogBridge.d(TAG, "【位置不连续】原因=" + reasonStr + ", 旧位置=" + (oldMs/1000) + "s, 新位置=" + (newMs/1000) + "s, 跳跃=" + (jumpMs/1000) + "s");
+                } else {
+                    LogBridge.i(TAG, "【位置不连续】原因=" + reasonStr + ", 旧位置=" + (oldMs/1000) + "s, 新位置=" + (newMs/1000) + "s, 跳跃=" + (jumpMs/1000) + "s");
+                }
+                // 通知性能采样器：下次采样跳过判据（位置基准回跳属直播正常现象，非卡顿）
+                mPerfSkipNext = true;
             }
         };
         player.addListener(playerListener);
@@ -1367,7 +1604,7 @@ public class TVPlayerManager {
         String backupUrl = backups.get(backupRetryIndex);
 
         if (isHuyaRoomUrl(backupUrl)) {
-            LogBridge.w(TAG, "备用源是虎牙房间号，跳过！尝试下一个...");
+            LogBridge.d(TAG, "备用源是虎牙房间号，跳过！尝试下一个...");
             return trySwitchBackup();
         }
 
@@ -1427,7 +1664,6 @@ public class TVPlayerManager {
         // 同一地址解析中 → 忽略重复请求（起播 + 重试可能同时触发）
         synchronized (this) {
             if (rawUrl.equals(renyiboResolvingUrl)) {
-                LogBridge.d(TAG, "【爱其意】解析进行中，忽略重复请求");
                 return;
             }
             renyiboResolvingUrl = rawUrl;
@@ -1465,7 +1701,6 @@ public class TVPlayerManager {
                     }
                     return;
                 }
-                LogBridge.i(TAG, "【爱其意】落地地址就绪 → " + resolved);
                 doPlay(resolved, initialSeekPosition);
             });
         }, "Renyibo-Resolve").start();
@@ -1533,8 +1768,6 @@ public class TVPlayerManager {
     private void resolveRenyiboVodAndPlay(String rawUrl, long initialSeekPosition) {
         final int typeId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodTypeIdOfScheme(rawUrl);
         final String vodId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfScheme(rawUrl);
-        LogBridge.i(TAG, "【爱其意·点播】起播请求 type_id=" + typeId
-                + " vodId=" + (vodId.isEmpty() ? "(分类入口)" : vodId));
         new Thread(() -> {
             String resolved = null;
             try {
@@ -1576,7 +1809,6 @@ public class TVPlayerManager {
     private void resolveAfhgrjAndPlay(String rawUrl, long initialSeekPosition) {
         synchronized (this) {
             if (rawUrl.equals(afhgrjResolvingUrl)) {
-                LogBridge.d(TAG, "【影视源7】解析进行中，忽略重复请求");
                 return;
             }
             afhgrjResolvingUrl = rawUrl;
@@ -1609,7 +1841,6 @@ public class TVPlayerManager {
                     autoRetry("源7解析失败");
                     return;
                 }
-                LogBridge.i(TAG, "【影视源7】落地地址就绪 → " + resolved);
                 // 【方案2】起播前异步预热真实 m3u8 host（DNS+TCP+TLS 提前做掉、
                 // 连接回池），与播放链路 RedirectLoggingHttpDataSource 同一
                 // HttpURLConnection 栈，首段拉流可直接复用连接少一次首跳。
@@ -1635,7 +1866,6 @@ public class TVPlayerManager {
         com.tv.live.ryb.RybUrlResolver.attach(context);
         synchronized (this) {
             if (rawUrl.equals(rybResolvingUrl)) {
-                LogBridge.d(TAG, "【源8 renyibo】解析进行中，忽略重复请求");
                 return;
             }
             rybResolvingUrl = rawUrl;
@@ -1660,7 +1890,6 @@ public class TVPlayerManager {
                     autoRetry("源8(renyibo)解析失败");
                     return;
                 }
-                LogBridge.i(TAG, "【源8 renyibo】落地地址就绪 → " + resolved);
                 try {
                     com.tv.live.MyApplication.prewarmStreamAsync(resolved);
                 } catch (Throwable ignored) {
@@ -1683,7 +1912,6 @@ public class TVPlayerManager {
         com.tv.live.nbmovie.NbMovieUrlResolver.attach(context);
         synchronized (this) {
             if (rawUrl.equals(nbmResolvingUrl)) {
-                LogBridge.d(TAG, "【4K影视】解析进行中，忽略重复请求");
                 return;
             }
             nbmResolvingUrl = rawUrl;
@@ -1708,7 +1936,6 @@ public class TVPlayerManager {
                     autoRetry("4K影视(nbmovie)解析失败");
                     return;
                 }
-                LogBridge.i(TAG, "【4K影视】落地地址就绪 → " + resolved);
                 try {
                     com.tv.live.MyApplication.prewarmStreamAsync(resolved);
                 } catch (Throwable ignored) {
@@ -1780,7 +2007,6 @@ public class TVPlayerManager {
     private void resolveJzAndPlay(String rawUrl, long initialSeekPosition) {
         synchronized (this) {
             if (rawUrl.equals(jzResolvingUrl)) {
-                LogBridge.d(TAG, "【源9 橘汁】解析进行中，忽略重复请求");
                 return;
             }
             jzResolvingUrl = rawUrl;
@@ -1805,7 +2031,6 @@ public class TVPlayerManager {
                     autoRetry("源9(橘汁)解析失败");
                     return;
                 }
-                LogBridge.i(TAG, "【源9 橘汁】落地地址就绪 → " + resolved);
                 try {
                     com.tv.live.MyApplication.prewarmStreamAsync(resolved);
                 } catch (Throwable ignored) {
@@ -1964,7 +2189,7 @@ public class TVPlayerManager {
         final String vodId = com.tv.live.renyibo.RenYiBoVodSourceLoader.vodIdOfChannelId(ch.getChannelId());
         if (TextUtils.isEmpty(vodId)) return false;   // 非源5点播：不接管
         if (mRenYiBoVodLineSwitchCount >= MAX_RENYIBO_VOD_LINE_SWITCH) {
-            LogBridge.w(TAG, "【源5 换线】本会话触发已达上限(" + MAX_RENYIBO_VOD_LINE_SWITCH + ")，转下一条兜底链");
+            LogBridge.i(TAG, "【源5 换线】本会话触发已达上限(" + MAX_RENYIBO_VOD_LINE_SWITCH + ")，转下一条兜底链");
             return false;
         }
         mRenYiBoVodLineSwitchCount++;
@@ -1988,7 +2213,7 @@ public class TVPlayerManager {
                         retryCount = 0;   // 换线重播 = 新一轮：重置重试计数，否则新线一遇抖动立刻又判失效
                         playUrlInternal(url);
                     } else {
-                        LogBridge.w(TAG, "【源5 换线】无可用线路，转下一条兜底链");
+                        LogBridge.i(TAG, "【源5 换线】无可用线路，转下一条兜底链");
                         if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
                     }
                 });
@@ -2017,7 +2242,7 @@ public class TVPlayerManager {
         final String url = ch.getMainPlayUrl();
         if (!com.tv.live.ryb.RybUrlResolver.isRybUrl(url)) return false;   // 非源8：不接管
         if (mRybLineSwitchCount >= MAX_RYB_LINE_SWITCH) {
-            LogBridge.w(TAG, "【源8 换线】本会话触发已达上限(" + MAX_RYB_LINE_SWITCH + ")，转下一条兜底链");
+            LogBridge.i(TAG, "【源8 换线】本会话触发已达上限(" + MAX_RYB_LINE_SWITCH + ")，转下一条兜底链");
             return false;
         }
         mRybLineSwitchCount++;
@@ -2041,7 +2266,7 @@ public class TVPlayerManager {
                         retryCount = 0;   // 换线重播 = 新一轮：重置重试计数，否则新线一遇抖动立刻又判失效
                         playUrlInternal(raw);
                     } else {
-                        LogBridge.w(TAG, "【源8 换线】无可用线路，转下一条兜底链");
+                        LogBridge.i(TAG, "【源8 换线】无可用线路，转下一条兜底链");
                         if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
                     }
                 });
@@ -2070,7 +2295,7 @@ public class TVPlayerManager {
         final String url = ch.getMainPlayUrl();
         if (!com.tv.live.juzhi.JzUrlResolver.isJzUrl(url)) return false;   // 非源9：不接管
         if (mJzLineSwitchCount >= MAX_JZ_LINE_SWITCH) {
-            LogBridge.w(TAG, "【源9 换线】本会话触发已达上限(" + MAX_JZ_LINE_SWITCH + ")，转下一条兜底链");
+            LogBridge.i(TAG, "【源9 换线】本会话触发已达上限(" + MAX_JZ_LINE_SWITCH + ")，转下一条兜底链");
             return false;
         }
         mJzLineSwitchCount++;
@@ -2098,7 +2323,7 @@ public class TVPlayerManager {
         final String url = ch.getMainPlayUrl();
         if (!com.tv.live.nbmovie.NbMovieUrlResolver.isNbmUrl(url)) return false;   // 非源2：不接管
         if (mNbmLineSwitchCount >= MAX_NBM_LINE_SWITCH) {
-            LogBridge.w(TAG, "【源2 换线】本会话触发已达上限(" + MAX_NBM_LINE_SWITCH + ")，转下一条兜底链");
+            LogBridge.i(TAG, "【源2 换线】本会话触发已达上限(" + MAX_NBM_LINE_SWITCH + ")，转下一条兜底链");
             return false;
         }
         mNbmLineSwitchCount++;
@@ -2122,7 +2347,7 @@ public class TVPlayerManager {
                         retryCount = 0;   // 换线重播 = 新一轮：重置重试计数，否则新线一遇抖动立刻又判失效
                         playUrlInternal(raw);
                     } else {
-                        LogBridge.w(TAG, "【源2 换线】无可用线路，转下一条兜底链");
+                        LogBridge.i(TAG, "【源2 换线】无可用线路，转下一条兜底链");
                         if (sourceFailedListener != null) sourceFailedListener.onSourceFailed();
                     }
                 });
@@ -2177,14 +2402,12 @@ public class TVPlayerManager {
         // 同一地址解析中 → 忽略重复请求（起播 + 重试可能同时触发）
         synchronized (this) {
             if (request.equals(miguResolvingPid)) {
-                LogBridge.d(TAG, "【咪咕】解析进行中，忽略重复请求 " + request);
                 return;
             }
             miguResolvingPid = request;
         }
 
         final String chName = currentChannelName;
-        LogBridge.i(TAG, "【咪咕】开始解析 " + request + " 频道=" + chName);
 
         // ★【2026-10-08】直链缓存回放：频道主地址（nowtv://<tvId>）若命中上次解析成功的
         //   直链 → 先直接起播（与直链源同速，省掉 取源+JS引擎+探测 ≈ 2.6s），后台解析链
@@ -2250,13 +2473,11 @@ public class TVPlayerManager {
                             if (healthy) {
                                 if (r.seekSec == 0) {
                                     saveCachedDirectUrl(reqTvId, r.url);
-                                    LogBridge.i(TAG, "【咪咕】缓存直链播放正常 → 保持画面，已刷新缓存 tvId="
-                                            + reqTvId);
                                 }
                                 notifyStreamOptionsReady();
                                 return;
                             }
-                            LogBridge.w(TAG, "【咪咕】缓存直链未就绪 → 切换后台解析结果（不等播放器报错）");
+                            LogBridge.d(TAG, "【咪咕】缓存直链未就绪 → 切换后台解析结果（不等播放器报错）");
                             // 落到下方正常流程（含黑洞预判 + doPlay），无缝接管
                         } else if (healthy) {
                             LogBridge.i(TAG, "【咪咕】本次解析未取到直链，但缓存直链播放正常 → 保持");
@@ -2330,7 +2551,7 @@ public class TVPlayerManager {
 
     private Resolved resolveMiguChain(String input, int depth, String channelName) {
         if (depth > 2 || TextUtils.isEmpty(input)) {
-            LogBridge.w(TAG, "【咪咕】解析层级过深或地址为空：" + input);
+            LogBridge.i(TAG, "【咪咕】解析层级过深或地址为空：" + input);
             return null;
         }
         String source = input;
@@ -2416,7 +2637,7 @@ public class TVPlayerManager {
                 LogBridge.w(TAG, "【咪咕】服务端未下发源 tvId=" + tvId);
                 return null;
             }
-            LogBridge.i(TAG, "【咪咕】采用源 → " + served);
+            LogBridge.d(TAG, "【咪咕】采用源 → " + served);
 
             // ★「全部优先咪咕线路」：下发源不是 migu* 时（典型：tvId=43 湖南卫视只有
             //   ysp:// + CDN 直链，无咪咕源），按频道名从本地咪咕表补一条 miguhd://<pID>
@@ -2430,11 +2651,9 @@ public class TVPlayerManager {
                             com.tv.live.migu.MiguUrlResolver.SCHEME + pidByName,
                             depth + 1, channelName);
                     if (viaMigu != null && !TextUtils.isEmpty(viaMigu.url)) {
-                        LogBridge.i(TAG, "【咪咕】按频道名补咪咕源命中：" + channelName
-                                + " → miguhd://" + pidByName + "（下发源 " + served + " 未采用）");
                         return viaMigu;
                     }
-                    LogBridge.w(TAG, "【咪咕】按频道名补的咪咕源未取到直链，回退下发源：频道="
+                    LogBridge.i(TAG, "【咪咕】按频道名补的咪咕源未取到直链，回退下发源：频道="
                             + channelName + " pID=" + pidByName + " 下发源=" + served);
                 }
             }
@@ -2479,7 +2698,6 @@ public class TVPlayerManager {
                 LogBridge.w(TAG, "【咪咕】云图回看未取到可用地址：tvId=" + ytTvId);
                 return null;
             }
-            LogBridge.i(TAG, "【咪咕】云图回看命中 → " + r.url);
             source = r.url;
         }
 
@@ -2495,7 +2713,7 @@ public class TVPlayerManager {
                 return null;
             }
             carouselSeekSec = r.offsetSec;
-            LogBridge.i(TAG, "【咪咕】轮播拿到当前节目《" + r.title + "》已播 "
+            LogBridge.d(TAG, "【咪咕】轮播拿到当前节目《" + r.title + "》已播 "
                     + r.offsetSec + "s → " + r.url
                     + (r.candidates.size() > 1 ? "（共 " + r.candidates.size() + " 条候选）" : ""));
 
@@ -2535,7 +2753,6 @@ public class TVPlayerManager {
                     alt = resolveYunTuLookBack(nowTvId);
                     if (alt != null && !TextUtils.isEmpty(alt.url)
                             && !alt.allCandidatesDead()) {
-                        LogBridge.i(TAG, "【咪咕】云图回看链命中 → " + alt.url);
                     } else {
                         LogBridge.w(TAG, "【咪咕】云图回看链未取到可用地址，继续 pid 旁路");
                         alt = null;
@@ -2566,14 +2783,12 @@ public class TVPlayerManager {
                         if (via != null && !TextUtils.isEmpty(via.url)
                                 && !com.tv.live.migu.source.CarouselApi
                                         .isKnownDeadHost(via.url)) {
-                            LogBridge.i(TAG, "【咪咕】具体回看源命中 → " + bc
-                                    + " → " + via.url);
                             if (via.seekSec == 0 && r.offsetSec > 0) {
                                 via.seekSec = r.offsetSec;
                             }
                             return via;
                         }
-                        LogBridge.w(TAG, "【咪咕】具体回看源未取到可用地址：" + bc);
+                        LogBridge.d(TAG, "【咪咕】具体回看源未取到可用地址：" + bc);
                     }
                 }
                 // ★【2026-10-07】最后兜底：同频道「回看候选」（节目单已缓存，零列表请求）。
@@ -2591,8 +2806,6 @@ public class TVPlayerManager {
                                 lbPid, "节目单回看 pid=" + lbPid);
                         if (alt != null && alt.allCandidatesDead()) alt = null;
                         if (alt != null) {
-                            LogBridge.i(TAG, "【咪咕】节目单回看命中 pid=" + lbPid
-                                    + " → " + alt.url + "（当前节目版权受限，已切可播节目）");
                             break;
                         }
                     }
@@ -2618,7 +2831,7 @@ public class TVPlayerManager {
             if (com.tv.live.migu.source.CarouselApi.isKnownDeadHost(r.url)) {
                 Resolved web = tryWebPageFallback(webPageSource, depth, channelName);
                 if (web != null) {
-                    LogBridge.i(TAG, "【咪咕】轮播全黑洞 → 网页源兜底命中 → " + web.url);
+                    LogBridge.d(TAG, "【咪咕】轮播全黑洞 → 网页源兜底命中 → " + web.url);
                     return new Resolved(web.url, carouselSeekSec);
                 }
             }
@@ -2638,12 +2851,11 @@ public class TVPlayerManager {
             com.tv.live.migu.source.ZgyjVodApi.Result zr =
                     com.tv.live.migu.source.ZgyjVodApi.resolve(source);
             if (zr != null && !TextUtils.isEmpty(zr.url)) {
-                LogBridge.i(TAG, "【咪咕】GITV VOD 鉴权命中 → " + zr.url);
                 source = zr.url;
             } else {
                 // Java 侧没取到 → 不中断，继续往下交 JS 路由表
                 // （yt_source_root.js 有 `http://zgyj_vod/` → zgyjvodParsePlay 兜底）
-                LogBridge.w(TAG, "【咪咕】GITV VOD 鉴权未取到 playUrl，转 JS 路由兜底：" + source);
+                LogBridge.i(TAG, "【咪咕】GITV VOD 鉴权未取到 playUrl，转 JS 路由兜底：" + source);
             }
         }
 
@@ -2667,10 +2879,9 @@ public class TVPlayerManager {
                 String viaJs = com.tv.live.migu.js.UrlSourceParser
                         .parseSync(context, source, MIGU_JS_TIMEOUT_MS);
                 if (!TextUtils.isEmpty(viaJs)) {
-                    LogBridge.i(TAG, "【咪咕】JS 引擎解析成功 ← " + source);
                     return new Resolved(resolveMiguRedirect(viaJs), carouselSeekSec);
                 }
-                LogBridge.w(TAG, "【咪咕】JS 引擎未取到直链，降级 Java ← " + source);
+                LogBridge.i(TAG, "【咪咕】JS 引擎未取到直链，降级 Java ← " + source);
             } catch (Throwable t) {
                 LogBridge.w(TAG, "【咪咕】JS 引擎异常，降级 Java：" + t.getMessage());
             }
@@ -2701,7 +2912,7 @@ public class TVPlayerManager {
         if (r == null || r.candidates.size() <= 1) return r;
         String pick = com.tv.live.migu.source.CarouselApi.pickResolvableCandidate(r.candidates);
         if (!TextUtils.isEmpty(pick) && !pick.equals(r.url)) {
-            LogBridge.i(TAG, "【咪咕】候选 DNS 探活换线：" + r.url + " → " + pick);
+            LogBridge.d(TAG, "【咪咕】候选 DNS 探活换线：" + r.url + " → " + pick);
             return r.withUrl(pick);
         }
         return r;
@@ -2768,13 +2979,13 @@ public class TVPlayerManager {
         com.tv.live.migu.source.NowTvSourceApi.CurrentEpg epg =
                 com.tv.live.migu.source.NowTvSourceApi.getChannelCurrentEpg(context, tvId);
         if (epg == null || !epg.valid()) {
-            LogBridge.w(TAG, "【咪咕】云图回看链：未取到当前节目时间窗 tvId=" + tvId);
+            LogBridge.d(TAG, "【咪咕】云图回看链：未取到当前节目时间窗 tvId=" + tvId);
             return null;
         }
         String raw = com.tv.live.migu.source.CarouselApi.buildLunboParserUrl(
                 String.valueOf(tvId), "1", epg.st, epg.et);
         if (TextUtils.isEmpty(raw)) return null;
-        LogBridge.i(TAG, "【咪咕】云图回看链 → " + raw + "（当前节目《" + epg.title + "》）");
+        LogBridge.d(TAG, "【咪咕】云图回看链 → " + raw + "（当前节目《" + epg.title + "》）");
         return com.tv.live.migu.source.CarouselApi.resolveLunboParser(raw);
     }
 
@@ -2793,10 +3004,10 @@ public class TVPlayerManager {
     private Resolved tryWebPageFallback(String webPageSource, int depth, String channelName) {
         if (TextUtils.isEmpty(webPageSource)) return null;
         if (depth >= 2) {
-            LogBridge.w(TAG, "【咪咕】网页兜底跳过（解析层级过深）");
+            LogBridge.d(TAG, "【咪咕】网页兜底跳过（解析层级过深）");
             return null;
         }
-        LogBridge.i(TAG, "【咪咕】网页源兜底 → " + webPageSource);
+        LogBridge.d(TAG, "【咪咕】网页源兜底 → " + webPageSource);
         Resolved web;
         try {
             web = resolveMiguChain(webPageSource, depth + 1, channelName);
@@ -2806,7 +3017,7 @@ public class TVPlayerManager {
         }
         if (web == null || TextUtils.isEmpty(web.url)
                 || com.tv.live.migu.source.CarouselApi.isKnownDeadHost(web.url)) {
-            LogBridge.w(TAG, "【咪咕】网页源兜底未取到可用地址");
+            LogBridge.i(TAG, "【咪咕】网页源兜底未取到可用地址");
             return null;
         }
         return web;
@@ -3634,7 +3845,6 @@ public class TVPlayerManager {
                     // 【2026-10-03 BUG C】按线路合并，避免一次抖动把 HS/AL 挤出存活表
                     mLastAliveStreams = mergeAliveStreams(mLastAliveStreams, alive);
                 }
-                LogBridge.i(TAG, "【虎牙】后台补验完成，存活 " + alive.size() + "/" + snapshot.size() + " 条");
             } catch (Throwable t) {
                 LogBridge.d(TAG, "【虎牙】后台补验异常: " + t.getMessage());
             }
@@ -3670,7 +3880,7 @@ public class TVPlayerManager {
             int fails = 0;
             // release 下 d 级不进 LogCollector（/api/logs 取不到），这里只在
             // 启停各打一条 i 级：足以判定"线程有没有跑""探了多少次""失败几次"
-            LogBridge.i(TAG, "【主动探活】巡检启动 roomId=" + roomId
+            LogBridge.d(TAG, "【主动探活】巡检启动 roomId=" + roomId
                     + " url尾=" + url.substring(Math.max(0, url.length() - 40)));
             try {
                 for (int i = 0; i < PROBE_WATCH_MAX_ROUNDS; i++) {
@@ -3687,11 +3897,11 @@ public class TVPlayerManager {
                     if (failStreak < PROBE_WATCH_FAIL_THRESHOLD) continue;
                     if (!isPlayerBufferingOrIdle()) {
                         // 播放器已就绪 = 画面正常，探测失败判定为 CDN 节点差异造成的假阳性
-                        LogBridge.d(TAG, "【主动探活】探测失败但播放器已就绪，忽略（假阳性）");
+
                         failStreak = 0;
                         continue;
                     }
-                    LogBridge.w(TAG, "【主动探活】当前地址连续 " + failStreak + " 次探测失败，"
+                    LogBridge.d(TAG, "【主动探活】当前地址连续 " + failStreak + " 次探测失败，"
                             + "提前清缓存重解析（不等播放器报错，roomId=" + roomId + "）");
                     mHandler.post(() -> probeWatchTriggerReload(roomId));
                     break;
@@ -3817,7 +4027,6 @@ public class TVPlayerManager {
                         }
 
                         if (!TextUtils.isEmpty(currentUrl)) {
-                            LogBridge.d(TAG, "Surface 重建完成，重新播放: " + currentUrl);
 
                             playUrlInternal(currentUrl);
                         }
@@ -3880,7 +4089,7 @@ public class TVPlayerManager {
 
     private void performDecoderSwitch() {
         if (isSwitching) {
-            LogBridge.w(TAG, "正在解码器切换中，忽略当前请求");
+            LogBridge.i(TAG, "正在解码器切换中，忽略当前请求");
             return;
         }
         isSwitching = true;
@@ -3956,6 +4165,33 @@ public class TVPlayerManager {
 
     public int getDecoderMode() {
         return mDecoderMode;
+    }
+
+    /**
+     * 【2026-10-27 软解自动回退】判定播放错误是否为「解码器初始化失败」。
+     *
+     * <p>命中条件（任一）：
+     * <ul>
+     *   <li>{@code error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED}（media3 标准码 4003）；</li>
+     *   <li>异常链上存在 {@code MediaCodecRenderer.DecoderInitializationException}
+     *       （设备无可用解码器 / 硬解 HAL 缺失，这类根因在 errorCode 不一定标 4003）。</li>
+     * </ul>
+     * 仅对「初始化」失败回退软解；解码中途失败（DECODER_DECODE_FAILED 等）不是硬解不可用，
+     * 不应触发回退，避免无谓重建。
+     */
+    private boolean isDecoderInitFailure(PlaybackException error) {
+        if (error == null) return false;
+        if (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED) return true;
+        Throwable t = error.getCause();
+        int depth = 0;
+        while (t != null && depth < 20) {
+            if (t instanceof androidx.media3.exoplayer.mediacodec.MediaCodecRenderer.DecoderInitializationException) {
+                return true;
+            }
+            t = t.getCause();
+            depth++;
+        }
+        return false;
     }
 
     private MediaCodecSelector createSmartSelector(boolean preferSoftware) {
@@ -4043,7 +4279,7 @@ public class TVPlayerManager {
                     || (videoSurface instanceof android.view.SurfaceView);
             if (typeKnown && isTextureView == useTexture) {
                 mCurrentUseTexture = useTexture;
-                LogBridge.i(TAG, "switchRenderer 渲染类型已匹配，跳过重建（避免黑屏）: useTexture="
+                LogBridge.d(TAG, "switchRenderer 渲染类型已匹配，跳过重建（避免黑屏）: useTexture="
                         + useTexture + ", view=" + System.identityHashCode(playerView));
                 // 【2026-10-13 黑边修复】跳过重建时视图保留的是 XML 里的 resize_mode="fit"：
                 //   OTT 预览容器（高 200dp、宽 match_parent）比例远宽于 16:9，fit 下视频按
@@ -4073,7 +4309,7 @@ public class TVPlayerManager {
 
         if (mCurrentUseTexture != null && mCurrentUseTexture == useTexture) {
             // 【2026-09-29 黑屏根因修复·第二轮】埋点：确认是否命中早退分支（用 i 级，release 版可见）
-            LogBridge.i(TAG, "switchRenderer 早退分支: useTexture=" + useTexture
+            LogBridge.d(TAG, "switchRenderer 早退分支: useTexture=" + useTexture
                     + ", mCurrentUseTexture=" + mCurrentUseTexture
                     + ", view=" + System.identityHashCode(playerView));
             if (playerView.getPlayer() != player) playerView.setPlayer(player);
@@ -4143,7 +4379,7 @@ public class TVPlayerManager {
 
         mHandler.postDelayed(() -> {
             // 【2026-09-29 黑屏根因修复·第二轮】埋点：旧视图移除
-            LogBridge.i(TAG, "移除旧 PlayerView, identityHashCode=" + System.identityHashCode(oldPlayerView));
+            LogBridge.d(TAG, "移除旧 PlayerView, identityHashCode=" + System.identityHashCode(oldPlayerView));
             oldPlayerView.setPlayer(null);
             parent.removeView(oldPlayerView);
             // 【2026-09-29 黑屏根因修复·第二轮】旧视图内部 SurfaceView 在移除时会触发 surfaceDestroyed，
@@ -4249,7 +4485,7 @@ public class TVPlayerManager {
                 //   却永远不出画面。这里以「实际 Surface 是否有效」为准。
                 boolean surfaceActuallyReady = isSurfaceActuallyReady();
                 // 【2026-09-29 黑屏根因修复·第二轮】埋点改 i 级，release 版可见；暴露引用相等与实际 Surface 有效性
-                LogBridge.i(TAG, "onForeground: surfaceReady=" + surfaceReady
+                LogBridge.d(TAG, "onForeground: surfaceReady=" + surfaceReady
                         + ", surfaceActuallyReady=" + surfaceActuallyReady
                         + ", getPlayer()==player=" + (playerView.getPlayer() == player));
 
@@ -4375,7 +4611,7 @@ public class TVPlayerManager {
                         if (player != null && playerView != null) {
                             boolean surfaceOk = isSurfaceActuallyReady();
                             // 【2026-09-29 黑屏根因修复·第二轮】埋点：暴露「getPlayer() 引用相等」与「实际 Surface 有效」两个信号
-                            LogBridge.i(TAG, "恢复分支: getPlayer()==player="
+                            LogBridge.d(TAG, "恢复分支: getPlayer()==player="
                                     + (playerView.getPlayer() == player)
                                     + ", isSurfaceActuallyReady=" + surfaceOk
                                     + ", 重试第" + retryCount[0] + "次");
@@ -4418,7 +4654,7 @@ public class TVPlayerManager {
                                                     + player.getVideoSize().height + "），跳过强制重绑");
                                             return;
                                         }
-                                        LogBridge.w(TAG, "复核：仍无视频帧，执行 Surface 强制重绑（黑屏兜底）");
+                                        LogBridge.i(TAG, "复核：仍无视频帧，执行 Surface 强制重绑（黑屏兜底）");
                                         try {
                                             playerView.setPlayer(null);
                                         } catch (Exception ignore) {
@@ -4513,7 +4749,7 @@ public class TVPlayerManager {
                     try {
                         if (playerView != null && playerView.getPlayer() == player) {
                             playerView.setPlayer(null);
-                            LogBridge.i(TAG, "onBackground: 已解绑 Surface（防止解码器持失效 Surface 报 1003）");
+                            LogBridge.d(TAG, "onBackground: 已解绑 Surface（防止解码器持失效 Surface 报 1003）");
                         }
                     } catch (Throwable detachEx) {
                         LogBridge.w(TAG, "onBackground 解绑 Surface 失败: " + detachEx.getMessage());
@@ -4557,8 +4793,6 @@ public class TVPlayerManager {
                     context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
                             .getString("renderer_type", "surface"));
             if (isTextureView == wantTexture) return;
-            LogBridge.i(TAG, "渲染方式与 SP 不一致，冷启动补切换: view=" + (isTextureView ? "texture" : "surface")
-                    + ", want=" + (wantTexture ? "texture" : "surface"));
             switchRenderer(wantTexture);
         } catch (Exception e) {
             LogBridge.w(TAG, "渲染方式补切换失败: " + e.getMessage());
@@ -4621,7 +4855,6 @@ public class TVPlayerManager {
                         }
                     }
                     pendingBindPlayer = false;
-                    LogBridge.d(TAG, "Surface创建成功，播放器已绑定视图并持续播放");
                 }
 
 
@@ -4629,7 +4862,7 @@ public class TVPlayerManager {
                 public void surfaceChanged(android.view.SurfaceHolder holder, int format, int width, int height) {
                     // 【2026-09-29 黑屏根因修复·第二轮】归属判断：忽略旧视图的回调
                     if (view != TVPlayerManager.this.playerView) {
-                        LogBridge.i(TAG, "surfaceChanged: 来自旧视图，已忽略");
+                        LogBridge.d(TAG, "surfaceChanged: 来自旧视图，已忽略");
                         return;
                     }
                     surfaceReady = true;
@@ -4641,7 +4874,7 @@ public class TVPlayerManager {
                     // 【2026-09-29 黑屏根因修复·第二轮】归属判断：旧视图被移除时也会触发本回调，
                     //   若无条件置 surfaceReady=false，会污染「新 Surface 已就绪」的全局状态 → 黑屏。
                     if (view != TVPlayerManager.this.playerView) {
-                        LogBridge.i(TAG, "surfaceDestroyed: 来自旧视图，已忽略（不污染全局状态）");
+                        LogBridge.d(TAG, "surfaceDestroyed: 来自旧视图，已忽略（不污染全局状态）");
                         return;
                     }
                     surfaceReady = false;
@@ -4663,8 +4896,6 @@ public class TVPlayerManager {
         //   非 null，或 Surface 实际已就绪），直接 return：不重复 switchRenderer、不重复启动轮询。
         if (view != null && view == playerView
                 && (mCurrentUseTexture != null || isSurfaceActuallyReady())) {
-            LogBridge.i(TAG, "attachPlayerView: 同一视图且已初始化，跳过重复调用, view="
-                    + System.identityHashCode(view));
             return;
         }
         playerView = view;
@@ -4825,11 +5056,26 @@ public class TVPlayerManager {
         this.sourceFailedListener = listener;
     }
 
+    /**
+     * 【2026-10-27 卡顿统计口径】每次装载新媒体源时调用：
+     * 把「是否播起来过」复位，并记下起播计时起点（供首帧播出时结算【起播耗时】）。
+     * 必须在主线程（player.setMediaSource 前后）调用。
+     */
+    private void beginPlaybackAttempt() {
+        mPlaybackStarted = false;
+        mStartupBeginTime = System.currentTimeMillis();
+        // 上一路残留的卡顿计时不能带进新一路（否则新源一起播就报「卡顿 N 秒」）
+        isStalled = false;
+        lastStallStartTime = 0;
+    }
+
     private void resetPerformanceStats() {
         bufferCount = 0;
         totalStallTime = 0;
         isStalled = false;
         lastStallStartTime = 0;
+        mPlaybackStarted = false;
+        mStartupBeginTime = 0;
     }
 
     private boolean isHuyaRoomUrl(String url) {
@@ -4863,6 +5109,9 @@ public class TVPlayerManager {
     }
 
     private void playUrlInternal(String url, long initialSeekPosition) {
+
+        // 【2026-10-27 软解自动回退】每次主动起播重新武装软解回退（新一轮播放，旧回退计数作废）。
+        mSoftFallbackArmed = true;
 
         // 【2026-10-22 死流检测】注册清单滚动性检测回调（覆盖式、幂等）：
         // 直播清单连续多次刷新 MEDIA-SEQUENCE 不前进 → 判定死流 → 复用既有 autoRetry 兜底链
@@ -5116,10 +5365,8 @@ public class TVPlayerManager {
                     //   都会继承上一部的暂停位置（续播串台隐患）
                     if (mVodPausedChannel != null && mVodPausedChannel.equals(curName)) {
                     if (initialSeekPosition <= 0) initialSeekPosition = mVodPausedPositionMs;
-                    LogBridge.i(TAG, "doPlay: 沿用后台暂停位置 " + initialSeekPosition + "ms 续播");
+                    LogBridge.d(TAG, "doPlay: 沿用后台暂停位置 " + initialSeekPosition + "ms 续播");
                 } else {
-                    LogBridge.i(TAG, "doPlay: 频道已切换（" + mVodPausedChannel + " → " + curName
-                            + "），丢弃后台暂停位置");
                     mVodPausedPositionMs = -1;
                     mVodPausedChannel = null;
                 }
@@ -5221,7 +5468,7 @@ public class TVPlayerManager {
                 String picked = com.tv.live.migu.source.CarouselApi
                         .pickResolvableCandidateCached(lineCands);
                 if (picked != null && !picked.equals(finalUrl)) {
-                    LogBridge.w(TAG, "【DNS 探活】线路域名已知失效 → 换线："
+                    LogBridge.i(TAG, "【DNS 探活】线路域名已知失效 → 换线："
                             + finalUrl.substring(0, Math.min(70, finalUrl.length()))
                             + " → " + picked.substring(0, Math.min(70, picked.length())));
                     finalUrl = picked;
@@ -5238,7 +5485,7 @@ public class TVPlayerManager {
                                     || player.getPlaybackState()
                                             != androidx.media3.common.Player.STATE_READY;
                             if (!notReady) return;
-                            LogBridge.w(TAG, "【DNS 探活】预热判定线路域名失效 → 接管换线："
+                            LogBridge.i(TAG, "【DNS 探活】预热判定线路域名失效 → 接管换线："
                                     + wantedUrl.substring(0, Math.min(70, wantedUrl.length()))
                                     + " → " + p.substring(0, Math.min(70, p.length())));
                             doPlay(p, 0);
@@ -5247,6 +5494,9 @@ public class TVPlayerManager {
                 }
             }
             currentUrl = finalUrl;
+
+            // 【2026-10-27 切台卡顿专项 · 方案1】按源类型差异化缓冲（播放器实例复用，仅热替换参数）
+            applyStreamBufferProfile(finalUrl);
 
             // ★内置源5（爱其意）：M3U 里存的是 renyibo://<apiId> 协议串（或旧缓存的
             //   php 跳转地址），起播这一刻才解析真实落地地址（参照咪咕惰性解析模式），
@@ -5329,6 +5579,30 @@ public class TVPlayerManager {
     }
 
     /**
+     * 【2026-10-27 切台卡顿专项 · 方案1+3】按源类型差异化缓冲：
+     *   虎牙 / HLS（首帧慢、需厚缓冲）→ 沿用既有的全量调优值（PROFILE_DEFAULT，零回归）；
+     *   非虎牙、非 HLS 的渐进式低延迟流（FLV/TS/MP4 直连）→ 收紧缓冲（PROFILE_LOW_LATENCY），
+     *   起播门槛更低、缓冲储备更小，切台感知更快。
+     * 仅替换缓冲参数，播放器实例不重建（方案3：复用实例）——与下方 isHlsUrl / isHuyaSource 复用同一判定。
+     *
+     * @param url 本次起播的最终真实地址（已越过「频道线路表覆盖」「DNS 探活换线」）
+     */
+    private void applyStreamBufferProfile(String url) {
+        if (optimizedLoadControl == null || TextUtils.isEmpty(url)) return;
+        // 【2026-10-27 方案1】切台：重置 live offset 去重标记，
+        // 让新源首个清单解析后重新按 td 设定 offset（否则从同类 10s 源切到另一 10s 源会因 td 相同被跳过）。
+        mLastLiveOffsetTdMs = -1;
+        optimizedLoadControl.setTimePrioritized(false); // 切台重置：时间优先预取仅对大分片源开启
+        DynamicLoadControl.BufferParams p = (isHuyaSource(url) || isHlsUrl(url))
+                ? DynamicLoadControl.PROFILE_DEFAULT
+                : DynamicLoadControl.PROFILE_LOW_LATENCY;
+        optimizedLoadControl.setParams(p);
+        dLog("【切台缓冲】类型=" + (p == DynamicLoadControl.PROFILE_DEFAULT ? "HLS/虎牙(默认)"
+                : "低延迟") + " 参数=" + p
+                + " url=" + url.substring(0, Math.min(60, url.length())));
+    }
+
+    /**
      * 是否为「整段式」可直接播放的媒体地址（非 HLS）。
      *
      * <p>用于 {@link #doPlay} 判定 {@code isRealStream}：为 true 时说明调用方给的
@@ -5398,7 +5672,6 @@ public class TVPlayerManager {
     }
 
     private void doPlayNormal(String url, long initialSeekPosition) {
-        LogBridge.d(TAG, "【普通源】开始播放: " + url.substring(0, Math.min(80, url.length())));
 
         // 【2026-10-17】直播直连标记：直播 m3u8（非点播上下文）不走代理，并加 live offset。
         //   实测（09:51）直连后无代理延迟打底，播放器紧贴直播边缘 → BUFFERING↔READY 每秒 20+ 次微颤；
@@ -5429,8 +5702,6 @@ public class TVPlayerManager {
         //   点播（renyibo-vod / afhgrj / zgyj_vod / yuntulunbo）仍走代理，广告剥离与秒开缓存不变。
         if (isHlsUrl(url) && url.contains(".m3u8")) {
             if (isLiveHls) {
-                LogBridge.i(TAG, "【广告剥离】直播源直连（跳过代理，避免清单缓存过期导致黑屏）: "
-                        + url.substring(0, Math.min(80, url.length())));
             } else if (jzVodDirect) {
                 // 【2026-10-23 源9 直连】点播也直连：不走本地剥离代理，播放器自己拉 m3u8 与分片
                 LogBridge.i(TAG, "【广告剥离】源9点播直连（不走代理，播放器直接播放）: "
@@ -5443,7 +5714,7 @@ public class TVPlayerManager {
                 //   改为：主线程零阻塞——后台启动代理，本次先用直连起播（代理正常在
                 //   Application 启动期已就绪，仅冷启动竞态等极端情况走此降级；不切换
                 //   已在播放的会话，下次播放代理已就绪自然走代理）。
-                LogBridge.w(TAG, "【广告剥离】代理未就绪，后台启动中，本次直连起播");
+                LogBridge.d(TAG, "【广告剥离】代理未就绪，后台启动中，本次直连起播");
                 final WebServerManager starting = new WebServerManager(context, 10481);
                 com.tv.live.util.AppExecutors.io(() -> {
                     try {
@@ -5478,7 +5749,7 @@ public class TVPlayerManager {
                     // }, 5000);
                 // } catch (Exception ignored) {}
             } else {
-                LogBridge.w(TAG, "【广告剥离】代理不可用，直连原始地址");
+                LogBridge.i(TAG, "【广告剥离】代理不可用，直连原始地址");
             }
             }
             }
@@ -5609,10 +5880,18 @@ public class TVPlayerManager {
                     //     把「发现新片」提前到播放头边界之前——待用户拍板。
                     //   【保留】min/maxPlaybackSpeed 锁 1.0：显式禁止变速追帧（非低延迟流 UNSET 本就不调，
                     //     显式锁是双保险；09-19 教训：0.95x 慢放会拉长音画时间感，虎牙路径同样不锁）。
+                    //   【2026-10-27 用户决定：30s → 40s（再 +10s）】
+                    //   2.0.243 定稿的 30s 在 CCTV4 / CCTV13 上仍能观测到「切台后第 1 个 10s 分片
+                    //   播完 → 下一片还没进清单」的空窗卡顿（3s ~ 10.5s 不等，实测日志 18:08 与
+                    //   18:21 两次）。根因是「可预取时长」被压到 5-8s，撑不过 10-11s 空窗。
+                    //   故基准落后量整体上移 10s：30000 → 40000（LIVE_OFFSET_BASE_MS），
+                    //   配合 DynamicLoadControl 的 timePrioritized 时间优先预取，把预取量顶到
+                    //   接近一整片以上。代价：直播延迟约 40s（电视直播可接受）。
+                    //   注：显式 offset 不受 FastLivePlaylistTrackerFactory 改写 td 的影响。
                     mediaItem = new MediaItem.Builder()
                             .setUri(finalUrl)
                             .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
-                                    .setTargetOffsetMs(30000)
+                                    .setTargetOffsetMs(LIVE_OFFSET_BASE_MS)
                                     .setMinPlaybackSpeed(1.0f)
                                     .setMaxPlaybackSpeed(1.0f)
                                     .build())
@@ -5686,6 +5965,9 @@ public class TVPlayerManager {
                 mHandler.post(() -> {
                     try {
                         ensurePlayerBoundToView();
+                        // 【2026-10-27 统计口径】新媒体源装载：复位「播起来过」并记起播计时起点，
+                        //   使「起播等待」不再被算成播放中卡顿（结算见 onIsPlayingChanged）。
+                        beginPlaybackAttempt();
                         player.setMediaSource(mediaSource, true);
                         player.prepare();
                         if (initialSeekPosition > 0) player.seekTo(initialSeekPosition);
@@ -5757,7 +6039,7 @@ public class TVPlayerManager {
                         localHeaders.put(e.getKey(), e.getValue());
                         cnt++;
 
-                        LogBridge.d(TAG, "  Header[" + e.getKey() + "] = " + e.getValue().substring(0, Math.min(50, e.getValue().length())));
+
                     }
                     LogBridge.d(TAG, "【虎牙源】解析器专用Headers注入 " + cnt + " 项(含Cookie="
                             + (pendingHeaders.containsKey("Cookie") ? "是" : "否") + ")");
@@ -5842,6 +6124,9 @@ public class TVPlayerManager {
                 mHandler.post(() -> {
                     try {
                         ensurePlayerBoundToView();
+                        // 【2026-10-27 统计口径】新媒体源装载：复位「播起来过」并记起播计时起点，
+                        //   使「起播等待」不再被算成播放中卡顿（结算见 onIsPlayingChanged）。
+                        beginPlaybackAttempt();
                         player.setMediaSource(mediaSource, true);
                         player.prepare();
                         if (initialSeekPosition > 0) player.seekTo(initialSeekPosition);
@@ -5895,8 +6180,6 @@ public class TVPlayerManager {
         // 与原 parseMasterPlaylist 同口径：按分辨率升序（低清在前），菜单顺序不变
         Collections.sort(sorted, (a, b) -> Integer.compare(a.height, b.height));
         synchronized (variantListLock) { this.variantList = sorted; }
-        LogBridge.i(TAG, "【普通源】主清单档位回填(播放器解析，零额外请求): " + sorted.size()
-                + " 档, master=" + (playlistUri == null ? "" : playlistUri));
 
         // 挂起「出画后恢复用户手选清晰度」；代数一起记，换台后旧挂起不消费
         synchronized (mPendingNormalRestoreLock) {
@@ -6208,15 +6491,15 @@ public class TVPlayerManager {
                         }
                     }
                     if (TextUtils.isEmpty(url)) {
-                        LogBridge.w(TAG, "【虎牙】补齐跳过: 总线路 lineIndex=" + lo.lineIndex
-                                + " cdnType=" + lo.cdnType + " 无可用的 quality URL");
+
+
                         continue;
                     }
                     mHuyaMultiLines.add(new HuyaStreamPlayer.MultiLineOption(
                             lo.lineIndex, lo.cdnType, url, /*priority*/ -1));
                     appended++;
-                    LogBridge.i(TAG, "【虎牙】补齐子线路: lineIndex=" + lo.lineIndex
-                            + " cdnType=" + lo.cdnType + " (multiLine 缺席)");
+
+
                 }
                 if (appended > 0) {
                     // 新增后重排一次（TX>HS>AL>其它，同 CDN 按 lineIndex 升序）
@@ -6231,7 +6514,7 @@ public class TVPlayerManager {
                                             b == null ? 0 : b.lineIndex);
                                 }
                             });
-                    LogBridge.i(TAG, "【虎牙】子线路表补齐 +" + appended + " 条，"
+                    LogBridge.d(TAG, "【虎牙】子线路表补齐 +" + appended + " 条，"
                             + "排序后共 " + mHuyaMultiLines.size() + " 条");
                 }
             }
@@ -6280,10 +6563,10 @@ public class TVPlayerManager {
                 }
             }
             if (best != null) effQuality = best.getDisplayLabel();
-            LogBridge.i(TAG, "【虎牙】沿用用户上次选择的线路 lineIndex=" + userLineD
+            LogBridge.d(TAG, "【虎牙】沿用用户上次选择的线路 lineIndex=" + userLineD
                     + (userResD > 0 ? " 清晰度 ratio=" + userResD : ""));
         } else if (userLineD >= 0) {
-            LogBridge.i(TAG, "【虎牙】用户线路 lineIndex=" + userLineD + " 本次缺席，回落默认线路");
+            LogBridge.d(TAG, "【虎牙】用户线路 lineIndex=" + userLineD + " 本次缺席，回落默认线路");
         }
 
         // 采用线路的采用档排最前：保证 getAvailableResolutions() 的首项 = 实际在播的档
@@ -6369,7 +6652,7 @@ public class TVPlayerManager {
                     }
                 }
                 if (survivors.isEmpty()) {
-                    LogBridge.i(TAG, "【虎牙·子线路补探】非当前线路无存活，候选=" + snapshot.size());
+                    LogBridge.d(TAG, "【虎牙·子线路补探】非当前线路无存活，候选=" + snapshot.size());
                     return;
                 }
                 synchronized (TVPlayerManager.this) {
@@ -6785,7 +7068,7 @@ public class TVPlayerManager {
             if (o == null || o.lineIndex != uc || TextUtils.isEmpty(o.url)) continue;
             if (failedHead.equals(normalizeUrlHead(o.url))) {
                 clearUserChosenLine(mHuyaRoomId);
-                LogBridge.w(TAG, "【虎牙】用户手选线路（源·" + (o.cdnType == null ? "?" : o.cdnType)
+                LogBridge.d(TAG, "【虎牙】用户手选线路（源·" + (o.cdnType == null ? "?" : o.cdnType)
                         + "）已失效，清除该房间线路偏好，重解析回落默认线路");
                 return;
             }
@@ -6800,7 +7083,7 @@ public class TVPlayerManager {
                     if (v.huyaBitRate != ur) continue;
                     if (failedHead.equals(normalizeUrlHead(v.url))) {
                         clearUserChosenResolution(mHuyaRoomId);
-                        LogBridge.w(TAG, "【虎牙】用户手选清晰度（ratio=" + ur
+                        LogBridge.d(TAG, "【虎牙】用户手选清晰度（ratio=" + ur
                                 + "）已失效，清除该房间清晰度偏好，保留线路偏好");
                         return;
                     }
@@ -6860,7 +7143,7 @@ public class TVPlayerManager {
             mCurrentHuyaLineIndex = o.lineIndex;
             // 与手动切换口径一致：子线路是成品地址，切过去必须把清晰度轴对齐
             syncResolutionLabelForDirectUrl(o.url, o);
-            LogBridge.i(TAG, "【虎牙】恢复用户上次选择的子线路：源·"
+            LogBridge.d(TAG, "【虎牙】恢复用户上次选择的子线路：源·"
                     + (o.cdnType == null ? "?" : o.cdnType) + "（lineIndex=" + o.lineIndex + "）");
             return o.url;
         }
@@ -6941,7 +7224,7 @@ public class TVPlayerManager {
         if (index < 0 || index >= src.size()) index = 0;
         HuyaStreamPlayer.MultiLineOption o = src.get(index);
         if (o == null || TextUtils.isEmpty(o.url)) {
-            LogBridge.w(TAG, "【虎牙】子线路#" + index + " 无有效地址，放弃切换");
+            LogBridge.i(TAG, "【虎牙】子线路#" + index + " 无有效地址，放弃切换");
             return;
         }
         Channel ch = getCurrentChannel();
@@ -7052,13 +7335,13 @@ public class TVPlayerManager {
         List<HuyaStreamPlayer.MultiLineOption> mls = huyaMultiLinesSnapshot();
         if (isHuyaSource(ch.getMainPlayUrl()) && !mls.isEmpty()) {
             if (lineIndex < 0 || lineIndex >= mls.size()) {
-                LogBridge.w(TAG, "【虎牙】子线路下标越界: " + lineIndex + "（共 " + mls.size() + " 条），忽略");
+                LogBridge.i(TAG, "【虎牙】子线路下标越界: " + lineIndex + "（共 " + mls.size() + " 条），忽略");
                 return;
             }
             HuyaStreamPlayer.MultiLineOption o = mls.get(lineIndex);
             String target = (o != null) ? o.url : null;
             if (TextUtils.isEmpty(target)) {
-                LogBridge.w(TAG, "【虎牙】子线路#" + lineIndex + " 无有效地址，放弃切换");
+                LogBridge.i(TAG, "【虎牙】子线路#" + lineIndex + " 无有效地址，放弃切换");
                 return;
             }
             mCurrentHuyaLineIndex = o.lineIndex;
@@ -7650,7 +7933,7 @@ public class TVPlayerManager {
 
         final List<Channel.EpgItem> eps = com.tv.live.afhgrj.AfhgrjUrlResolver.getEpisodes(vodId);
         if (eps == null || eps.isEmpty()) {
-            LogBridge.w(TAG, "【源7 联播】集数列表为空 → 停止播放（不重播）vodId=" + vodId);
+            LogBridge.i(TAG, "【源7 联播】集数列表为空 → 停止播放（不重播）vodId=" + vodId);
             afhgrjPlaybackFinished = true;
             notifyAfhgrjAllEpisodesEnded();
             return true;
@@ -7705,7 +7988,7 @@ public class TVPlayerManager {
 
         final List<Channel.EpgItem> eps = com.tv.live.renyibo.RenYiBoVodSourceLoader.getVodEpisodes(vodId);
         if (eps == null || eps.isEmpty()) {
-            LogBridge.w(TAG, "【源5 联播】选集列表为空 → 停止播放（不重播）vodId=" + vodId);
+            LogBridge.i(TAG, "【源5 联播】选集列表为空 → 停止播放（不重播）vodId=" + vodId);
             renyiboPlaybackFinished = true;
             notifyRenyiboAllEpisodesEnded();
             return true;
@@ -7760,7 +8043,7 @@ public class TVPlayerManager {
 
         final List<Channel.EpgItem> eps = com.tv.live.ryb.RybUrlResolver.getEpisodes(slug);
         if (eps == null || eps.isEmpty()) {
-            LogBridge.w(TAG, "【源8 联播】选集列表为空 → 停止播放（不重播）slug=" + slug);
+            LogBridge.i(TAG, "【源8 联播】选集列表为空 → 停止播放（不重播）slug=" + slug);
             rybPlaybackFinished = true;
             notifyRybAllEpisodesEnded();
             return true;
@@ -7805,7 +8088,7 @@ public class TVPlayerManager {
 
         final List<Channel.EpgItem> eps = com.tv.live.nbmovie.NbMovieUrlResolver.getEpisodes(vodId);
         if (eps == null || eps.isEmpty()) {
-            LogBridge.w(TAG, "【源2 联播】选集列表为空 → 停止播放（不重播）vodId=" + vodId);
+            LogBridge.i(TAG, "【源2 联播】选集列表为空 → 停止播放（不重播）vodId=" + vodId);
             nbmPlaybackFinished = true;
             notifyNbMovieAllEpisodesEnded();
             return true;
@@ -7880,6 +8163,111 @@ public class TVPlayerManager {
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    /**
+     * 【2026-10-27 快轮询缓冲守卫】最近一次采样得到的 live 缓冲余量（播放头距直播边缘 ms）。
+     * 供 {@link com.tv.live.FastLivePlaylistTrackerFactory} 在改写 targetDuration 前判断：
+     * 缓冲偏低时跳过快轮询，避免挤压 live-edge 引发微缓冲抖动。
+     * 返回 {@link Long#MAX_VALUE} 表示尚未采样（守卫不触发，安全默认）。
+     */
+    public static long getLatestLiveBufferBehindMs() {
+        return sLatestLiveBufferBehindMs;
+    }
+
+    /**
+     * 【2026-10-27 方案1·targetLiveOffset 落后补偿】HLS 媒体清单解析成功后的 targetDuration 回传入口。
+     *
+     * <p>由 {@link com.tv.live.FastLivePlaylistTrackerFactory} 在每次媒体清单解析成功时调用
+     * （loader IO 线程）。本方法 post 到主线程，按 td 自适应设置 live offset：
+     * <ul>
+     *   <li>td ≥ 8s（10s 大分片低频源，如 PLTV）→ 目标落后 live-edge = max(2×td + 10s, 40s)
+     *       （10s 分片 → 40s，约 4 片），手里常备一整片以上缓冲，覆盖「新片发布→清单可见」
+     *       最长 10-11s 的空窗，消除分片交界处 3s~10.5s 级卡顿（2026-10-27 再 +10s）；</li>
+     *   <li>td &lt; 8s（小分片源）→ 清除覆盖，回落 MediaItem 显式 offset（30s）/media3 默认 3×td。</li>
+     * </ul>
+     * 同一 td 重复解析不重复设置（清单每 10s 刷新一次）；切台时由
+     * {@link #applyStreamBufferProfile(String)} 重置标记，保证新源首个清单解析后重新生效。
+     */
+    public static void reportHlsTargetDuration(long targetDurationUs, String host) {
+        TVPlayerManager mgr = instance;
+        if (mgr == null) return;
+        try {
+            mgr.applyLiveOffsetForTargetDuration(targetDurationUs, host);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /**
+     * 【2026-10-27 方案1·targetLiveOffset 落后补偿（基于实测 liveOffset 的主动 seek 版）】
+     *
+     * <p>media3 1.7.1 的 ExoPlayer 接口<b>没有</b> setTargetLiveOffsetOverrideMs（已核实 1.7.1 源码），
+     * live offset 只能经 MediaItem.LiveConfiguration 在 setMediaItem 时生效，而构建 MediaItem 时
+     * 尚未解析清单、拿不到 targetDuration。故改为「清单解析后按实测 liveOffset 主动拨轮」：
+     * <ul>
+     *   <li>td ≥ 8s（10s 大分片低频源，如 PLTV）→ 目标落后 live-edge = max(2×td + 10s, 40s)
+     *       （10s 分片 → 40s，约 4 片），覆盖「新片发布→清单可见」最长 10-11s 空窗；</li>
+     *   <li>td &lt; 8s → 不干预，保持 MediaItem 显式 offset（40s）。</li>
+     * </ul>
+     * 只当实测 liveOffset 比目标小 2s 以上才 seek 后退（避免频繁 seek 打断缓冲）；
+     * 若现有 40s offset 已生效（liveOffset≈40s），则判定已满足、不干预。
+     * 切台时 {@link #applyStreamBufferProfile(String)} 重置去重标记；清单每 10s 刷新但 td 相同则不再调整。
+     */
+    private void applyLiveOffsetForTargetDuration(long targetDurationUs, String host) {
+        long tdMs = targetDurationUs / 1000;
+        if (tdMs <= 0 || tdMs == mLastLiveOffsetTdMs) return; // 同源重复解析 → 跳过
+        if (mHandler == null) return;
+        final long targetOffsetMs = tdMs >= 8000
+                ? Math.min(Math.max(tdMs * 2 + LIVE_OFFSET_EXTRA_MS, LIVE_OFFSET_BASE_MS),
+                           LIVE_OFFSET_MAX_MS)
+                : C.TIME_UNSET;
+        mHandler.post(() -> {
+            try {
+                if (player == null) return;
+                long actual = C.TIME_UNSET;
+                try {
+                    actual = player.getCurrentLiveOffset();
+                } catch (Throwable ignored) {
+                }
+                if (actual == C.TIME_UNSET) {
+                    // 尚未进入直播窗口/未就绪：不记录去重标记，等下次清单解析再试
+                    // 【2026-10-27 分级】属预期内中间态（每次换台必现一次），降为 d：正式版不进缓冲
+                    if (mLastLiveOffsetWaitLogTdMs != tdMs) {
+                        mLastLiveOffsetWaitLogTdMs = tdMs;
+                        LogBridge.d(TAG, "【live-offset】td=" + tdMs + "ms 等待直播窗口（liveOffset=unset），稍后重试");
+                    }
+                    return;
+                }
+                mLastLiveOffsetTdMs = tdMs; // 成功拿到 live 信息才记录，避免 unset 时误锁
+                mLastLiveOffsetWaitLogTdMs = -1; // 【2026-10-28】成功一次即重置，下一轮换台可再打一条
+                if (optimizedLoadControl != null) {
+                    // td≥8s：开启时间优先预取，绕开 allocator 字节上限把预取掐在 ~8s 的问题
+                    optimizedLoadControl.setTimePrioritized(targetOffsetMs != C.TIME_UNSET);
+                }
+                if (targetOffsetMs == C.TIME_UNSET) {
+
+
+                    return;
+                }
+                if (actual < targetOffsetMs - 2000) {
+                    long deltaMs = targetOffsetMs - actual;
+                    long newPos = player.getCurrentPosition() - deltaMs;
+                    if (newPos > 0) {
+                        player.seekTo(newPos);
+
+
+
+                    }
+                } else {
+                    // 【2026-10-27 分级】「无需调整」= 什么都没做，属稳态旁证，降 d；
+                    //   只有真正执行了 seek（下面那条）才值得在正式版留一条 i。
+
+
+                }
+            } catch (Throwable t) {
+                LogBridge.w(TAG, "【live-offset】处理失败: " + t);
+            }
+        });
     }
 
     public long getDuration() {
@@ -7965,10 +8353,11 @@ public class TVPlayerManager {
             if (height <= 0) {
                 b.setMaxVideoSize(Integer.MAX_VALUE, Integer.MAX_VALUE);
             } else {
+                LogBridge.w(TAG, "【解码器切换】10s 条件复查：仍未就绪，补挂卡顿看门狗");
                 b.setMaxVideoSize(Integer.MAX_VALUE, height);
             }
             trackSelector.setParameters(b.build());
-            LogBridge.i(TAG, "【清晰度】限制设为 " + (height <= 0 ? "自动" : height + "p"));
+            LogBridge.d(TAG, "【清晰度】限制设为 " + (height <= 0 ? "自动" : height + "p"));
         } catch (Throwable t) {
             LogBridge.w(TAG, "设置清晰度失败: " + t.getMessage());
         }

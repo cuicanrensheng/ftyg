@@ -212,7 +212,7 @@ public class WebServerManager {
         if (isRunning) return;
         synchronized (sStartLock) {
             if (sStartingOrRunning) {
-                LogBridge.i("WebServer", "已有代理实例启动中/运行中，跳过重复启动");
+                LogBridge.d("WebServer", "已有代理实例启动中/运行中，跳过重复启动");
                 return;
             }
             sStartingOrRunning = true;
@@ -274,7 +274,6 @@ public class WebServerManager {
                 synchronized (sStartLock) { sStartingOrRunning = false; }
 
             } catch (Exception e) {
-                e.printStackTrace();
                 isRunning = false;
                 runningInstance = null;
                 // 【2026-10-22 I1-05】bind 失败需复位守卫，否则后续启动全被拒
@@ -300,7 +299,6 @@ public class WebServerManager {
             if (stripExecutor != null) stripExecutor.shutdownNow();
             if (segExecutor != null) segExecutor.shutdownNow();
         } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
@@ -424,15 +422,11 @@ public class WebServerManager {
                     sendResponse(socket, "403 Forbidden", "text/plain", "Invalid token");
                     return;
                 }
-                LogBridge.i("WebServer", "========== 广告剥离代理请求开始 ==========");
-                if (!channelName.isEmpty()) {
-                    LogBridge.i("WebServer", "频道: " + channelName);
-                }
-                LogBridge.i("WebServer", "目标URL: " + targetUrl.substring(0, Math.min(100, targetUrl.length())));
                 long stripStartTime = System.currentTimeMillis();
+                // 【2026-10-28】内部类里要用频道名，先固化成 final
+                final String fChannelName = channelName;
                 String cached = getM3u8Cache(targetUrl);
                 if (cached != null) {
-                    LogBridge.i("WebServer", "缓存命中，直接返回，耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
                     sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", cached);
                     return;
                 }
@@ -440,10 +434,9 @@ public class WebServerManager {
                 // 【2026-10-16】请求去重：检查是否有相同URL正在处理
                 Future<String> existingFuture = pendingStripRequests.get(targetUrl);
                 if (existingFuture != null && !existingFuture.isDone()) {
-                    LogBridge.i("WebServer", "请求去重：等待相同URL的处理结果");
+                    LogBridge.d("WebServer", "请求去重：等待相同URL的处理结果");
                     try {
                         String dedupResult = existingFuture.get(3, TimeUnit.SECONDS);
-                        LogBridge.i("WebServer", "请求去重：获取到共享结果，耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms");
                         sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", dedupResult);
                         return;
                     } catch (Exception e) {
@@ -462,7 +455,6 @@ public class WebServerManager {
                             String finalContent = m3u8Content;
                             String finalBaseUrl = finalTargetUrl;
                             if (M3u8AdStripper.isMasterPlaylist(m3u8Content)) {
-                                LogBridge.i("WebServer", "检测到 Master Playlist，下载第一个子流");
                                 String variantUrl = M3u8AdStripper.getFirstVariantUrl(m3u8Content, finalTargetUrl);
                                 if (variantUrl != null && !variantUrl.isEmpty()) {
                                     String variantContent = downloadM3u8(variantUrl);
@@ -473,7 +465,6 @@ public class WebServerManager {
                                 }
                             }
                             int beforeSegments = countSegmentsInM3u8(finalContent);
-                            LogBridge.i("WebServer", "剥离前: 分片数=" + beforeSegments);
                             // 【2026-10-23 禁止降级返回原文】原先这里是 stripWithTimeout：
                             //   剥离超过 500ms 就降级返回「未剥离原文」+ 后台继续剥离存缓存。
                             //   实测证明这条降级正是**广告漏出到播放器的直接原因**：主算法明明
@@ -485,7 +476,12 @@ public class WebServerManager {
                             //   剥离版写进缓存，下次直接命中（实测缓存命中仅 9ms）。
                             String stripped = stripBlocking(finalContent, finalBaseUrl, finalTargetUrl);
                             int afterSegments = countSegmentsInM3u8(stripped);
-                            LogBridge.i("WebServer", "剥离后: 分片数=" + afterSegments + ", 剔除=" + (beforeSegments - afterSegments) + " 个");
+                            // 【2026-10-28 只留一条结果】正常流程只记这一行（频道 + 剥离前后 + 剔除数）
+                            LogBridge.d("WebServer", "剥离" + (fChannelName.isEmpty() ? "" : "[" + fChannelName + "]")
+                                    + ": " + beforeSegments + " → " + afterSegments
+                                    + " 片（剔除 " + (beforeSegments - afterSegments) + "）"
+                                    + " 算法=" + M3u8AdStripper.getLastAlgoName()
+                                    + " 耗时=" + M3u8AdStripper.getLastCostMs() + "ms");
                             return putM3u8Cache(finalTargetUrl, stripped);
                         } finally {
                             pendingStripRequests.remove(finalTargetUrl);
@@ -502,7 +498,6 @@ public class WebServerManager {
                         sendResponse(socket, "502 Bad Gateway", "text/plain", "Failed to download m3u8");
                         return;
                     }
-                    LogBridge.i("WebServer", "========== 广告剥离代理请求结束，总耗时=" + (System.currentTimeMillis() - stripStartTime) + "ms ==========");
                     sendResponse(socket, "200 OK", "application/vnd.apple.mpegurl; charset=utf-8", result);
                 } catch (Exception e) {
                     // 【2026-10-22 P1-05】仅剩「上游下载慢」会走到这里（剥离已 500ms 降级不阻塞）；
@@ -684,7 +679,6 @@ public class WebServerManager {
             if (e instanceof java.net.SocketException) {
                 LogBridge.w("WebServer", "请求处理异常（对端断开，忽略）: " + e.getMessage());
             } else {
-                e.printStackTrace();
                 LogBridge.e("WebServer", "请求处理异常: " + e.getMessage());
             }
             try {
@@ -737,7 +731,6 @@ public class WebServerManager {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
         }
         return params;
     }
@@ -1028,7 +1021,7 @@ public class WebServerManager {
                 boolean live = content != null && !content.contains(TAG_HLS_ENDLIST);
                 long ttl = live ? M3U8_LIVE_CACHE_TTL_MS : M3U8_CACHE_TTL_MS;
                 if (System.currentTimeMillis() - timestamp < ttl) {
-                    LogBridge.i("WebServer", "[缓存命中]" + (live ? "(直播短缓存)" : "") + " "
+                    LogBridge.d("WebServer", "[缓存命中]" + (live ? "(直播短缓存)" : "") + " "
                             + url.substring(0, Math.min(60, url.length())));
                     return content;
                 } else {
@@ -1204,7 +1197,7 @@ public class WebServerManager {
                         || responseCode == 307 || responseCode == 308) {
                     String location = conn.getHeaderField("Location");
                     if (location != null && !location.isEmpty() && redirect < 2) {
-                        LogBridge.i("WebServer", "分片 302 重定向 → " + location.substring(0, Math.min(80, location.length())));
+
                         try { conn.disconnect(); } catch (Throwable ignored) {}
                         conn = null;
                         curUrl = location;
@@ -1253,7 +1246,7 @@ public class WebServerManager {
             out.flush();
             byte[] data = tee.toByteArray();
             if (data.length == 0) {
-                LogBridge.w("WebServer", "分片代理上游返回空 url=" + segUrl.substring(0, Math.min(80, segUrl.length())));
+                LogBridge.i("WebServer", "分片代理上游返回空 url=" + segUrl.substring(0, Math.min(80, segUrl.length())));
                 try { socket.close(); } catch (Exception ignored) {}
                 return null;
             }
@@ -1265,8 +1258,14 @@ public class WebServerManager {
             // 响应头未发出：还能回一个明确的 502；已发出（流式回传中断）：只能断连，
             //   让播放器按 premature EOF 自重试（此时回错误响应头会污染字节流）。
             if (headersSent) {
-                LogBridge.w("WebServer", "分片流式回传中断（对端放弃或上游中断）: "
-                        + e.getClass().getSimpleName() + " " + e.getMessage());
+                // 【2026-10-28 降噪】ConnectionReset / Broken pipe 是播放器主动放弃分片下载
+                //   （切台、seek、预取淘汰）的正常产物，每次起播必现，不算故障 → 不记；
+                //   其余异常仍按 warn 记录。
+                String cn = e.getClass().getSimpleName();
+                if (!"ConnectionResetException".equals(cn) && !"SocketException".equals(cn)) {
+                    LogBridge.w("WebServer", "分片流式回传中断（上游中断）: "
+                            + cn + " " + e.getMessage());
+                }
                 try { socket.close(); } catch (Exception ignored) {}
             } else {
                 LogBridge.e("WebServer", "分片代理打开上游失败: " + e.getClass().getSimpleName() + " " + e.getMessage());
@@ -1333,7 +1332,7 @@ public class WebServerManager {
             @Override
             public void run() {
                 try {
-                    LogBridge.i("WebServer", "[预加载] 开始: " + url.substring(0, Math.min(60, url.length())));
+                    LogBridge.d("WebServer", "[预加载] 开始: " + url.substring(0, Math.min(60, url.length())));
                     String m3u8Content = downloadM3u8(url);
                     if (TextUtils.isEmpty(m3u8Content)) return;
                     String finalContent = m3u8Content;
@@ -1360,7 +1359,7 @@ public class WebServerManager {
                         }
                     }
                     putM3u8Cache(url, stripped);
-                    LogBridge.i("WebServer", "[预加载] 完成，存入缓存");                } catch (Exception e) {
+                    LogBridge.d("WebServer", "[预加载] 完成，存入缓存");                } catch (Exception e) {
                     LogBridge.e("WebServer", "[预加载] 失败: " + e.getMessage());
                 } finally {
                     preloadRunning.set(false);
@@ -1385,7 +1384,7 @@ public class WebServerManager {
             @Override
             public String call() throws Exception {
                 try {
-                    LogBridge.i("WebServer", "[预剥离] 开始: " + finalUrl.substring(0, Math.min(60, finalUrl.length())));
+                    LogBridge.d("WebServer", "[预剥离] 开始: " + finalUrl.substring(0, Math.min(60, finalUrl.length())));
                     String m3u8Content = downloadM3u8(finalUrl);
                     if (m3u8Content.isEmpty()) return null;
                     String finalContent = m3u8Content;
@@ -1416,7 +1415,7 @@ public class WebServerManager {
                         }
                     }
                     String cachedContent = putM3u8Cache(finalUrl, stripped);
-                    LogBridge.i("WebServer", "[预剥离] 完成，存入缓存");
+                    LogBridge.d("WebServer", "[预剥离] 完成，存入缓存");
                     return cachedContent;
                 } finally {
                     pendingStripRequests.remove(finalUrl);

@@ -112,18 +112,18 @@ public final class ChanxiangSourceLoader {
                     seen.put(id, it);
                     all.add(it);
                 }
-                LogBridge.d(TAG, "分组 " + groupName + "(" + tagId + ") 取到 " + arr.length() + " 条");
+
             } catch (Exception ex) {
-                LogBridge.w(TAG, "分组 " + groupName + "(" + tagId + ") 拉取失败: " + ex.getMessage());
+                LogBridge.d(TAG, "分组 " + groupName + "(" + tagId + ") 拉取失败: " + ex.getMessage());
             }
         }
 
-        LogBridge.i(TAG, "共 " + all.size() + " 个频道，开始解析播放源…");
+        LogBridge.d(TAG, "共 " + all.size() + " 个频道，开始解析播放源…");
         resolveAll(all);
 
         int ok = 0;
         for (ChannelItem it : all) if (it.playable) ok++;
-        LogBridge.i(TAG, "解析完成：可播 " + ok + " / " + all.size());
+        LogBridge.d(TAG, "解析完成：可播 " + ok + " / " + all.size());
         return all;
     }
 
@@ -184,7 +184,7 @@ public final class ChanxiangSourceLoader {
                     try {
                         resolveSource(it);
                     } catch (Throwable t) {
-                        LogBridge.w(TAG, it.name + " 源解析异常: " + t.getMessage());
+                        LogBridge.d(TAG, it.name + " 源解析异常: " + t.getMessage());
                     }
                 }));
             }

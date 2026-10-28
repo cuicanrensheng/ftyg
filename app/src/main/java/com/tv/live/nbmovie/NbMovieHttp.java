@@ -107,12 +107,12 @@ public final class NbMovieHttp {
 
         // 加密路径：先确保会话（内部会走 config + exchange 两个明文请求）
         if (!NbMovieApi.ensureSession()) {
-            LogBridge.w(TAG, "会话不可用，放弃请求 path=" + path);
+            LogBridge.i(TAG, "会话不可用，放弃请求 path=" + path);
             return null;
         }
         String sid = NbMovieApi.getSessionId();
         if (sid == null || sid.isEmpty()) {
-            LogBridge.w(TAG, "session_id 为空，放弃请求 path=" + path);
+            LogBridge.i(TAG, "session_id 为空，放弃请求 path=" + path);
             return null;
         }
 
@@ -250,7 +250,7 @@ public final class NbMovieHttp {
                 return new String(bytes, StandardCharsets.UTF_8);
             }
             if (bb.get() != FRAME_VERSION) {
-                LogBridge.w(TAG, "响应帧版本不支持");
+                LogBridge.i(TAG, "响应帧版本不支持");
                 return null;
             }
             bb.get(); // flags

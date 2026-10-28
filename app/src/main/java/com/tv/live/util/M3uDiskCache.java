@@ -154,7 +154,6 @@ public final class M3uDiskCache {
         }
         lastFailAtMs = 0L;
         writeDiskCache(context, out);
-        LogBridge.i(tag, label + "：抓取成功并写入磁盘缓存，" + out.length() + " 字符");
         return out;
     }
 

@@ -169,7 +169,6 @@ public class PictureInPictureManager {
                 return true;
             }
         } catch (Exception e) {
-            e.printStackTrace();
             isPipEntering = false;
         }
         return false;

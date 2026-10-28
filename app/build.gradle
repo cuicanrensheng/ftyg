@@ -32,8 +32,8 @@ android {
         applicationId "com.tv.live"
         minSdk 21
         targetSdk 36
-        versionCode 258
-        versionName "2.0.258"
+        versionCode 279
+        versionName "2.0.279"
         resConfigs "zh"
         multiDexEnabled true
 

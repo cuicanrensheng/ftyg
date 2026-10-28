@@ -47,6 +47,9 @@ public class AppCoreManager {
     /** 【2026-10-26 EPG 懒加载】true = 冷启动不自动解析 EPG，用户打开节目单时才加载（降低弱 CPU 起播期抢核）。
      *  切源 / 远程配置改源等用户主动行为仍走 forceLoadEpg 强制加载。 */
     private static final boolean EPG_LAZY = true;
+    /** 【2026-10-27 去日志双写】一个加载周期内「EPG 懒加载跳过」只记一次：
+     *  冷启动时 loadEpgCache() 与 loadEpg() 会在同一周期内先后被调用，各打一条 → 固定两行同一决策。 */
+    private boolean epgLazySkipLogged = false;
     private volatile long lastNetworkLoadAtMs = 0;
     private static final int MAX_CONSECUTIVE_SKIP = 10;
 
@@ -323,6 +326,7 @@ public class AppCoreManager {
 
     private void loadLiveAndEpgInternal(long gen) {
         log("【直播源】开始加载直播源...");
+        epgLazySkipLogged = false;   // 新加载周期：允许再记一次「EPG 懒加载跳过」
         isLoading = true;
 
         timeoutHandler.postDelayed(() -> {
@@ -421,7 +425,11 @@ public class AppCoreManager {
                 }
                 finishLiveSourceLoad(gen);
                 List<Channel> safeChannels = sanitizeChannels(channels);
-                log("【网络】直播源加载成功，频道总数：" + safeChannels.size());
+                // 【2026-10-27 去日志双写】原实现先打「加载成功，频道总数=N」，随后又打
+                // 「直播源列表已更新」，同一事件两行（间隔 0ms）。现合并为一条，并用「超时后补到数据」
+                // 表明是超时兜底后才回来的结果（isLoading 此刻尚未复位，即原 firstTime）。
+                log("【网络】直播源" + (isLoading ? "加载成功" : "超时后补到数据")
+                        + "，频道总数：" + safeChannels.size());
                 synchronized (channelListLock) {
                     channelSourceList = ensureChannelListNotNull(channelSourceList);
                     if (safeChannels.isEmpty()) {
@@ -444,7 +452,6 @@ public class AppCoreManager {
                     sLastLoadedChannels = new ArrayList<>(safeChannels);
                 }
 
-                boolean firstTime = isLoading;
                 isLoading = false;
                 if (dataLoadListener != null) {
 
@@ -454,11 +461,8 @@ public class AppCoreManager {
                         dataLoadListener.onLiveSourceFailed("直播源返回 0 个频道，地址可能已失效或暂时不可达");
                     }
                 }
-                if (firstTime) {
-                    log("【网络】直播源列表已更新");
-                } else {
-                    log("【网络】直播源列表已更新（超时后补到数据）");
-                }
+                // 【2026-10-27 去日志双写】原此处再打一条「直播源列表已更新」，
+                // 与上方「加载成功，频道总数=N」重复描述同一事件，已删除。
                 if (!safeChannels.isEmpty()) {
                     collectAndPreloadHuyaRooms(safeChannels, "网络");
                 }
@@ -541,7 +545,7 @@ public class AppCoreManager {
         if (EPG_LAZY) {
             // 【2026-10-26 懒加载】冷启动不提前解析 EPG 磁盘缓存，省下整段 parseXml 的 CPU 占用，
             // 留给媒体解码/提取线程。节目单数据将在用户打开节目单时由 ensureEpgLoaded 触发。
-            log("【EPG】懒加载模式：跳过冷启动 EPG 缓存解析（待用户打开节目单时再加载）");
+            logEpgLazySkip();
             return;
         }
         log("【EPG】尝试从缓存加载...");
@@ -645,20 +649,32 @@ public class AppCoreManager {
         if (EPG_LAZY) {
             // 【2026-10-26 懒加载】冷启动自动加载路径在懒加载模式下不执行；
             // 节目单改为用户打开时由 EpgManager.ensureEpgLoaded 触发。
-            log("【EPG】懒加载模式：跳过冷启动自动加载（待用户打开节目单时再加载）");
+            logEpgLazySkip();
             return;
         }
-        loadEpgInternal();
+        loadEpgInternal(null);
+    }
+
+    /** 【2026-10-27 去日志双写】懒加载跳过提示：一个加载周期只记一条。
+     *  loadEpgCache()（缓存路径）与 loadEpg()（网络路径）在同一周期内都会走到这里，
+     *  原先各自打点 → 冷启动固定出现两行「跳过冷启动…」描述同一个决策。 */
+    private void logEpgLazySkip() {
+        if (epgLazySkipLogged) return;
+        epgLazySkipLogged = true;
+        log("【EPG】懒加载模式：本次不自动加载（用户打开节目单时再加载）");
     }
 
     /** 【2026-10-26 懒加载】用户主动行为（切源 / 远程配置改源）强制加载 EPG，不受 EPG_LAZY 影响。 */
     private void forceLoadEpg() {
-        log("【EPG】强制加载（切源 / 远程配置改源 / 用户主动）");
-        loadEpgInternal();
+        loadEpgInternal("强制：切源 / 远程配置改源 / 用户主动");
     }
 
     private void loadEpgInternal() {
-        log("【EPG】开始加载节目单...");
+        loadEpgInternal(null);
+    }
+
+    private void loadEpgInternal(String reason) {
+        log("【EPG】开始加载节目单..." + (reason == null ? "" : "（" + reason + "）"));
         // 【2026-10-05】EPG 操作串行化（同 loadEpgCache，全部走 serial 单线程）。
         // loadEpg 内部自带「7 天新鲜 + 缓存来源校验 + 坏缓存回退下载」：
         // 缓存有效 → 只用缓存不下载；换源/损坏/过期 → 自动下载兜底。
@@ -984,7 +1000,6 @@ public class AppCoreManager {
 
             receiversRegistered = true;
         } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
@@ -999,7 +1014,6 @@ public class AppCoreManager {
             }
             receiversRegistered = false;
         } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 

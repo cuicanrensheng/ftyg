@@ -112,7 +112,7 @@ public final class UrlSourceParser {
                 }
                 final String pluginName = route.get(0);
                 String fnName = route.get(1);
-                LogBridge.i(TAG, "路由：" + url + " → " + pluginName + "::" + fnName);
+                LogBridge.d(TAG, "路由：" + url + " → " + pluginName + "::" + fnName);
 
                 // 第 2 步：执行具体解析函数
                 final String pluginJs = JsPluginStore.getPlugin(ctx, pluginName);
@@ -129,11 +129,10 @@ public final class UrlSourceParser {
                         List<String> urls = parseStringArray(result);
                         urls.removeAll(Collections.singleton(""));
                         if (urls.isEmpty()) {
-                            LogBridge.w(TAG, "解析结果为空（" + pluginName + "）");
+                            LogBridge.i(TAG, "解析结果为空（" + pluginName + "）");
                             cb.onError("empty parse result");
                             return;
                         }
-                        LogBridge.i(TAG, "解析成功：" + url + " → " + abbreviate(urls.get(0)));
                         cb.onSuccess(urls);
                     }
 

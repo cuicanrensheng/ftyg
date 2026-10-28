@@ -27,6 +27,13 @@ public class InfoDisplayManager {
     private static final long CHANNEL_NUM_HIDE_DELAY = 3000;
     private static final long PROGRAM_PROGRESS_INTERVAL = 30000;
 
+    /**
+     * 【2026-10-27】底部信息栏（切台/起播时弹出的「频道名+节目进度条」）总开关。
+     * 用户反馈切台时底部信息栏干扰观看，默认关闭；置 true 可恢复原行为。
+     * 注：仅控制 infoBar，不影响右上角频道号（tvChannelNum）显示。
+     */
+    private static final boolean INFO_BAR_ENABLED = false;
+
     private Context context;
     private TextView tvChannelNum;
     private View infoBar;
@@ -133,6 +140,11 @@ public class InfoDisplayManager {
     public void showInfoBar(Channel channel, TVPlayerManager.LiveInfo liveInfo){
         if(infoBar == null || channel == null) return;
         currentPlayChannel = channel;
+        if (!INFO_BAR_ENABLED) {
+            // 信息栏已禁用：仅静默记录当前频道，不弹 UI、不发起 EPG/进度轮询（避免空转）
+            LogBridge.d("InfoDisplay", "底部信息栏已禁用，跳过显示（channel=" + channel.getName() + "）");
+            return;
+        }
         infoBar.setVisibility(View.VISIBLE);
         mainHandler.removeCallbacks(hideInfoBarTask);
         mainHandler.postDelayed(hideInfoBarTask, INFO_BAR_HIDE_DELAY);
@@ -209,7 +221,6 @@ public class InfoDisplayManager {
                     applyEpgUiResult(result, channel);
                 });
             } catch (Exception e) {
-                e.printStackTrace();
                 mainHandler.post(() -> {
                     if (!isReleased) {
                         setEpgEmptyUi();

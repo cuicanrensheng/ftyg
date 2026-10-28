@@ -94,7 +94,7 @@ public class ChannelInfoBar extends LinearLayout {
         root.addView(this, lp);
         attached = true;
         setVisibility(View.GONE);
-        com.tv.live.util.LogBridge.i("ChannelInfo", "attachTo 完成 width=" + dp(780));
+        com.tv.live.util.LogBridge.d("ChannelInfo", "attachTo 完成 width=" + dp(780));
     }
 
     /**
@@ -120,7 +120,7 @@ public class ChannelInfoBar extends LinearLayout {
 
     public void show(String number, String name, String now, String next,
                      float pct, int bottomMarginPx) {
-        com.tv.live.util.LogBridge.i("ChannelInfo", "SHOW-CALL attached=" + attached
+        com.tv.live.util.LogBridge.d("ChannelInfo", "SHOW-CALL attached=" + attached
                 + " name=" + name);
         if (!attached) return;
         if (bottomMarginPx > 0 && getLayoutParams() instanceof FrameLayout.LayoutParams) {

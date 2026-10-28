@@ -74,14 +74,12 @@ public class DisplayManager {
                     activity.getWindow().setDecorFitsSystemWindows(false);
                 } catch (Exception e) {
 
-                    e.printStackTrace();
                 }
             }
 
             fullScreenApplied = true;
 
         } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
@@ -134,7 +132,6 @@ public class DisplayManager {
             loadingViewInitialized = true;
 
         } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 

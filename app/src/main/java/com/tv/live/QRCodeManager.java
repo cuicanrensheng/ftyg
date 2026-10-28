@@ -63,7 +63,6 @@ public class QRCodeManager {
             }
             return bmp;
         } catch (Exception e) {
-            e.printStackTrace();
             return null;
         }
     }

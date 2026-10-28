@@ -105,8 +105,6 @@ public final class DnsAdBlocker {
         addBlockDomain("*.taboola.com");
         addBlockDomain("*.outbrain.com");
 
-        LogBridge.i(TAG, "DNS 广告拦截器初始化完成，默认规则数: " +
-                (sExactBlocklist.size() + sSuffixBlocklist.size() + sRegexBlocklist.size()));
     }
 
     /**
@@ -123,20 +121,16 @@ public final class DnsAdBlocker {
             // 通配符匹配：保存后缀（去掉 *.）
             String suffix = domain.substring(1); // .example.com
             sSuffixBlocklist.add(suffix);
-            LogBridge.d(TAG, "添加通配符拦截: " + domain);
         } else if (domain.startsWith("regex:")) {
             // 正则表达式匹配
             try {
                 Pattern pattern = Pattern.compile(domain.substring(6));
                 sRegexBlocklist.add(pattern);
-                LogBridge.d(TAG, "添加正则拦截: " + domain);
             } catch (Exception e) {
-                LogBridge.w(TAG, "正则表达式无效: " + domain + ", " + e.getMessage());
             }
         } else {
             // 精确匹配
             sExactBlocklist.add(domain);
-            LogBridge.d(TAG, "添加精确拦截: " + domain);
         }
     }
 

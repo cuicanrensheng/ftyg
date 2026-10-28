@@ -31,7 +31,6 @@ public final class NbMovieCrypto {
         try {
             System.loadLibrary("tvlive_security");
             sLoaded = true;
-            LogBridge.i(TAG, "libtvlive_security.so 加载成功（NbMovie 协议就绪）");
         } catch (Throwable t) {
             sLoaded = false;
             LogBridge.w(TAG, "libtvlive_security.so 加载失败: " + t.getMessage());

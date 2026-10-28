@@ -63,7 +63,6 @@ public class NetUtil {
         // （此时通常已在后台线程，如直播源 / EPG / 虎牙线路的下载路径）。
         // ⚠️ 安全性完全不变：builder 链、拦截器、证书固定（CertAwareTrustManager / HostnameVerifier）
         //    与虎牙限流配置**逐字节保持原样**，仅构建时机后移。
-        LogBridge.i(TAG, "NetUtil 单例构造完成（轻量；OkHttpClient 延迟到首次真实请求时构建）");
     }
 
     /** 主客户端（安全请求头 + 虎牙限流）。懒构造，双检锁。 */
@@ -80,8 +79,6 @@ public class NetUtil {
                     c = mClient = HuyaHttpThrottle.attach(createBaseClientBuilder())
                             .addInterceptor(new SecurityRequestInterceptor(false))
                             .build();
-                    LogBridge.i(TAG, "⏱️[NetUtil] mClient 懒构建完成 "
-                            + (System.currentTimeMillis() - t0) + "ms（含 SSL/证书固定/限流）");
                 }
             }
         }
@@ -100,8 +97,6 @@ public class NetUtil {
                             .addInterceptor(new SecurityRequestInterceptor(true))
                             .addNetworkInterceptor(new SensitiveDataProtectionInterceptor())
                             .build();
-                    LogBridge.i(TAG, "⏱️[NetUtil] mSecureClient 懒构建完成 "
-                            + (System.currentTimeMillis() - t0) + "ms");
                 }
             }
         }

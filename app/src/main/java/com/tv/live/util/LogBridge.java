@@ -68,51 +68,68 @@ import okhttp3.WebSocketListener;
 import okio.ByteString;
 
 public final class LogBridge {
+    /*
+     * 【2026-10-28 单通道铁律 · 双写全部拆除】
+     *   一条事件只允许落一个地方：9527 环形缓冲（/api/logs + WS）。可选入口（二选一，禁止同时调用）：
+     *     1) LogBridge.v/d/i/w/e(tag, msg)           → 只进缓冲（d 级在正式版不进缓冲）
+     *     2) LogCollector.getInstance().xxx(tag,msg) → 只进缓冲（xxx ∈ info/warn/error/playback/
+     *        operation/crash/debug/network/parse）
+     *
+     *   本次删除的三类冗余旁路：
+     *     - logcat 镜像：emit() 与 writer echo 原先各写一次 android.util.Log，与缓冲重复；
+     *     - 文件旁路：boot_logs.txt / crash_logs/*.txt / tamper_logs/*.log 三套 FileWriter/FileOutputStream；
+     *     - 同事件多处调用：崩溃、异常上报、自启埋点曾对同一句分别走 LogBridge 与 LogCollector。
+     *
+     *   需要 ExceptionReporter 上报的用 LogCollector.error(...)（内部自动上报）；
+     *   只需记录、不想上报的用 LogBridge.e(...)。
+     */
     private LogBridge() {}
 
+    /** 【2026-10-28 单通道】统一单日志出口：去重 → 只进 9527 环形缓冲，不再镜像 logcat。 */
     public static void v(String tag, String msg) {
-        Log.v(tag, msg);
-        forward(tag, msg, LogCollector.TYPE_DEBUG);
+        emit(tag, msg, LogCollector.TYPE_DEBUG, null);
     }
 
     public static void d(String tag, String msg) {
-        Log.d(tag, msg);
-        // 卡顿优化：d 级日志量最大（HuyaSDKParser 数十处），release 下不进 LogCollector，
-        // info/warn/error/playback 等仍全量收集（9527 /api/logs 依赖它们）
-        if (com.tv.live.BuildConfig.IS_DEBUG) {
-            forward(tag, msg, LogCollector.TYPE_DEBUG);
-        }
+        emit(tag, msg, LogCollector.TYPE_DEBUG, null);
     }
 
     public static void i(String tag, String msg) {
-        Log.i(tag, msg);
-        forward(tag, msg, LogCollector.TYPE_INFO);
+        emit(tag, msg, LogCollector.TYPE_INFO, null);
     }
 
     public static void w(String tag, String msg) {
-        Log.w(tag, msg);
-        forward(tag, msg, LogCollector.TYPE_WARN);
+        emit(tag, msg, LogCollector.TYPE_WARN, null);
     }
 
     public static void w(String tag, String msg, Throwable tr) {
-        Log.w(tag, msg, tr);
-        forward(tag, msg + (tr != null ? " : " + tr.getMessage() : ""), LogCollector.TYPE_WARN);
+        emit(tag, msg + (tr != null ? " : " + tr.getMessage() : ""), LogCollector.TYPE_WARN, tr);
     }
 
     public static void e(String tag, String msg) {
-        Log.e(tag, msg);
-        forward(tag, msg, LogCollector.TYPE_ERROR);
+        emit(tag, msg, LogCollector.TYPE_ERROR, null);
     }
 
     public static void e(String tag, String msg, Throwable tr) {
-        Log.e(tag, msg, tr);
-        forward(tag, msg + (tr != null ? " : " + tr.getMessage() : ""), LogCollector.TYPE_ERROR);
+        emit(tag, msg + (tr != null ? " : " + tr.getMessage() : ""), LogCollector.TYPE_ERROR, tr);
     }
 
     public static int println(int priority, String tag, String msg) {
-        int r = Log.println(priority, tag, msg);
-        forward(tag, msg, LogCollector.TYPE_INFO);
-        return r;
+        String type = priority == android.util.Log.DEBUG || priority == android.util.Log.VERBOSE
+                ? LogCollector.TYPE_DEBUG : LogCollector.TYPE_INFO;
+        emit(tag, msg, type, null);
+        return 0;
+    }
+
+    /** 统一写入口：同指纹去重 → 单通道进 9527 缓冲（logcat 镜像已删除，2026-10-28） */
+    private static void emit(String tag, String msg, String type, Throwable tr) {
+        if (isDup(tag, msg, type)) return; // 窗口内重复 → 整体跳过
+        if (LogCollector.TYPE_DEBUG.equals(type)) {
+            // 卡顿优化：d 级日志量最大（HuyaSDKParser 数十处），release 下不进 LogCollector，
+            // info/warn/error/playback 等仍全量收集（9527 /api/logs 依赖它们）
+            if (!com.tv.live.BuildConfig.IS_DEBUG) return;
+        }
+        forward(tag, msg, type);
     }
 
     private static void forward(String tag, String msg, String type) {
@@ -122,10 +139,41 @@ public final class LogBridge {
         } catch (Throwable ignored) {}
     }
 
+    /** 【2026-10-27 禁止日志双写】入口级同指纹去重窗口：窗口内同 tag+type+msg 只允许输出一次（logcat 与缓冲同时挡下） */
+    private static final long DEDUP_WINDOW_MS = 300L;
+    /** 入口级指纹表容量上限；超出整体重建，防止无界增长 */
+    private static final int DEDUP_CAP = 2048;
+    /** 指纹 → 最近一次输出时间戳（ConcurrentHashMap 保证多线程安全） */
+    private static final java.util.Map<String, Long> sDedup = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 返回 true 表示窗口内重复，调用方必须整体跳过（不再写 logcat、不再进缓冲）；error/crash 不参与去重 */
+    private static boolean isDup(String tag, String msg, String type) {
+        if (LogCollector.TYPE_ERROR.equals(type) || LogCollector.TYPE_CRASH.equals(type)) {
+            return false;
+        }
+        String fp = (tag == null ? "" : tag) + "|" + type + "|" + msg;
+        long now = System.currentTimeMillis();
+        Long last = sDedup.get(fp);
+        if (last != null && now - last < DEDUP_WINDOW_MS) {
+            return true;
+        }
+        if (sDedup.size() >= DEDUP_CAP) {
+            sDedup.clear();
+        }
+        sDedup.put(fp, now);
+        return false;
+    }
+
     public static class LogCollector {
         private static volatile LogCollector sInstance;
         private final List<String> logs;
         private final List<LogEntry> logEntries;
+        /** 【2026-10-27 禁止日志双写】同指纹（tag+type+msg）在 DEDUP_WINDOW_MS 内只入缓冲一条 */
+        private static final long DEDUP_WINDOW_MS = 300L;
+        /** 指纹表容量上限；超出整体重建，防止无界增长 */
+        private static final int DEDUP_CAP = 2048;
+        /** 指纹 → 最近一次提交时间戳 */
+        private final java.util.Map<String, Long> lastEmitByFingerprint = new java.util.HashMap<>();
         private final SimpleDateFormat sdf;
         private final List<LogListener> listeners;
         private final List<DeviceInfoProvider> deviceInfoProviders;
@@ -303,18 +351,12 @@ public final class LogBridge {
         }
 
         public void addLog(String tag, String msg, String type) {
-            // 直调 LogCollector 的调用方**没有**写 logcat，由 writer 负责 echo 一次（保证这类日志仍可见）
-            addLogInternal(tag, msg, type, true, true);
+            addLogInternal(tag, msg, type, true);
         }
 
         public void addLogNoReport(String tag, String msg, String type) {
-            // 【2026-10-05 日志去重】本入口**只**被 LogBridge.forward() 调用；而 LogBridge.v/d/i/w/e/println
-            // 在调用线程已经先 android.util.Log.x() 写过一次 logcat，所以 writer 必须**跳过 echo**，
-            // 否则每条 app 日志会在 logcat 里出现两份（实测 debug 包 76% 的行都有 0~20ms 内的重复副本）。
-            // 注意：debug 包才可见——release 包 proguard 有
-            //   -assumenosideeffects class android.util.Log { v/d/i/w/e/println }
-            // 会把两处 Log 调用全部在编译期删掉。
-            addLogInternal(tag, msg, type, false, false);
+            // 【2026-10-28 单通道】本入口**只**被 LogBridge.forward() 调用，不再有 logcat echo 分支。
+            addLogInternal(tag, msg, type, false);
         }
 
         /** 单线程写队列：addLog 的重活（格式化/锁/listeners/logd）全部移出调用线程（含主线程），防播放卡顿 */
@@ -327,12 +369,13 @@ public final class LogBridge {
 
         /**
          * @param autoReport   error/crash 是否自动上报
-         * @param echoToLogcat writer 是否要把这条再写一次 logcat。
-         *                     来自 {@link LogBridge} 的条目传 false（调用方已写过）；直调 LogCollector 的传 true。
          */
-        private void addLogInternal(String tag, String msg, String type, boolean autoReport, boolean echoToLogcat) {
-            if (msg != null && msg.length() > 500) {
-                msg = msg.substring(0, 500) + "...[已截断]";
+        private void addLogInternal(String tag, String msg, String type, boolean autoReport) {
+            // 【2026-10-28】文件旁路删除后，崩溃全文只能靠缓冲承载，故 crash 放宽到 8000 字、
+            //   error 放宽到 2000 字（原统一 500 会把堆栈砍掉，等于丢现场）；其余类型维持 500。
+            int cap = TYPE_CRASH.equals(type) ? 8000 : (TYPE_ERROR.equals(type) ? 2000 : 500);
+            if (msg != null && msg.length() > cap) {
+                msg = msg.substring(0, cap) + "...[已截断]";
             }
             // 【2026-10-13 日志脱敏】分工明确：
             //   fMsg    → 脱敏后正文，进 9527 的 logs / logEntries（【2026-10-22 I1-02】GET /api/logs
@@ -342,13 +385,28 @@ public final class LogBridge {
             final String fMsgRaw = msg;
             final String fMsg = LogRedactor.redact(msg);
             final boolean fReport = autoReport;
-            final boolean fEcho = echoToLogcat;
             final long ts = System.currentTimeMillis(); // 提交时打时间戳，保证异步后仍单调
-            sLogWriter.execute(() -> addLogInternalOnWriter(fTag, fMsg, fType, fReport, fEcho, ts, fMsgRaw));
+            sLogWriter.execute(() -> addLogInternalOnWriter(fTag, fMsg, fType, fReport, ts, fMsgRaw));
         }
 
         private void addLogInternalOnWriter(String tag, String msg, String type, boolean autoReport,
-                                            boolean echoToLogcat, long timestamp, String rawMsg) {
+                                            long timestamp, String rawMsg) {
+            // 【2026-10-27 禁止日志双写】同指纹短窗口去重：任何双路径/双事件产生的重复日志
+            //   （同 tag+type+message）在 DEDUP_WINDOW_MS 内只保留第一条，避免重复占缓冲计数
+            //   与 WS 广播；error/crash 告警不参与去重，保证异常全量保留。
+            if (!TYPE_ERROR.equals(type) && !TYPE_CRASH.equals(type)) {
+                synchronized (lastEmitByFingerprint) {
+                    String fp = (tag == null ? "" : tag) + "|" + type + "|" + msg;
+                    Long last = lastEmitByFingerprint.get(fp);
+                    if (last != null && timestamp - last < DEDUP_WINDOW_MS) {
+                        return; // 窗口内重复 → 禁止双写
+                    }
+                    if (lastEmitByFingerprint.size() >= DEDUP_CAP) {
+                        lastEmitByFingerprint.clear();
+                    }
+                    lastEmitByFingerprint.put(fp, timestamp);
+                }
+            }
             // msg = 已脱敏（展示/落盘）；rawMsg = 原文（logcat echo 与异常上报）
             LogEntry entry = createLogEntry(tag, msg, type, timestamp);
             String line;
@@ -433,54 +491,12 @@ public final class LogBridge {
                                 rMsg != null ? rMsg : "Unknown error",
                                 new RuntimeException(rMsg != null ? rMsg : "Unknown error"));
                     } catch (Throwable ignored) {}
-                } else {
-
-                    android.util.Log.w("LogCollector", "日志已过滤不记录: " +
-                        (rMsg != null ? rMsg.substring(0, Math.min(100, rMsg.length())) : ""));
                 }
+                // 【2026-10-28 单通道】原先 else 分支还有一条 android.util.Log.w("日志已过滤不记录")，
+                //   与缓冲内同类信息重复，已删除。
             }
-
-            // 【2026-10-05 日志去重】来自 LogBridge 的条目在调用线程已经 Log.x() 写过 logcat，
-            // 这里必须跳过 echo，否则同一条日志在 logcat 里出现两份（实测重复率 76%）。
-            // 直调 LogCollector 的条目（autoReport=true 路径）仍照常 echo，保证它们不会从 logcat 消失。
-            if (!echoToLogcat) return;
-
-            try {
-                // 【2026-10-13 脱敏】logcat 走原文：需要 adb 授权才能读，
-                // 且 release 包的 android.util.Log 已被 proguard 整体剥离，不存在额外的暴露面。
-                // 这样 debug 包调试时仍能看清完整特征串。
-                final String echoMsg = rawMsg != null ? rawMsg : msg;
-                String logTag = TextUtils.isEmpty(tag) ? "TVLive" : tag;
-                switch (type) {
-                    case TYPE_ERROR:
-                        android.util.Log.e(logTag, echoMsg);
-                        break;
-                    case TYPE_WARN:
-                        android.util.Log.w(logTag, echoMsg);
-                        break;
-                    case TYPE_DEBUG:
-                        android.util.Log.d(logTag, echoMsg);
-                        break;
-                    case TYPE_CRASH:
-                        android.util.Log.e(logTag, "CRASH: " + echoMsg);
-                        break;
-                    case TYPE_NETWORK:
-                        android.util.Log.i(logTag, "[NET] " + echoMsg);
-                        break;
-                    case TYPE_PARSE:
-                        android.util.Log.i(logTag, "[PARSE] " + echoMsg);
-                        break;
-                    case TYPE_PLAYBACK:
-                        android.util.Log.i(logTag, "[PLAY] " + echoMsg);
-                        break;
-                    case TYPE_OPERATION:
-                        android.util.Log.i(logTag, "[OP] " + echoMsg);
-                        break;
-                    default:
-                        android.util.Log.i(logTag, echoMsg);
-                        break;
-                }
-            } catch (Throwable ignored) {}
+            // 【2026-10-28 单通道】原先此处有 logcat echo 分支（switch 按 type 再写一次 android.util.Log），
+            //   与 emit() 的 logcat 镜像共同构成第三条重复链路，整体删除。日志出口只剩 9527 缓冲。
         }
 
         public void info(String tag, String msg) { addLog(tag, msg, TYPE_INFO); }
@@ -522,10 +538,11 @@ public final class LogBridge {
             }
         }
         public void playback(String tag, String msg) {
-
-            if (BuildConfig.IS_DEBUG) {
-                addLog(tag, msg, TYPE_PLAYBACK);
-            }
+            // 【2026-10-27 日志统一】原实现仅在 IS_DEBUG 下写入，导致正式版想用「playback」这一
+            //   分类就必须再调一次 LogBridge.i 才能被 9527 看到 → 同一事件在缓冲里占两格。
+            //   现改为两个版本都收：调用方只写这一处，一条事件 = 一条日志。
+            //   （内容量与原来正式版的那条 info 完全等价，不会增加缓冲压力。）
+            addLog(tag, msg, TYPE_PLAYBACK);
         }
         public void operation(String tag, String msg) { addLog(tag, msg, TYPE_OPERATION); }
 
@@ -792,7 +809,8 @@ public final class LogBridge {
             }, "LogServer");
             serverThread.setDaemon(true);
             serverThread.start();
-            LogBridge.i(TAG, "LogServer starting on port " + port + " (cleared " + webSockets.size() + " old connections)");
+            // 【2026-10-27 去日志双写】启动过程日志降 d：成功绑定后 startHttpServer 会打一条 info（含 IP:端口）
+            LogBridge.d(TAG, "LogServer starting on port " + port + " (cleared " + webSockets.size() + " old connections)");
 
             startConnectionCleaner();
         }
@@ -844,7 +862,7 @@ public final class LogBridge {
         private void startHttpServer() throws IOException {
             serverSocket = new java.net.ServerSocket(port);
             serverSocket.setReuseAddress(true);
-            LogBridge.i(TAG, "HTTP Server listening on port " + port);
+            LogBridge.i(TAG, "LogServer 已就绪：" + getDeviceIpAddress() + ":" + port);
 
             // 【2026-10-22 I1-11】连续 accept 失败计数：退避 100ms→500ms→1s 封顶。
             //   accept 持续异常（fd 耗尽/socket 异常态）时，无退避的空转会瞬间刷爆
@@ -933,8 +951,7 @@ public final class LogBridge {
          *
          * <p>{@code cleanCache} 的 {@code target} 取值与此一一对应，两边必须同步改。
          * 只收「删掉能自动重建」的目录；databases（播放历史/收藏）、shared_prefs（设置）、
-         * filesDir 下各源 M3U 落地缓存（renyibo_vod.m3u 等业务数据）、filesDir/boot_logs.txt
-         * （开机日志，用户还要看）一律不在白名单内。
+         * filesDir 下各源 M3U 落地缓存（renyibo_vod.m3u 等业务数据）一律不在白名单内。
          */
         private static final String[][] CLEARABLE_CACHE_ITEMS = {
                 {"channel_logo", "台标图片缓存"},
@@ -1234,7 +1251,7 @@ public final class LogBridge {
 
             // 【2026-10-22 I1-02】敏感端点鉴权（服务绑定 0.0.0.0，局域网可达）：
             //   /api/token            仅回环可获取（adb forward 排障链路零影响；PC 工具走 forward）
-            //   /api/info·logs·bootlog·cache·cache/clean·perf  回环豁免，非回环须 ?token= 有效 token
+            //   /api/info·logs·cache·cache/clean·perf  回环豁免，非回环须 ?token= 有效 token
             //   / 与 /health          保持公开（探活与引导页）
             if ("/api/token".equals(path)) {
                 if (!isLoopback(clientSocket)) {
@@ -1242,7 +1259,7 @@ public final class LogBridge {
                     clientSocket.close();
                     return;
                 }
-            } else if ("/api/info".equals(path) || "/api/logs".equals(path) || "/api/bootlog".equals(path)
+            } else if ("/api/info".equals(path) || "/api/logs".equals(path)
                     || "/api/cache".equals(path) || "/api/perf".equals(path)
                     || "/logs".equals(path) || "/ui".equals(path)
                     || (path != null && path.startsWith("/api/cache/clean"))) {
@@ -1263,8 +1280,6 @@ public final class LogBridge {
                 sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(info));
             } else if ("/api/logs".equals(path)) {
                 handleApiLogs(out, request);
-            } else if ("/api/bootlog".equals(path)) {
-                handleApiBootLog(out);
             } else if ("/api/token".equals(path)) {
                 Map<String, Object> result = new HashMap<>();
                 result.put("token", token);
@@ -1696,27 +1711,6 @@ public final class LogBridge {
             sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(result));
         }
 
-        private void handleApiBootLog(java.io.OutputStream out) throws Exception {
-            Map<String, Object> result = new HashMap<>();
-            java.io.File bootLog = new java.io.File(context.getFilesDir(), "boot_logs.txt");
-            if (bootLog.exists()) {
-                java.io.FileInputStream fis = new java.io.FileInputStream(bootLog);
-                byte[] buf = new byte[(int) Math.min(bootLog.length(), 1024 * 1024)];
-                int n = fis.read(buf);
-                fis.close();
-                String content = n > 0 ? new String(buf, 0, n, "UTF-8") : "";
-                result.put("exists", true);
-                result.put("size", bootLog.length());
-                result.put("content", content);
-            } else {
-                result.put("exists", false);
-                result.put("size", 0);
-                result.put("content", "");
-            }
-            result.put("timestamp", System.currentTimeMillis());
-            sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(result));
-        }
-
         private void handleWebSocketUpgrade(java.net.Socket clientSocket, String request, java.io.OutputStream out) throws Exception {
             String key = extractHeader(request, "Sec-WebSocket-Key");
             if (TextUtils.isEmpty(key)) {
@@ -1938,31 +1932,6 @@ public final class LogBridge {
             }
         }
 
-        public void sendCrashLog(String crashLog) {
-            try {
-                Map<String, Object> logMap = new HashMap<>();
-                logMap.put("type", "crash");
-                logMap.put("timestamp", System.currentTimeMillis());
-                logMap.put("time", sdf.format(new Date()));
-                logMap.put("tag", "CrashHandler");
-                logMap.put("message", crashLog);
-                logMap.put("logType", LogCollector.TYPE_CRASH);
-                logMap.put("deviceId", deviceId);
-                logMap.put("deviceName", deviceName);
-                logMap.put("deviceModel", deviceModel);
-                logMap.put("appVersion", appVersion);
-
-                String json = gson.toJson(logMap);
-                for (WebSocket ws : webSockets) {
-                    try {
-                        ws.send(json);
-                    } catch (Exception ignored) {}
-                }
-            } catch (Exception e) {
-                LogBridge.e(TAG, "Error sending crash log", e);
-            }
-        }
-
         private Map<String, Object> getServerInfo() {
             Map<String, Object> info = new HashMap<>();
             info.put("deviceId", deviceId);
@@ -2001,7 +1970,7 @@ public final class LogBridge {
                     "        <div class=\"info\" style=\"background:#eef6e9;\">\n" +
                     "            <h3>日志查看器</h3>\n" +
                     "            <p><a href=\"/logs\" style=\"font-size:18px;font-weight:bold;color:#1e7be0;\">▶ 打开图形化日志页（/logs）</a></p>\n" +
-                    "            <p style=\"color:#666;font-size:12px;\">支持关键字/Tag 过滤、级别筛选、2s 自动刷新、启动日志（bootlog）</p>\n" +
+                    "            <p style=\"color:#666;font-size:12px;\">支持关键字/Tag 过滤、级别筛选、2s 自动刷新</p>\n" +
                     "        </div>\n" +
                     "        <div class=\"info\">\n" +
                     "            <h3>Device Info</h3>\n" +
@@ -2035,7 +2004,7 @@ public final class LogBridge {
          * <p>背景：此前 9527 只有 /api/logs 的裸 JSON，浏览器里看日志要靠插件格式化，
          * 或者 adb forward 后拉文件解析；移动端/电视上更是没法看。本页为纯前端渲染
          * （无外部依赖、可离线），支持关键字与 Tag 过滤、级别筛选、2s 自动刷新、暂停、
-         * 清空缓冲、切到启动日志（boot_logs.txt）。
+         * 清空缓冲。
          *
          * <p>鉴权口径与 /api/logs 对齐：回环来源（adb forward）直接放行，局域网须带 ?token=；
          * 页面自身注入 token 供其后续请求使用，因此局域网打开本页后无需再手工带参。
@@ -2084,10 +2053,6 @@ public final class LogBridge {
                 .row.playback .m{color:var(--gold)}
                 .row.debug .m{color:var(--dim)}
                 .row .m em{background:rgba(255,209,102,.28);font-style:normal;border-radius:2px}
-                #bootWrap{padding:12px 14px}
-                #bootBox{background:var(--panel);border:1px solid var(--line);border-radius:8px;
-                     padding:12px;white-space:pre-wrap;word-break:break-word;
-                     max-height:74vh;overflow:auto;margin:0}
                 .empty{color:var(--dim);text-align:center;padding:40px}
               </style>
             </head>
@@ -2106,19 +2071,17 @@ public final class LogBridge {
                   <option value="network">network</option>
                 </select>
                 <label class="chk"><input type="checkbox" id="auto" checked>自动刷新</label>
-                <button id="boot">启动日志</button>
                 <button id="clear">清空</button>
                 <span id="stat">加载中…</span>
               </div>
             </header>
             <main id="list"></main>
-            <div id="bootWrap" hidden><pre id="bootBox"></pre></div>
             <script>
             var TOKEN = "__TOKEN__";
             var API = function (p) {
               return TOKEN ? (p + (p.indexOf("?") >= 0 ? "&" : "?") + "token=" + TOKEN) : p;
             };
-            var LOGS = [], timer = null, bootMode = false;
+            var LOGS = [], timer = null;
             function el(id) { return document.getElementById(id); }
             function esc(s) {
               return String(s == null ? "" : s).replace(/[&<>]/g, function (c) {
@@ -2145,7 +2108,6 @@ public final class LogBridge {
               return out;
             }
             function render() {
-              if (bootMode) return;
               var qs = terms(), lvl = el("lvl").value;
               var html = "", shown = 0, errs = 0;
               for (var i = 0; i < LOGS.length; i++) {
@@ -2190,24 +2152,11 @@ public final class LogBridge {
                 el("stat").innerHTML = '<b style="color:#ff5c6c">' + esc(e.message) + '</b>';
               });
             }
-            function loadBoot() {
-              fetch(API("/api/bootlog")).then(function (r) { return r.json(); }).then(function (d) {
-                el("bootBox").textContent = d.exists ? d.content : "（无 boot_logs.txt）";
-              }).catch(function (e) { el("bootBox").textContent = "读取失败：" + e.message; });
-            }
             function stopAuto() { if (timer) { clearInterval(timer); timer = null; } }
             function startAuto() { stopAuto(); timer = setInterval(load, 2000); }
             el("auto").onchange = function () { this.checked ? startAuto() : stopAuto(); };
-            el("boot").onclick = function () {
-              bootMode = !bootMode;
-              this.classList.toggle("on", bootMode);
-              el("bootWrap").hidden = !bootMode;
-              el("list").style.display = bootMode ? "none" : "";
-              if (bootMode) { el("auto").checked = false; stopAuto(); loadBoot(); }
-              else { el("auto").checked = true; startAuto(); load(); }
-            };
             el("clear").onclick = function () {
-              if (!confirm("清空当前日志环形缓冲？（不影响 bootlog）")) return;
+              if (!confirm("清空当前日志环形缓冲？")) return;
               fetch(API("/api/logs?clear=true")).then(function () {
                 LOGS = []; render();
               }).catch(function (e) { alert("清空失败：" + e.message); });
@@ -2407,6 +2356,10 @@ public final class LogBridge {
         }
 
         public static void setEnabled(boolean value) {
+            // 【2026-10-27 去日志双写】init() 已把 enabled 置 true 并打过「ExceptionReporter initialized」，
+            // 调用方紧接着执行 setEnabled(!IS_DEBUG)：正式版传 true = 状态未变，却会再打一条「enabled」。
+            // 只在状态真正翻转时打点。
+            if (enabled == value) return;
             enabled = value;
             LogBridge.i(TAG, "ExceptionReporter " + (value ? "enabled" : "disabled"));
         }
@@ -2448,15 +2401,15 @@ public final class LogBridge {
 
             String stackTrace = getStackTrace(throwable);
 
-            // msg 不再拼 throwable.getMessage()（LogBridge.e 还会追加 tr.getMessage()，造成 "X : X" 重复）；
-            // 完整堆栈已由下方 LogCollector 条目承载
-            LogBridge.e(TAG, "[" + module + "] Exception reported: " + throwable.getMessage());
-            if (context != null && !context.isEmpty()) {
-                LogBridge.e(TAG, "[" + module + "] Context: " + context);
-            }
+            // 【2026-10-28 单通道】原先这里另有两条 LogBridge.e（"Exception reported" / "Context"），
+            //   与下面这条 LogCollector.error 属同一异常的第二、第三份记录，已删除；
+            //   异常类型/消息/上下文/堆栈全部并入下条消息。
             try {
                 LogCollector.getInstance().error(module,
-                        (context != null ? context + " | " : "") + stackTrace);
+                        "[" + module + "] " + throwable.getClass().getSimpleName()
+                                + ": " + throwable.getMessage()
+                                + (context != null && !context.isEmpty() ? " | " + context : "")
+                                + "\n" + stackTrace);
             } catch (Throwable ignored) {}
         }
 
@@ -2565,13 +2518,8 @@ public final class LogBridge {
 
         private Thread.UncaughtExceptionHandler defaultHandler;
 
-        private static final String CRASH_DIR_NAME = "crash_logs";
-
-        private static final int MAX_CRASH_LOG_COUNT = 10;
-
-        private static final String CRASH_FILE_PREFIX = "crash_";
-
-        private static final String CRASH_FILE_SUFFIX = ".txt";
+        // 【2026-10-28】crash_logs 目录与 crash_*.txt 落盘已整体移除（日志双写清理），
+        //   CRASH_DIR_NAME / MAX_CRASH_LOG_COUNT / CRASH_FILE_PREFIX / CRASH_FILE_SUFFIX 一并删除。
 
         public static volatile String CRASH_LOG = "";
 
@@ -2597,8 +2545,7 @@ public final class LogBridge {
 
             Thread.setDefaultUncaughtExceptionHandler(this);
 
-            LogBridge.i(TAG, "全局崩溃捕获器已初始化");
-            LogBridge.d(TAG, "崩溃日志保存目录：" + getCrashDir().getAbsolutePath());
+            LogBridge.d(TAG, "全局崩溃捕获器已初始化");
             LogBridge.d(TAG, "崩溃页面显示时长：" + CRASH_PAGE_DISPLAY_DURATION / 1000 + " 秒");
             LogBridge.d(TAG, "自动重启：" + (autoRestartEnabled ? "已开启" : "已关闭"));
         }
@@ -2620,11 +2567,9 @@ public final class LogBridge {
                         PrintWriter pw = new PrintWriter(sw);
                         ex.printStackTrace(pw);
                         pw.close();
+                        // 【2026-10-28 单通道】原先此处另有 LogServer.sendCrashLog 再推一遍 WS，
+                        //   而 LogCollector 落缓冲后会经 LogListener 广播，属同一事件第二次写，已删除。
                         LogCollector.getInstance().error("CrashHandler", "mars_ignored:" + sw.toString());
-                        if (context != null) {
-                            LogServer.getInstance(context).sendCrashLog(
-                                    "【mars 黑名单免疫】\n" + sw.toString());
-                        }
                     } catch (Throwable ignored) {
                     }
                     return;
@@ -2633,22 +2578,13 @@ public final class LogBridge {
                 String crashLog = buildCrashLog(thread, ex);
 
                 CRASH_LOG = crashLog;
-                LogBridge.e(TAG, crashLog);
 
-                saveCrashLogToFile(crashLog);
-
+                // 【2026-10-28 单通道】原实现同一崩溃写 4 处：LogBridge.e(全文) + 文件 crash_*.txt
+                //   + LogCollector.crash(摘要) + LogServer.sendCrashLog(WS 再推一遍)。
+                //   现只保留缓冲一条（全文，含设备信息与堆栈），WS 由 LogListener 广播自动覆盖。
                 try {
-                    LogBridge.e(TAG, "【崩溃】" + ex.getClass().getName() + ": " + ex.getMessage());
-                    LogBridge.e(TAG, "【崩溃】详细日志已保存到文件");
-                    LogBridge.e(TAG, "【崩溃】崩溃页面将显示 " + (CRASH_PAGE_DISPLAY_DURATION / 1000) + " 秒");
-
-                    LogCollector.getInstance().crash("CrashHandler",
-                            ex.getClass().getSimpleName() + ": " + ex.getMessage());
-
-                    if (context != null) {
-                        LogServer.getInstance(context).sendCrashLog(crashLog);
-                    }
-                } catch (Exception ignored) {}
+                    LogCollector.getInstance().crash("CrashHandler", crashLog);
+                } catch (Throwable ignored) {}
 
                 startCrashActivity();
 
@@ -2730,68 +2666,11 @@ public final class LogBridge {
             } else {
                 sb.append("页面将在 ").append(CRASH_PAGE_DISPLAY_DURATION / 1000).append(" 秒后自动关闭\n");
             }
-            sb.append("详细日志已保存到本地文件，可在设置页面查看\n");
+            sb.append("崩溃详情已写入 9527 日志缓冲（/api/logs，类型 crash）\n");
 
             sb.append("\n========================================\n");
 
             return sb.toString();
-        }
-
-        private void saveCrashLogToFile(String crashLog) {
-            try {
-
-                File crashDir = getCrashDir();
-                if (!crashDir.exists()) {
-                    crashDir.mkdirs();
-                }
-
-                String fileName = CRASH_FILE_PREFIX
-                        + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date())
-                        + CRASH_FILE_SUFFIX;
-
-                File crashFile = new File(crashDir, fileName);
-
-                FileWriter writer = new FileWriter(crashFile);
-                writer.write(crashLog);
-                writer.flush();
-                writer.close();
-
-                LogBridge.d(TAG, "崩溃日志已保存：" + crashFile.getAbsolutePath());
-
-                cleanOldCrashLogs();
-
-            } catch (Exception e) {
-                LogBridge.e(TAG, "保存崩溃日志到文件失败", e);
-            }
-        }
-
-        private void cleanOldCrashLogs() {
-            try {
-                File crashDir = getCrashDir();
-                File[] files = crashDir.listFiles();
-
-                if (files == null || files.length <= MAX_CRASH_LOG_COUNT) {
-                    return;
-                }
-
-                List<File> fileList = new ArrayList<>(Arrays.asList(files));
-                Collections.sort(fileList, new Comparator<File>() {
-                    @Override
-                    public int compare(File f1, File f2) {
-                        return Long.compare(f2.lastModified(), f1.lastModified());
-                    }
-                });
-
-                for (int i = MAX_CRASH_LOG_COUNT; i < fileList.size(); i++) {
-                    File oldFile = fileList.get(i);
-                    if (oldFile.delete()) {
-                        LogBridge.d(TAG, "已删除旧的崩溃日志：" + oldFile.getName());
-                    }
-                }
-
-            } catch (Exception e) {
-                LogBridge.e(TAG, "清理旧崩溃日志失败", e);
-            }
         }
 
         private void restartApp() {
@@ -2817,7 +2696,6 @@ public final class LogBridge {
                             System.currentTimeMillis() + RESTART_DELAY,
                             pendingIntent
                     );
-                    LogBridge.d(TAG, "已设置自动重启，" + RESTART_DELAY + "ms 后启动");
                 }
 
             } catch (Exception e) {
@@ -2836,77 +2714,8 @@ public final class LogBridge {
             }
         }
 
-        private File getCrashDir() {
-            return new File(context.getFilesDir(), CRASH_DIR_NAME);
-        }
-
         private String getCurrentTime() {
             return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
-        }
-
-        public List<File> getCrashLogList() {
-            try {
-                File crashDir = getCrashDir();
-                File[] files = crashDir.listFiles();
-
-                if (files == null || files.length == 0) {
-                    return new ArrayList<>();
-                }
-
-                List<File> fileList = new ArrayList<>(Arrays.asList(files));
-                Collections.sort(fileList, new Comparator<File>() {
-                    @Override
-                    public int compare(File f1, File f2) {
-                        return Long.compare(f2.lastModified(), f1.lastModified());
-                    }
-                });
-
-                return fileList;
-
-            } catch (Exception e) {
-                LogBridge.e(TAG, "获取崩溃日志列表失败", e);
-                return new ArrayList<>();
-            }
-        }
-
-        public String getLatestCrashLog() {
-            List<File> list = getCrashLogList();
-            if (list.isEmpty()) {
-                return null;
-            }
-
-            try {
-                File latestFile = list.get(0);
-                return readFileToString(latestFile);
-            } catch (Exception e) {
-                LogBridge.e(TAG, "读取最新崩溃日志失败", e);
-                return null;
-            }
-        }
-
-        public int clearAllCrashLogs() {
-            try {
-                File crashDir = getCrashDir();
-                File[] files = crashDir.listFiles();
-
-                if (files == null || files.length == 0) {
-                    return 0;
-                }
-
-                int count = 0;
-                for (File file : files) {
-                    if (file.delete()) {
-                        count++;
-                    }
-                }
-
-                LogBridge.d(TAG, "已清空 " + count + " 个崩溃日志");
-                return count;
-
-            } catch (Exception e) {
-                LogBridge.e(TAG, "清空崩溃日志失败", e);
-                return 0;
-            }
         }
 
         private boolean isIgnoredMarsLinkError(Throwable ex) {
@@ -2947,18 +2756,6 @@ public final class LogBridge {
             }
         }
 
-        private String readFileToString(File file) {
-            try {
-                java.io.FileInputStream fis = new java.io.FileInputStream(file);
-                byte[] buffer = new byte[(int) file.length()];
-                fis.read(buffer);
-                fis.close();
-                return new String(buffer);
-            } catch (Exception e) {
-                LogBridge.e(TAG, "读取文件失败：" + file.getAbsolutePath(), e);
-                return null;
-            }
-        }
     }
 
     public static class CrashActivity extends Activity {
@@ -3077,13 +2874,11 @@ public final class LogBridge {
             rootLayout.addView(btnLayout);
             setContentView(rootLayout);
 
+            // 【2026-10-28】崩溃详情只来自内存 CRASH_LOG（文件落盘已删除，无兜底读文件）
             String crashLog = CrashHandler.CRASH_LOG;
-            if (TextUtils.isEmpty(crashLog)) {
-                crashLog = CrashHandler.getInstance().getLatestCrashLog();
-            }
 
             String errorMsg = "发生了未处理的异常";
-            String detailMsg = "无详细信息 (日志文件可能未保存)";
+            String detailMsg = "无详细信息（未捕获到崩溃上下文）";
 
             if (!TextUtils.isEmpty(crashLog)) {
                 String[] lines = crashLog.split("\n");

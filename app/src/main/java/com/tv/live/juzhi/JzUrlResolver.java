@@ -95,6 +95,16 @@ public final class JzUrlResolver {
     private static final long SPEED_PICK_TTL_MS = 10 * 60 * 1000L;
     /** 慢线路告警阈值（KB/s）：低于仅告警仍选最快的一条（全网都慢时别无选择） */
     private static final long SLOW_LINE_WARN_KBPS = 200L;
+    /**
+     * 【2026-10-27 线路面板】测速速率低于此值（KB/s）视为「线路过慢不可用」。
+     * 背景：QQ 等线路服务端防盗链对纯直连限速到 ~1KB/s（能连但卡死黑屏），
+     *   measureSpeed 在 3s 窗口内仍能测到 speed>0，原逻辑只在 speed<=0 才判死，
+     *   于是「限速黑屏线」被当成「慢但可用」永远显示可用。
+     *   引入阈值后：测速 speed 低于此值的线路同样记入失效黑名单，
+     *   在 OTT/设置面板标记「已失效」并置灰，且自动选线不再选它。
+     *   经验值：正常 HLS 首段探测在该参数下约 15~21KB/s，10 阈值只剔除明显不可用的慢线。
+     */
+    private static final long MIN_USABLE_KBPS = 10L;
 
     /**
      * 【2026-10-23 手动线路选择】用户在线路面板手动选的线路，
@@ -125,10 +135,29 @@ public final class JzUrlResolver {
         return names;
     }
 
+    /**
+     * 与 {@link #lineNames} 一一对应：每条线路是否已失效（判死且未过期）。
+     * 供 OTT 线路面板 / 设置面板「频道线路选择」标记「已失效」并置灰禁用，
+     * 避免用户选到测速失败 / 播放失败过的失效线路。
+     */
+    public static java.util.List<Boolean> lineDeadFlags(int vodId, int wantEp) {
+        java.util.List<Boolean> flags = new java.util.ArrayList<>();
+        try {
+            List<Video> all = videosOf(vodId);
+            if (all.isEmpty()) return flags;
+            List<Video> epVideos = videosOfEpisode(all, wantEp);
+            for (Video v : epVideos) {
+                flags.add(isLineDead(vodId, v.source));
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "lineDeadFlags 异常: " + t.getMessage());
+        }
+        return flags;
+    }
+
     /** 获取用户手动选择的线路索引（未选返回 -1） */
     public static int getSelectedLine(int vodId, int wantEp) {
-        String key = vodId + "@" + wantEp;
-        String sel = sManualLineSel.get(key);
+        String sel = getManualLine(vodId, wantEp);
         if (sel == null || sel.isEmpty()) return -1;
         java.util.List<String> names = lineNames(vodId, wantEp);
         for (int i = 0; i < names.size(); i++) {
@@ -152,7 +181,21 @@ public final class JzUrlResolver {
 
     /** 获取用户手动选择的线路 source 名称（无则 null） */
     public static String getManualLine(int vodId, int wantEp) {
-        return sManualLineSel.get(vodId + "@" + wantEp);
+        String key = vodId + "@" + wantEp;
+        String sel = sManualLineSel.get(key);
+        if (sel != null && !sel.isEmpty()) return sel;
+        // 【2026-10-27 修复】线路面板的 ep 取自**频道 M3U 地址**（juzhi://<vodId>，无 @ep → ep=0），
+        //   而取流用的是 EPG 切集后的 juzhi://<vodId>@<ep>（ep=1/2/…）—— 两者 key 永不相交，
+        //   导致源9 的「手动选线」被静默忽略（用户选了 qq 也照样走测速选线）。
+        //   线路选择本质是「按 source 选线路」，与集数无关 → 回退到该 vodId 下任意 ep 的手动选择。
+        String prefix = vodId + "@";
+        for (java.util.Map.Entry<String, String> e : sManualLineSel.entrySet()) {
+            if (e.getKey() != null && e.getKey().startsWith(prefix)
+                    && e.getValue() != null && !e.getValue().isEmpty()) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 
     /** 清除手动线路选择（回到服务端第一条） */
@@ -168,21 +211,47 @@ public final class JzUrlResolver {
      */
     private static boolean isPlayableM3u8(String url) {
         if (url == null || url.isEmpty()) return false;
-        // 【2026-10-26 直链媒体】非清单类直链（B 站 durl 的 mp4、m4s 等）没有 #EXTM3U 头，
+        // 【2026-10-26 直链媒体】非清单类直链（B 站 durl 的 mp4、m4s 等，扩展名正常）没有 #EXTM3U 头，
         //   做清单校验只会白下载一次并必然判负 → 直接视为可播。
         if (!looksLikePlaylist(url) && looksLikeDirectMedia(url)) {
             return true;
         }
         try {
-            String sample = M3u8AdStripper.downloadContent(
-                    url, FORMAT_CHECK_BYTES, "https://www.shenhua7.vip/");
-            if (sample == null || sample.isEmpty()) return false;
-            sample = M3u8AdStripper.decodeDecimalM3u8(sample);
-            return sample.contains("#EXTM3U");
+            // 【2026-10-27】改用字节级探针：除了 m3u8 文本，还按「真内容」识别二进制容器。
+            //   源9 存在伪装扩展名（mp4 伪装成 .image、m3u8 分片伪装成 .png），按扩展名会漏判。
+            byte[] sample = M3u8AdStripper.downloadBytes(
+                    url, FORMAT_CHECK_BYTES, "https://www.shenhua7.vip/", null);
+            if (sample == null || sample.length == 0) return false;
+            // ① 二进制容器魔数（mp4/TS/FLV）→ 直链媒体，可播
+            if (isMediaContainer(sample)) return true;
+            // ② 文本清单（含十进制混淆解码）
+            String text = new String(sample, "UTF-8");
+            text = M3u8AdStripper.decodeDecimalM3u8(text);
+            return text.contains("#EXTM3U");
         } catch (Throwable t) {
             LogBridge.w(TAG, "格式校验异常 " + t.getClass().getSimpleName() + ": " + t.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 【2026-10-27】按真内容（魔数）识别二进制媒体容器，不依赖扩展名。
+     * 覆盖：mp4(isom/ftyp)、MPEG-TS(0x47 同步)、FLV。
+     */
+    private static boolean isMediaContainer(byte[] b) {
+        if (b == null || b.length < 4) return false;
+        // mp4 / mov / m4s：第 4~8 字节为 "ftyp"（前 4 字节是 box size）
+        if (b.length >= 12 && b[4] == 'f' && b[5] == 't' && b[6] == 'y' && b[7] == 'p') {
+            return true;
+        }
+        // TS：首字节 0x47（同步字节），且（若足够长）第 188 字节也是 0x47
+        if (b[0] == 0x47) {
+            if (b.length < 188) return true;
+            if (b[188] == 0x47) return true;
+        }
+        // FLV：前 3 字节 "FLV"
+        if (b[0] == 'F' && b[1] == 'L' && b[2] == 'V') return true;
+        return false;
     }
 
     /**
@@ -300,12 +369,30 @@ public final class JzUrlResolver {
             for (Video v : epVideos) {
                 if (!v.source.equals(manualSource)) continue;
                 String m3u8 = fetchPlayUrl(v);
+                // 【2026-10-27 修复】手动选线同样要处理「网页播放页」线路。
+                //   之前只取服务端 videoUsableUrl 的原样返回值：qq 线路服务端回显的是
+                //   v.qq.com/x/cover/...html 网页 → isPlayableM3u8 判 false → 明明手动选了 qq
+                //   也被静默回退到测速选线（用户体感=「手动选线没用」）。
+                //   现在与 probeLine 同口径：网页型先走 JS 插件解析出真实 m3u8 再校验。
+                if (m3u8 != null && looksLikeHtmlPage(m3u8)) {
+                    LogBridge.d(TAG, "手动选线[" + manualSource + "] 是网页播放页，先 web 解析: " + brief(m3u8));
+                    PlayResult wr = resolveWebLineResult(m3u8, null);
+                    if (wr != null && !TextUtils.isEmpty(wr.url)) {
+                        m3u8 = wr.url;
+                        if (!wr.headers.isEmpty()) {
+                            sPlayHeaders = wr.headers;
+                        }
+                    } else {
+
+                        break;
+                    }
+                }
                 if (m3u8 != null && isPlayableM3u8(m3u8)) {
-                    LogBridge.i(TAG, "使用手动选线[" + manualSource + "(" + v.sourceCn
+                    LogBridge.d(TAG, "使用手动选线[" + manualSource + "(" + v.sourceCn
                             + ")] vodId=" + vodId + " ep=" + wantEp);
                     return m3u8;
                 }
-                LogBridge.w(TAG, "手动选线[" + manualSource + "] 不可播，回退测速选线");
+
                 break;
             }
         }
@@ -315,7 +402,7 @@ public final class JzUrlResolver {
         List<Video> alive = new java.util.ArrayList<>();
         for (Video v : epVideos) {
             if (isLineDead(vodId, v.source)) {
-                LogBridge.i(TAG, "跳过已判死线路[" + v.source + "] vodId=" + vodId);
+
                 continue;
             }
             alive.add(v);
@@ -337,32 +424,34 @@ public final class JzUrlResolver {
             return picked.url;
         }
 
-        // ③ 测速全失败 → 服务端第一条顺序降级（跳过不可播的，避免选到 iqiyi 网页 URL 导致黑屏）
+        // ③ 测速全失败 → 服务端第一条顺序降级（跳过不可播/刚判死的过慢线路，避免选到黑屏线）
         for (int i = 0; i < alive.size(); i++) {
             Video v = alive.get(i);
+            if (isLineDead(vodId, v.source)) continue;  // 跳过本轮刚判死的限速线
             String m3u8 = fetchPlayUrl(v);
             if (TextUtils.isEmpty(m3u8)) {
-                LogBridge.w(TAG, "线路[" + v.source + "] 直链获取失败，试下一条");
+                LogBridge.d(TAG, "线路[" + v.source + "] 直链获取失败，试下一条");
                 continue;
             }
             // 【2026-10-26 网页线路】下发的是 HTML 播放页 → 走 web 解析拿真实 m3u8
             //   【2026-10-26 收窄】改用 looksLikeHtmlPage：只有真正的网页（.html 或已知视频站）
             //   才进 web 解析；图片 URL / 裸 vid 等非网页直接判不可达，不再浪费 30s WebView 兜底。
             if (looksLikeHtmlPage(m3u8)) {
-                LogBridge.w(TAG, "线路[" + v.source + "] 是网页播放页，走 web 解析: " + brief(m3u8));
-                String web = resolveWebLineUrl(m3u8, null);
-                if (TextUtils.isEmpty(web)) {
-                    LogBridge.w(TAG, "线路[" + v.source + "] web 解析失败，试下一条");
+
+                PlayResult webPr = resolveWebLineResult(m3u8, null);
+                if (webPr == null || TextUtils.isEmpty(webPr.url)) {
+
                     continue;
                 }
-                m3u8 = web;
+                if (!webPr.headers.isEmpty()) sPlayHeaders = webPr.headers;
+                m3u8 = webPr.url;
             }
             if (!isPlayableM3u8(m3u8)) {
-                LogBridge.w(TAG, "线路[" + v.source + "] 非标准 m3u8，试下一条");
+
                 continue;
             }
-            LogBridge.i(TAG, "使用服务端第" + (i + 1) + "条线路[" + v.source + "("
-                    + v.sourceCn + ")] vodId=" + vodId + " ep=" + wantEp);
+
+
             rememberPickedLine(vodId, v.source);
             return m3u8;
         }
@@ -421,6 +510,19 @@ public final class JzUrlResolver {
         if (TextUtils.isEmpty(pageUrl)) return null;
         final java.util.Map<String, String> outHeaders = new java.util.LinkedHashMap<>();
         if (headers != null) outHeaders.putAll(headers);
+        // 【2026-10-27 方案A】QQ 线路：解析阶段预取游客 Cookie + 强制 Referer=v.qq.com，
+        //   注入播放头，使后续测速/播放请求带齐浏览器会话身份（解除盗链层限速的关键）。
+        if (pageUrl.contains("v.qq.com")) {
+            prefetchQqCookie(pageUrl);
+            String qqCookie = getQqCookie();
+            outHeaders.put("Referer", "https://v.qq.com/");
+            if (qqCookie != null && !qqCookie.isEmpty()) {
+                outHeaders.put("Cookie", qqCookie);
+                LogBridge.i(TAG, "QQ 线路注入游客 Cookie 到播放头");
+            } else {
+                LogBridge.w(TAG, "QQ 线路未取到游客 Cookie，仅注入 Referer");
+            }
+        }
         // ① 轻量正则（限长下载：网页动辄几百 KB，全量下载会吃掉整个解析预算）
         try {
             String page = downloadSmallLimited(pageUrl, outHeaders, WEB_PAGE_PROBE_BYTES);
@@ -429,7 +531,7 @@ public final class JzUrlResolver {
                 while (m.find()) {
                     String cand = m.group(0);
                     if (isPlayableM3u8(cand)) {
-                        LogBridge.i(TAG, "网页线路：正则提取到内嵌 m3u8: " + brief(cand));
+
                         return new PlayResult(cand, outHeaders, null);
                     }
                 }
@@ -439,7 +541,7 @@ public final class JzUrlResolver {
 
         android.content.Context ctx = sAppContext;
         if (ctx == null) {
-            LogBridge.w(TAG, "网页线路：未注入 Context，跳过 JS 插件/WebView 解析: " + brief(pageUrl));
+            LogBridge.d(TAG, "网页线路：未注入 Context，跳过 JS 插件/WebView 解析: " + brief(pageUrl));
             return null;
         }
         // ② 咪咕 JS 插件
@@ -456,14 +558,11 @@ public final class JzUrlResolver {
                     if (!hdrs.isEmpty()) {
                         sPlayHeaders = hdrs;
                         outHeaders.putAll(hdrs);
-                        LogBridge.i(TAG, "网页线路：JS 插件解析成功（含播放头 " + hdrs.size()
-                                + " 项）: " + brief(parsed));
                     } else {
-                        LogBridge.i(TAG, "网页线路：JS 插件解析成功: " + brief(parsed));
                     }
                     return new PlayResult(parsed, outHeaders, null);
                 }
-                LogBridge.w(TAG, "网页线路：JS 插件返回不可播地址: " + brief(raw));
+                LogBridge.i(TAG, "网页线路：JS 插件返回不可播地址: " + brief(raw));
             }
         } catch (Throwable t) {
             LogBridge.w(TAG, "网页线路：JS 插件解析异常 " + t.getClass().getSimpleName()
@@ -473,7 +572,7 @@ public final class JzUrlResolver {
         try {
             String parsed = com.tv.live.renyibo.WebVideoResolver.get(ctx).resolve(pageUrl);
             if (!TextUtils.isEmpty(parsed) && looksLikeM3u8(parsed)) {
-                LogBridge.i(TAG, "网页线路：WebView 解析成功: " + brief(parsed));
+                LogBridge.d(TAG, "网页线路：WebView 解析成功: " + brief(parsed));
                 return new PlayResult(parsed, outHeaders, null);
             }
         } catch (Throwable t) {
@@ -656,11 +755,11 @@ public final class JzUrlResolver {
         sDeadLines.put(key, System.currentTimeMillis());
         // 同时作废该片的测速缓存，否则下次选线还会命中这条死线路
         sSpeedPickCache.remove(String.valueOf(vodId));
-        LogBridge.w(TAG, "线路[" + source + "] 已判死（vodId=" + vodId + "），后续选线将跳过");
+
     }
 
-    /** 该线路是否已判死（且未过期） */
-    private static boolean isLineDead(int vodId, String source) {
+    /** 该线路是否已判死（且未过期）。供 OTT/设置线路面板标记并置灰失效线路。 */
+    public static boolean isLineDead(int vodId, String source) {
         if (TextUtils.isEmpty(source)) return false;
         Long ts = sDeadLines.get(vodId + "|" + source);
         if (ts == null) return false;
@@ -708,15 +807,15 @@ public final class JzUrlResolver {
             // 【2026-10-26】缓存线路若已判死（播放失败过）→ 不可复用，
             //   否则会一次又一次拿回同一条死地址 → 起播失败 → 再来一次（一直重复播放）。
             if (isLineDead(vodId, src)) {
-                LogBridge.i(TAG, "测速选线缓存命中但线路[" + src + "]已判死，重新选线 vodId=" + vodId);
+                LogBridge.d(TAG, "测速选线缓存命中但线路[" + src + "]已判死，重新选线 vodId=" + vodId);
                 sSpeedPickCache.remove(key);
             } else {
                 for (Video v : epVideos) {
                     if (src != null && src.equals(v.source)) {
-                        LogBridge.i(TAG, "测速选线命中缓存 → [" + src + "] vodId=" + vodId + " ep=" + wantEp);
+
                         PlayResult r = fetchPlayUrlEx(v);
                         if (r != null && !TextUtils.isEmpty(r.url)) return r;
-                        LogBridge.w(TAG, "缓存线路[" + src + "]当前集不可用，重新测速");
+
                         break;
                     }
                 }
@@ -724,7 +823,6 @@ public final class JzUrlResolver {
             }
         }
 
-        LogBridge.i(TAG, "测速选线开始：候选 " + epVideos.size() + " 条 vodId=" + vodId + " ep=" + wantEp);
         final ProbeOutcome[] outcomes = new ProbeOutcome[epVideos.size()];
         java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(
                 Math.min(SPEED_PROBE_CONCURRENCY, epVideos.size()), r -> {
@@ -741,9 +839,9 @@ public final class JzUrlResolver {
                 outcomes[idx] = o;
                 String name = TextUtils.isEmpty(v.sourceCn) ? v.source : v.source + "(" + v.sourceCn + ")";
                 if (o.speed > 0) {
-                    LogBridge.i(TAG, "测速线路#" + (idx + 1) + " [" + name + "] " + o.speed + "KB/s");
+
                 } else {
-                    LogBridge.w(TAG, "测速线路#" + (idx + 1) + " [" + name + "] 不可达");
+
                 }
             }));
         }
@@ -752,7 +850,7 @@ public final class JzUrlResolver {
         for (java.util.concurrent.Future<?> f : futures) {
             long remain = deadline - System.currentTimeMillis();
             if (remain <= 0) {
-                LogBridge.w(TAG, "测速选线超过总时限 " + SPEED_PICK_MAX_WAIT_MS + "ms，按已完成结果择优");
+
                 break;
             }
             try {
@@ -765,21 +863,35 @@ public final class JzUrlResolver {
         int best = -1;
         long bestSpeed = -1;
         for (int i = 0; i < outcomes.length; i++) {
-            if (outcomes[i] != null && outcomes[i].speed > bestSpeed) {
+            // 只从「速率达标」的线路里挑最快：否则会把限速黑屏线当成"最快"选去播放
+            if (outcomes[i] != null && outcomes[i].speed >= MIN_USABLE_KBPS
+                    && outcomes[i].speed > bestSpeed) {
                 bestSpeed = outcomes[i].speed;
                 best = i;
             }
         }
+        // 【2026-10-27 线路面板】测速不可达 / 过慢的线路记入失效黑名单，
+        // 使「测速失败 / 限速黑屏」也能在 OTT/设置面板被标记「已失效」并置灰。
+        // 必须放在 sSpeedPickCache.put 之前：否则下面 markLineDead 的缓存失效会清掉刚选的最快线路。
+        for (int i = 0; i < outcomes.length; i++) {
+            if (i < epVideos.size() && outcomes[i] != null
+                    && outcomes[i].speed < MIN_USABLE_KBPS) {
+
+
+
+                markLineDead(vodId, epVideos.get(i).source);
+            }
+        }
+
         if (best < 0 || outcomes[best].play == null) {
-            LogBridge.w(TAG, "测速选线：全部线路不可达，回退服务端顺序");
+            LogBridge.i(TAG, "测速选线：全部线路不可达，回退服务端顺序");
             return null;
         }
         if (bestSpeed < SLOW_LINE_WARN_KBPS) {
-            LogBridge.w(TAG, "测速选线：最快线路仅 " + bestSpeed + "KB/s（低于 "
+            LogBridge.i(TAG, "测速选线：最快线路仅 " + bestSpeed + "KB/s（低于 "
                     + SLOW_LINE_WARN_KBPS + "KB/s 告警线），全网偏慢");
         }
         sSpeedPickCache.put(key, new Object[]{epVideos.get(best).source, System.currentTimeMillis()});
-        LogBridge.i(TAG, "测速选线完成 → 第" + (best + 1) + "条 " + bestSpeed + "KB/s");
         return outcomes[best].play;
     }
 
@@ -795,10 +907,10 @@ public final class JzUrlResolver {
         //   否则会把网页里随便一行 URL 当分片（下载又快）→ 网页被选成"最快线路"，落地必播不出。
         //   【2026-10-26 收窄】改用 looksLikeHtmlPage：非网页（图片/裸 vid）直接判不可达。
         if (looksLikeHtmlPage(r.url)) {
-            LogBridge.w(TAG, "线路[" + v.source + "] 是网页播放页，测速前先 web 解析: " + brief(r.url));
+
             PlayResult wr = resolveWebLineResult(r.url, r.headers);
             if (wr == null || TextUtils.isEmpty(wr.url)) {
-                LogBridge.w(TAG, "线路[" + v.source + "] web 解析失败，判不可达");
+
                 return new ProbeOutcome(-1, null);
             }
             // 【2026-10-26】用带播放头的结果（B 站直链缺 Referer 会 403）
@@ -815,6 +927,63 @@ public final class JzUrlResolver {
             seg = r.url;
         }
         return new ProbeOutcome(measureSpeed(seg, r.headers), r);
+    }
+
+    // ===================== 【2026-10-27 方案A】QQ 线路游客会话身份 =====================
+    // QQ 分片直连限速本质是「缺浏览器会话身份（Cookie/Referer）被当盗链/异常流量」。
+    // 解析阶段预取 v.qq.com 游客 Cookie 并强制 Referer，使测速/播放请求带齐身份，
+    // 验证限速是否仅为盗链识别层。若有效 → QQ 线路复活；若仍限速 → 确属签名层，再上 WebView。
+    private static final long QQ_COOKIE_TTL_MS = 5 * 60 * 1000L;
+    private static volatile long sQqCookieTs = 0L;
+    private static volatile String sQqCookie = null;
+
+    private static String getQqCookie() {
+        if (sQqCookie != null
+                && System.currentTimeMillis() - sQqCookieTs < QQ_COOKIE_TTL_MS) {
+            return sQqCookie;
+        }
+        return null;
+    }
+
+    /** 预取 v.qq.com 游客 Cookie（只取响应头 Set-Cookie，不下 body），缓存 5 分钟复用 */
+    private static void prefetchQqCookie(String pageUrl) {
+        if (getQqCookie() != null) return;  // 缓存有效，跳过
+        try {
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
+                    new java.net.URL(pageUrl).openConnection(java.net.Proxy.NO_PROXY);
+            conn.setConnectTimeout(PROBE_CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(PROBE_READ_TIMEOUT_MS);
+            conn.setRequestMethod("GET");
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent",
+                    "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36");
+            conn.setRequestProperty("Referer", "https://v.qq.com/");
+            java.util.Map<String, java.util.List<String>> hf = conn.getHeaderFields();
+            StringBuilder sb = new StringBuilder();
+            if (hf != null) {
+                java.util.List<String> sc = hf.get("Set-Cookie");
+                if (sc == null) sc = hf.get("set-cookie");
+                if (sc != null) {
+                    for (String c : sc) {
+                        if (c == null) continue;
+                        String pair = c.split(";", 2)[0];
+                        if (pair != null && !pair.trim().isEmpty()) {
+                            if (sb.length() > 0) sb.append("; ");
+                            sb.append(pair.trim());
+                        }
+                    }
+                }
+            }
+            conn.disconnect();
+            if (sb.length() > 0) {
+                sQqCookie = sb.toString();
+                sQqCookieTs = System.currentTimeMillis();
+            } else {
+                LogBridge.i(TAG, "QQ 游客 Cookie 预取为空（播放页未下发 Set-Cookie）");
+            }
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "QQ 游客 Cookie 预取异常: " + t.getMessage());
+        }
     }
 
     /**
@@ -838,6 +1007,11 @@ public final class JzUrlResolver {
             String referer = headerValue(headers, "referer");
             if (referer != null && !referer.isEmpty()) {
                 conn.setRequestProperty("Referer", referer);
+            }
+            // 【2026-10-27 方案A】QQ 线路：带上游客 Cookie（来自播放页预取），解除盗链层限速
+            String cookie = headerValue(headers, "cookie");
+            if (cookie != null && !cookie.isEmpty()) {
+                conn.setRequestProperty("Cookie", cookie);
             }
             conn.setRequestProperty("Range", "bytes=0-" + (SPEED_PROBE_MAX_BYTES - 1));
             int code = conn.getResponseCode();
@@ -879,7 +1053,7 @@ public final class JzUrlResolver {
         //   网页被选成"最快线路"，落地后播放器拿到的是网页，自然一直播不出来。
         //   这里先校验是不是真清单（含 #EXTM3U），不是就判该线路不可用。
         if (!content.contains("#EXTM3U")) {
-            LogBridge.w(TAG, "线路内容不是 m3u8 清单（疑似网页播放页），判该线路不可用: "
+            LogBridge.i(TAG, "线路内容不是 m3u8 清单（疑似网页播放页），判该线路不可用: "
                     + m3u8Url.substring(0, Math.min(80, m3u8Url.length())));
             return null;
         }
@@ -988,7 +1162,7 @@ public final class JzUrlResolver {
 
         String idStr = vodIdOf(url);
         if (TextUtils.isEmpty(idStr)) {
-            LogBridge.w(TAG, "resolve: vodId 为空 url=" + url);
+            LogBridge.i(TAG, "resolve: vodId 为空 url=" + url);
             return null;
         }
         int vodId;
@@ -1009,7 +1183,7 @@ public final class JzUrlResolver {
         // 【2026-10-23 源9】同一集取全部线路，按服务端顺序取第一条可用线路
         List<Video> epVideos = videosOfEpisode(videos, wantEp);
         if (epVideos.isEmpty()) {
-            LogBridge.w(TAG, "resolve: 未找到匹配集 vodId=" + vodId + " ep=" + wantEp);
+            LogBridge.i(TAG, "resolve: 未找到匹配集 vodId=" + vodId + " ep=" + wantEp);
             return null;
         }
         String playUrl = selectBestPlayUrl(vodId, wantEp, epVideos);
@@ -1085,7 +1259,7 @@ public final class JzUrlResolver {
         }
         String playUrl = JzProtocol.str(data, 1);
         if (TextUtils.isEmpty(playUrl)) {
-            LogBridge.w(TAG, "resolveLive: play_url 为空 msg=" + JzProtocol.str(data, 9));
+            LogBridge.i(TAG, "resolveLive: play_url 为空 msg=" + JzProtocol.str(data, 9));
             return null;
         }
         // 【2026-10-23 修复5】直播线路同样下发防盗链播放头（ParsePlayUrlBean.headers=6）

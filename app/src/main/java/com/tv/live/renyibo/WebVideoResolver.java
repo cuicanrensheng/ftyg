@@ -130,7 +130,6 @@ public final class WebVideoResolver {
         // 检查缓存
         String cached = cache.get(cacheKey);
         if (cached != null) {
-            LogBridge.d(TAG, "解析命中缓存: " + cacheKey + " -> " + cached);
             return cached;
         }
 
@@ -152,14 +151,12 @@ public final class WebVideoResolver {
                     return;
                 }
 
-                LogBridge.i(TAG, "开始解析页面: " + pageUrl);
 
                 // 设置 WebViewClient 监听页面加载
                 webView.setWebViewClient(new WebViewClient() {
                     @Override
                     public void onPageFinished(WebView view, String url) {
                         super.onPageFinished(view, url);
-                        LogBridge.d(TAG, "页面加载完成: " + url);
                         // 【2026-10-18 双声道修复】站点播放器会自动播放并出声，而我们是把这个
                         // WebView 当「取地址工具」用，真正出声的是 ExoPlayer → 两路音频同时响
                         // （一路是正片进度，一路是刚从头开始）。页面一加载完立即静音。
@@ -208,7 +205,6 @@ public final class WebVideoResolver {
 
         if (result != null) {
             cache.put(cacheKey, result);
-            LogBridge.i(TAG, "解析成功: " + cacheKey + " -> " + result);
         }
         return result;
     }
@@ -285,7 +281,7 @@ public final class WebVideoResolver {
     private void pollVideoSource(WebView view, AtomicReference<String> resultRef,
                                   CountDownLatch latch, int attempt) {
         if (attempt >= MAX_POLL_COUNT) {
-            LogBridge.w(TAG, "轮询达到最大次数，未找到 video 元素");
+            LogBridge.i(TAG, "轮询达到最大次数，未找到 video 元素");
             latch.countDown();
             return;
         }
@@ -362,7 +358,6 @@ public final class WebVideoResolver {
                     "Chrome/91.0.4472.120 Mobile Safari/537.36");
             webView.setWebChromeClient(new WebChromeClient());
             initialized = true;
-            LogBridge.i(TAG, "WebView 初始化成功");
         } catch (Exception e) {
             LogBridge.e(TAG, "WebView 初始化失败: " + e.getMessage());
             webView = null;
@@ -386,7 +381,6 @@ public final class WebVideoResolver {
      */
     public void clearCache() {
         cache.clear();
-        LogBridge.i(TAG, "解析缓存已清除");
     }
 
     /**
@@ -412,13 +406,11 @@ public final class WebVideoResolver {
                     return;
                 }
 
-                LogBridge.i(TAG, "开始解析片单页面: " + playlistUrl);
 
                 webView.setWebViewClient(new WebViewClient() {
                     @Override
                     public void onPageFinished(WebView view, String url) {
                         super.onPageFinished(view, url);
-                        LogBridge.d(TAG, "片单页面加载完成: " + url);
                         // 等待 JS 渲染后提取视频链接
                         pollPlaylistLinks(view, resultRef, latch, 0, new String[2]);
                     }
@@ -471,8 +463,6 @@ public final class WebVideoResolver {
                 item.put("title", title);
                 result.add(item);
             }
-            LogBridge.i(TAG, "片单解析成功: " + playlistUrl + " -> " + result.size()
-                    + " 部（剔除站点推荐 " + skipped + " 条）");
             return result;
         } catch (Exception e) {
             LogBridge.w(TAG, "片单结果解析失败: " + e.getMessage());
@@ -505,7 +495,7 @@ public final class WebVideoResolver {
                 LogBridge.w(TAG, "片单轮询达上限，退回最后一轮结果（疑似主体未渲染）");
                 resultRef.set(state[1]);
             } else {
-                LogBridge.w(TAG, "片单轮询达到最大次数，未找到视频链接");
+                LogBridge.i(TAG, "片单轮询达到最大次数，未找到视频链接");
             }
             latch.countDown();
             return;
@@ -637,7 +627,6 @@ public final class WebVideoResolver {
                     return;
                 }
 
-                LogBridge.i(TAG, "开始解析片单列表页: " + playlistsUrl);
 
                 webView.setWebViewClient(new WebViewClient() {
                     @Override
@@ -674,7 +663,6 @@ public final class WebVideoResolver {
                 item.put("title", obj.optString("title", ""));
                 result.add(item);
             }
-            LogBridge.i(TAG, "片单列表解析成功: " + playlistsUrl + " -> " + result.size() + " 个片单");
             return result;
         } catch (Exception e) {
             LogBridge.w(TAG, "片单列表结果解析失败: " + e.getMessage());

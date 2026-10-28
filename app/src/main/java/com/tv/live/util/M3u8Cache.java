@@ -87,7 +87,7 @@ public class M3u8Cache {
      */
     public synchronized void clear() {
         cache.clear();
-        LogBridge.i("M3u8Cache", "缓存已清空");
+        LogBridge.d("M3u8Cache", "缓存已清空");
     }
 
     /**

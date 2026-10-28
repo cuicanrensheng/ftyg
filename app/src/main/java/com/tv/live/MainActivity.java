@@ -826,7 +826,7 @@ public class MainActivity extends AppCompatActivity {
         }
         splashDismissed = true;
         try {
-            LogBridge.i("MainActivity", "【启动图】淡出覆盖层: " + reason);
+            LogBridge.d("MainActivity", "【启动图】淡出覆盖层: " + reason);
         } catch (Throwable ignored) {
         }
         if (splashOverlay == null) return;
@@ -1048,7 +1048,7 @@ public class MainActivity extends AppCompatActivity {
                                 ? "?" : mPlayerManager.getCurrentChannel().getName();
                         log("【" + (fromCache ? "缓存" : "网络") + "】当前播放的是外部频道（" + playingName
                                 + "，不在直播源列表）→ 直播源列表已更新，但不改动播放");
-                        LogBridge.i("MainActivity", "【外部频道保护】正在播放虎牙等外部频道（" + playingName
+                        LogBridge.d("MainActivity", "【外部频道保护】正在播放虎牙等外部频道（" + playingName
                                 + "），直播源" + (fromCache ? "缓存" : "网络") + "刷新不触发自动起播");
                         return;
                     }
@@ -1653,8 +1653,8 @@ public class MainActivity extends AppCompatActivity {
         if (!sp.getBoolean("debug_log_enable", false)) {
             return;
         }
-        LogBridge.d("MainActivity", msg);
-
+        // 【2026-10-27 日志单写】原为 LogBridge.d + collector.addLog 双写（同一句占两格）；
+        //   collector.addLog 内部会 echo 到 logcat，保留这一条即可。
         LogCollector.getInstance().addLog("播放", msg);
     }
 

@@ -115,7 +115,7 @@ public class SeekHintBar extends LinearLayout {
         handler.removeCallbacks(hideTask);
         handler.postDelayed(hideTask, HIDE_DELAY_MS);
         post(this::applyProgress);
-        com.tv.live.util.LogBridge.i("SeekHint", "显示 " + fmt(targetMs) + " / " + fmt(durationMs)
+        com.tv.live.util.LogBridge.d("SeekHint", "显示 " + fmt(targetMs) + " / " + fmt(durationMs)
                 + " 步长=" + deltaMs + "ms 可见=" + (getVisibility() == View.VISIBLE));
     }
 

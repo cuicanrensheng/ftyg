@@ -603,15 +603,13 @@ public class WebServerManager {
                     // 自然 Broken pipe 退出（见下方修复4，不再 cancel(true) 一刀切）。
                     future.get(SEG_FETCH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 } catch (Exception e) {
-                    // 【2026-10-23 修复4】去掉 future.cancel(true)：
-                    //   interrupt 会把「正在途中的大分片」一刀切掉，慢速 CDN 下永远下不完；
-                    //   播放器已放弃时会自己关 socket，任务写 socket 立刻 Broken pipe 退出；
-                    //   CDN stall 时任务受上游 30s 读不活动超时约束自动退出——都不需要外力取消。
-                    LogBridge.w("WebServer", "分片代理超时或异常（不取消在途下载，任其自然结束）: " + e.getMessage());
-                    try {
-                        socket.close();
-                    } catch (Exception ignored) {
-                    }
+                    // 【2026-10-29 修复】future.get 超时（SEG_FETCH_TIMEOUT_MS=60s 总时长硬顶）仅表示
+                    //   "调用方不再阻塞等待"，不再强制关闭与播放器的 socket —— 否则正在途的分片被中途
+                    //   掐断，播放器读到 unexpected end of stream（premature EOF，见 13:51:16 日志）。
+                    //   任务内的流式回传会继续把字节写给播放器，直到上游 EOF（正常收尾 1255 行 close）
+                    //   或播放器放弃（写 socket 抛 Broken pipe 自然退出）；上游真卡死由
+                    //   SEG_READ_TIMEOUT_MS=30s 读不活动超时兜底。遵循「任其自然结束」的本意。
+                    LogBridge.w("WebServer", "分片代理总时长达上限，交由在途回传自然结束（不强制关闭播放器连接）: " + e.getMessage());
                 } finally {
                     // 仅移除自己的映射（并发同 key 请求可能已换成新的 future）
                     pendingTsRequests.remove(cacheKey, future);

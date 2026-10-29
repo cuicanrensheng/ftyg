@@ -32,8 +32,8 @@ android {
         applicationId "com.tv.live"
         minSdk 21
         targetSdk 36
-        versionCode 279
-        versionName "2.0.279"
+        versionCode 280
+        versionName "2.0.280"
         resConfigs "zh"
         multiDexEnabled true
 
@@ -478,23 +478,50 @@ def mappingReleaseDirAtConfig = new File(project.layout.buildDirectory.get().asF
 tasks.matching { it.name == 'shrinkReleaseRes' }.configureEach {
     doFirst {
         File f = new File(mappingReleaseDirAtConfig, 'resources.txt')
-        if (f.exists()) {
-            try { f.setWritable(true) } catch (Throwable ignored) { }
-            long t0 = System.currentTimeMillis()
-            boolean ok = f.delete()
-            while (!ok && (System.currentTimeMillis() - t0) < 15000L) {
-                Thread.sleep(500L)
-                ok = f.delete()
-            }
-            long waited = System.currentTimeMillis() - t0
-            if (ok) {
-                if (waited >= 500L) {
-                    logger.lifecycle("[lock-fix] resources.txt 被残留句柄占用，等待 ${waited}ms 后已预删（任务将重建）")
-                }
-            } else {
-                logger.lifecycle("[lock-fix] resources.txt 等待 ${waited}ms 仍无法删除（非 Gradle 残留句柄），" +
-                        "请执行 gradlew --stop 后重试，或用 _who_locks.ps1 查持有进程")
+        if (!f.exists()) return
+        try { f.setWritable(true) } catch (Throwable ignored) { }
+        long t0 = System.currentTimeMillis()
+        boolean cleared = f.delete()
+        if (!cleared) {
+            // delete 失败：多半是被外部进程（Defender/索引器）锁。Windows 下 rename 常能绕过文件锁，
+            // 把旧文件移走，使 shrinkReleaseRes 能创建全新的 resources.txt（新句柄，不受旧锁影响）。
+            for (int i = 0; i < 40 && !cleared; i++) {
+                try {
+                    File moved = new File(mappingReleaseDirAtConfig, "resources.txt.bak-${System.nanoTime()}")
+                    if (f.renameTo(moved)) {
+                        cleared = true
+                        logger.lifecycle("[lock-fix] resources.txt 被外部进程占用且 delete 失败，已 rename 移走以绕过文件锁")
+                    }
+                } catch (Throwable ignored) { }
+                if (!cleared) Thread.sleep(500L)
             }
         }
+        long waited = System.currentTimeMillis() - t0
+        if (!cleared) {
+            logger.lifecycle("[lock-fix] resources.txt 在 ${waited}ms 内仍无法 delete/rename（疑似 Defender/索引器独占锁）；" +
+                    "建议将 build 目录加入 Windows Defender 排除：Add-MpPreference -ExclusionPath \"${mappingReleaseDirAtConfig.absolutePath}\"")
+        } else if (waited >= 500L) {
+            logger.lifecycle("[lock-fix] resources.txt 占用 ${waited}ms 后已让道，任务将重建")
+        }
+    }
+    doLast {
+        // 用户要求：不再保留 resources.txt 这份资源压缩映射报告。
+        // 说明：AGP 在 shrinkResources=true 时由 ResourceShrinker 在分析阶段必然写出该文件，
+        //   下游任务不读取它、也不进 APK，AGP 无单独开关"不生成"。因此只能任务结束后主动删掉。
+        // 附带根治文件锁：删掉后下次构建时 resources.txt 不存在，doFirst 直接跳过，
+        //   aapt2 以全新文件重建，彻底绕开"覆盖已锁旧文件"导致的「拒绝访问」。
+        try {
+            File dir = mappingReleaseDirAtConfig
+            if (dir.exists()) {
+                File report = new File(dir, 'resources.txt')
+                if (report.exists()) { try { report.delete() } catch (Throwable ignored) { } }
+                File[] bakFiles = dir.listFiles(new FileFilter() {
+                    boolean accept(File fn) { return fn.name.startsWith('resources.txt.bak-') }
+                })
+                if (bakFiles != null) {
+                    for (File b : bakFiles) { try { b.delete() } catch (Throwable ignored) { } }
+                }
+            }
+        } catch (Throwable ignored) { }
     }
 }

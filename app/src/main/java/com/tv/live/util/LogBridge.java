@@ -1261,6 +1261,7 @@ public final class LogBridge {
                 }
             } else if ("/api/info".equals(path) || "/api/logs".equals(path)
                     || "/api/cache".equals(path) || "/api/perf".equals(path)
+                    || "/api/bootlog".equals(path)
                     || "/logs".equals(path) || "/ui".equals(path)
                     || (path != null && path.startsWith("/api/cache/clean"))) {
                 if (!isSensitiveAllowed(clientSocket, request)) {
@@ -1280,6 +1281,8 @@ public final class LogBridge {
                 sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(info));
             } else if ("/api/logs".equals(path)) {
                 handleApiLogs(out, request);
+            } else if ("/api/bootlog".equals(path)) {
+                handleApiBootLog(out);
             } else if ("/api/token".equals(path)) {
                 Map<String, Object> result = new HashMap<>();
                 result.put("token", token);
@@ -1665,6 +1668,27 @@ public final class LogBridge {
             } catch (Throwable e) {
                 return -1;
             }
+        }
+
+        private void handleApiBootLog(java.io.OutputStream out) throws Exception {
+            Map<String, Object> result = new HashMap<>();
+            java.io.File bootLog = new java.io.File(context.getFilesDir(), "boot_logs.txt");
+            if (bootLog.exists()) {
+                java.io.FileInputStream fis = new java.io.FileInputStream(bootLog);
+                byte[] buf = new byte[(int) Math.min(bootLog.length(), 1024 * 1024)];
+                int n = fis.read(buf);
+                fis.close();
+                String content = n > 0 ? new String(buf, 0, n, "UTF-8") : "";
+                result.put("exists", true);
+                result.put("size", bootLog.length());
+                result.put("content", content);
+            } else {
+                result.put("exists", false);
+                result.put("size", 0);
+                result.put("content", "");
+            }
+            result.put("timestamp", System.currentTimeMillis());
+            sendHttpResponse(out, "HTTP/1.0 200 OK", "application/json", gson.toJson(result));
         }
 
         private void handleApiLogs(java.io.OutputStream out, String request) throws Exception {

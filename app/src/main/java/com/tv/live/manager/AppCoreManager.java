@@ -727,6 +727,8 @@ public class AppCoreManager {
         content = com.tv.live.afhgrj.AfhgrjSourceLoader.rewritePosterHostsPublic(content);
         String[] lines = content.split("\n");
         String currentName = "";
+        String currentBaseName = "";  // 【2026-10-28 多线路】剥「·备用N」后的频道名（归并键/显示名）
+        String currentLineLabel = ""; // 【2026-10-28 多线路】本条线路标签（"备用N"；主线路为空）
         String currentGroup = "未分类";
         String currentTvgId = "";
         String currentLogo = "";   // 【2026-09-29 频道台标】
@@ -747,7 +749,8 @@ public class AppCoreManager {
                 }
                 if (!group.isEmpty()) currentGroup = group;
                 pendingM3uUri = false;
-                currentName = ""; currentTvgId = ""; currentLogo = "";
+                currentName = ""; currentBaseName = ""; currentLineLabel = "";
+                currentTvgId = ""; currentLogo = "";
                 continue;
             }
 
@@ -760,11 +763,15 @@ public class AppCoreManager {
                     String diypName = line.substring(0, diypComma).trim();
                     String diypUri = line.substring(diypComma + 1).trim();
                     // 【2026-10-07】接受协议串（renyibo:// 等），否则源5缓存永远解析失败 → 首播被网络刷新卡死
-                    if (!diypName.isEmpty() && com.tv.live.PlaylistParser.isSupportedUri(diypUri)) {
+                    // 【2026-10-28 多线路归并】DIY 行同样可能是「台名·备用N」，按 base 名归并。
+                    String diypBase = com.tv.live.PlaylistParser.baseChannelName(diypName);
+                    String diypLabel = com.tv.live.PlaylistParser.backupLineLabel(diypName);
+                    if (!diypBase.isEmpty() && com.tv.live.PlaylistParser.isSupportedUri(diypUri)) {
                         addParsedChannel(channelMap, plainList, noDedup,
-                                diypName, diypUri, currentGroup, "", "");
+                                diypBase, diypUri, currentGroup, "", "", diypLabel);
                         pendingM3uUri = false;
-                        currentName = ""; currentTvgId = ""; currentLogo = "";
+                        currentName = ""; currentBaseName = ""; currentLineLabel = "";
+                        currentTvgId = ""; currentLogo = "";
                         continue;
                     }
                 }
@@ -772,12 +779,23 @@ public class AppCoreManager {
 
             if (line.startsWith("#EXTINF:")) {
                 currentName = "";
+                currentBaseName = "";
+                currentLineLabel = "";
                 currentTvgId = "";
                 currentLogo = "";   // 【2026-09-29 频道台标】
 
                 int commaIndex = line.indexOf(",");
                 if (commaIndex > 0 && commaIndex < line.length() - 1) {
                     currentName = line.substring(commaIndex + 1).trim();
+                }
+                // 【2026-10-28 多线路归并】源1 新版 M3U 用「·备用N」后缀区分同频道多线路，
+                //   且没有 tvg-id。若仍用原始 name 当归并键，每个备用源都会成为独立频道
+                //   → 列表里同一台铺 2~5 条（用户反馈「显示多重备用源」）。
+                //   这里把后缀拆开：base 名做归并键/显示名，后缀转成线路标签（与 backupUrls 同序）。
+                currentBaseName = com.tv.live.PlaylistParser.baseChannelName(currentName);
+                currentLineLabel = com.tv.live.PlaylistParser.backupLineLabel(currentName);
+                if (TextUtils.isEmpty(currentBaseName)) {
+                    currentBaseName = currentName;
                 }
                 int groupIndex = line.indexOf("group-title=\"");
                 if (groupIndex > 0) {
@@ -814,17 +832,19 @@ public class AppCoreManager {
             //   否则源5(爱其意)的缓存 M3U 解析出 0 个频道，缓存快显形同虚设。
             if (pendingM3uUri && com.tv.live.PlaylistParser.isSupportedUri(line)) {
                 String playUrl = line;
-                if (!TextUtils.isEmpty(currentName)) {
+                if (!TextUtils.isEmpty(currentBaseName)) {
                     addParsedChannel(channelMap, plainList, noDedup,
-                            currentName, playUrl, currentGroup, currentTvgId, currentLogo);
+                            currentBaseName, playUrl, currentGroup, currentTvgId, currentLogo,
+                            currentLineLabel);
                 }
                 pendingM3uUri = false;
-                currentName = ""; currentTvgId = ""; currentLogo = "";
+                currentName = ""; currentBaseName = ""; currentLineLabel = "";
+                currentTvgId = ""; currentLogo = "";
                 continue;
             }
 
             if (!pendingM3uUri && com.tv.live.PlaylistParser.isSupportedUri(line)) {
-                addParsedChannel(channelMap, plainList, noDedup, line, line, currentGroup, "", "");
+                addParsedChannel(channelMap, plainList, noDedup, line, line, currentGroup, "", "", "");
             }
         }
         // 【2026-10-12 屏蔽名单】本方法是「本地缓存快显」路径的解析出口
@@ -845,9 +865,10 @@ public class AppCoreManager {
      */
     private static void addParsedChannel(Map<String, Channel> channelMap, List<Channel> plainList,
                                          boolean noDedup, String name, String uri,
-                                         String group, String tvgId, String logo) {
+                                         String group, String tvgId, String logo,
+                                         String lineLabel) {
         if (!noDedup) {
-            mergeChannelInto(channelMap, name, uri, group, tvgId, logo);
+            mergeChannelInto(channelMap, name, uri, group, tvgId, logo, lineLabel);
             return;
         }
         if (TextUtils.isEmpty(name) || TextUtils.isEmpty(uri)
@@ -861,7 +882,8 @@ public class AppCoreManager {
 
     private static void mergeChannelInto(Map<String, Channel> channelMap,
                                          String name, String uri,
-                                         String group, String tvgId, String logo) {
+                                         String group, String tvgId, String logo,
+                                         String lineLabel) {
         // 【2026-10-07】改用统一白名单（含 renyibo:// 等协议串）
         if (TextUtils.isEmpty(name) || TextUtils.isEmpty(uri)
                 || !com.tv.live.PlaylistParser.isSupportedUri(uri)) return;
@@ -870,7 +892,9 @@ public class AppCoreManager {
 
         Channel existing = channelMap.get(key);
         if (existing != null) {
-            existing.addBackupUrl(uri);
+            // 【2026-10-28 多线路归并】同频道后续条目进备用源，带上线路标签；
+            //   一律走带 label 的重载（label 可为空串），保证 backupUrls 与 huyaLineLabels 等长。
+            existing.addBackupUrl(uri, lineLabel);
             if (!TextUtils.isEmpty(group)) {
                 existing.setGroup(group);
             }

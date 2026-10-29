@@ -653,7 +653,8 @@ public class MyApplication extends Application {
             LogBridge.w("MyApplication", "广告剥离代理启动失败 (ignore): " + e.getMessage());
         }
 
-        // 【2026-10-28 日志双写清理】BootReceiver.trimBootLog 已随 boot_logs.txt 旁路一起删除。
+        // 【2026-10-29 恢复】启动日志文件旁路恢复后，应用启动时裁剪 boot_logs.txt 体积
+        BootReceiver.trimBootLog(this);
 
     }
 

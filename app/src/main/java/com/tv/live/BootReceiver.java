@@ -82,24 +82,24 @@ public class BootReceiver extends BroadcastReceiver {
         String model = android.os.Build.MODEL;
 
         if (context == null || intent == null) {
-            LogBridge.w(TAG, "onReceive: context 或 intent 为 null | uptime=" + uptime + "ms");
+            writeBootLog(context, "onReceive: context 或 intent 为 null | uptime=" + uptime + "ms");
             return;
         }
 
         String action = intent.getAction();
         String pkg = intent.getPackage();
-        LogBridge.i(TAG, "【广播入口】action=" + action + " | pkg=" + pkg
+        writeBootLog(context, "【广播入口】action=" + action + " | pkg=" + pkg
                 + " | uptime=" + uptime + "ms | device=" + brand + "/" + model);
 
         if (!isBootRelatedAction(action)) {
-            LogBridge.d(TAG, "非开机相关广播，忽略：" + action);
+            writeBootLog(context, "非开机相关广播，忽略：" + action);
             return;
         }
 
         SharedPreferences sp = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE);
         boolean autoStart = sp.getBoolean("boot_auto_start", false);
         if (!autoStart) {
-            LogBridge.d(TAG, "用户未开启开机自启，不启动");
+            writeBootLog(context, "用户未开启开机自启，不启动");
             return;
         }
 
@@ -108,16 +108,16 @@ public class BootReceiver extends BroadcastReceiver {
             long elapsed = SystemClock.elapsedRealtime() - lastStart;
 
             if (elapsed <= 0) {
-                LogBridge.d(TAG, "防重复：elapsed=" + elapsed + "ms（跨重启导致），重置时间戳并放行 action=" + action);
+                writeBootLog(context, "防重复：elapsed=" + elapsed + "ms（跨重启导致），重置时间戳并放行 action=" + action);
                 sp.edit().putLong(SP_KEY_LAST_BOOT_START, SystemClock.elapsedRealtime()).apply();
             } else if (elapsed < MIN_START_INTERVAL_MS) {
-                LogBridge.d(TAG, "距离上次启动仅 " + elapsed + "ms，跳过重复启动");
+                writeBootLog(context, "距离上次启动仅 " + elapsed + "ms，跳过重复启动");
                 return;
             }
         }
 
         long delay = getDelayByAction(action);
-        LogBridge.d(TAG, "延迟 " + delay + "ms 后启动应用");
+        writeBootLog(context, "延迟 " + delay + "ms 后启动应用");
 
         scheduleDelayedStart(context, delay, sp);
     }
@@ -159,7 +159,7 @@ public class BootReceiver extends BroadcastReceiver {
     private void scheduleDelayedStart(Context context, long delayMs, SharedPreferences sp) {
 
         sp.edit().putLong(SP_KEY_LAST_BOOT_START, SystemClock.elapsedRealtime()).apply();
-        LogBridge.d(TAG, "【启动计划】delay=" + delayMs + "ms | uptime="
+        writeBootLog(context, "【启动计划】delay=" + delayMs + "ms | uptime="
                 + android.os.SystemClock.elapsedRealtime() + "ms");
 
         boolean alarmScheduled = false;
@@ -187,22 +187,22 @@ public class BootReceiver extends BroadcastReceiver {
                 }
                 alarmScheduled = true;
             } else {
-                LogBridge.w(TAG, "AlarmManager 为 null，无法设置延迟启动");
+                writeBootLog(context, "AlarmManager 为 null，无法设置延迟启动");
             }
         } catch (Exception e) {
-            LogBridge.e(TAG, "AlarmManager 设置失败", e);
+            writeBootLog(context, "AlarmManager 设置失败" + e);
         }
 
         if (!alarmScheduled || Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             try {
                 scheduleBootJob(context, delayMs);
             } catch (Exception e) {
-                LogBridge.e(TAG, "JobScheduler 设置失败", e);
+                writeBootLog(context, "JobScheduler 设置失败" + e);
             }
         }
 
         if (!alarmScheduled) {
-            LogBridge.d(TAG, "AlarmManager 不可用，尝试直接启动");
+            writeBootLog(context, "AlarmManager 不可用，尝试直接启动");
             startMainActivity(context);
         }
     }
@@ -233,9 +233,9 @@ public class BootReceiver extends BroadcastReceiver {
 
         int result = jobScheduler.schedule(builder.build());
         if (result == JobScheduler.RESULT_SUCCESS) {
-            LogBridge.d(TAG, "JobScheduler 兜底任务已设置");
+            writeBootLog(context, "JobScheduler 兜底任务已设置");
         } else {
-            LogBridge.w(TAG, "JobScheduler 兜底任务设置失败");
+            writeBootLog(context, "JobScheduler 兜底任务设置失败");
         }
     }
 
@@ -252,9 +252,9 @@ public class BootReceiver extends BroadcastReceiver {
             mainIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             mainIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
             context.startActivity(mainIntent);
-            LogBridge.d(TAG, "已启动 MainActivity");
+            writeBootLog(context, "已启动 MainActivity");
         } catch (Exception e) {
-            LogBridge.e(TAG, "启动 MainActivity 失败", e);
+            writeBootLog(context, "启动 MainActivity 失败" + e);
         }
     }
 
@@ -276,13 +276,44 @@ public class BootReceiver extends BroadcastReceiver {
                 context.registerReceiver(receiver, filter);
             }
 
-            LogBridge.d(TAG, "动态开机兜底监听已注册（覆盖快速开机/SCREEN_ON 场景）");
+            writeBootLog(context, "动态开机兜底监听已注册（覆盖快速开机/SCREEN_ON 场景）");
         } catch (Exception e) {
-            LogBridge.e(TAG, "动态注册开机监听失败", e);
+            writeBootLog(context, "动态注册开机监听失败" + e);
         }
     }
 
-    // 【2026-10-28 日志双写清理】boot_logs.txt 文件旁路已整体删除：
-    //   原 writeBootLog/trimBootLog 把同一条自启事件既写 logcat/9527 缓冲、又追加到
-    //   files/boot_logs.txt，属典型双写。现统一只走 LogBridge（9527 /api/logs）。
+    private static final String BOOT_LOG_FILE = "boot_logs.txt";
+
+    public static void writeBootLog(Context context, String message) {
+        if (context == null) return;
+        try {
+            File file = new File(context.getFilesDir(), BOOT_LOG_FILE);
+            String line = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()).format(new Date())
+                    + " | " + message + "\n";
+            FileOutputStream fos = new FileOutputStream(file, true);
+            fos.write(line.getBytes("UTF-8"));
+            fos.close();
+        } catch (Exception ignored) {
+        }
+    }
+
+    public static void trimBootLog(Context context) {
+        if (context == null) return;
+        try {
+            File file = new File(context.getFilesDir(), BOOT_LOG_FILE);
+            if (!file.exists() || file.length() < 200 * 1024) return;
+            List<String> lines = new ArrayList<>();
+            BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"));
+            String line;
+            while ((line = br.readLine()) != null) lines.add(line);
+            br.close();
+            int start2 = Math.max(0, lines.size() - 500);
+            StringBuilder sb = new StringBuilder();
+            for (int i = start2; i < lines.size(); i++) sb.append(lines.get(i)).append("\n");
+            FileOutputStream fos = new FileOutputStream(file, false);
+            fos.write(sb.toString().getBytes("UTF-8"));
+            fos.close();
+        } catch (Exception ignored) {
+        }
+    }
 }

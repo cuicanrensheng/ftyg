@@ -36,6 +36,7 @@ import androidx.media3.common.VideoSize;
 // 缓冲策略改用同包 DynamicLoadControl（media3 适配、可运行时按源类型换参），见 initPlayer / applyStreamBufferProfile。
 import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.DecoderReuseEvaluation;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -156,6 +157,11 @@ public class TVPlayerManager {
     /** 播放器实例：由后台线程构建（冷启动优化），volatile 保证主线程可觑 */
     private volatile ExoPlayer player;
     private PlayerView playerView;
+
+    // 【2026-10-29 黑屏差异诊断·临时】切台起始时刻，用于量「旧画面消失 → 新频道首帧」的间隔
+    private volatile long zapStartMs = 0L;
+
+
     // 主播放器构建用的渲染器工厂与缓冲策略（initPlayer 内赋值，试过升为字段供第二播放器复用，
     //   2026-10-26 双播放器实验移除后保留字段形态，避免改动 initPlayer 结构）
     private DefaultRenderersFactory factory;
@@ -261,7 +267,7 @@ public class TVPlayerManager {
                             && (droppedDelta > 0 || skippedDelta > 0 || bufferedBehind < 2000);
                     // 日志降级（2026-10-27）：
                     //   · 异常 → 全字段详单 + `<<<异常`（唯一需要盯着看的行）
-                    //   · 正常 → 每 10 次采样（约 20s）一条**精简**心跳，只留判读必需字段
+                    //   · 正常 → 每 10 次采样（约 20s）一条**精简**心跳（d 级，仅调试版可见，正式版不刷屏）
                     //   · 基准回跳（skip）→ 完全不打印，仅计入 rewindSkips 随心跳带出
                     if (abnormal) {
                         LogBridge.i("TVPlayerPerf",
@@ -275,7 +281,9 @@ public class TVPlayerManager {
                                         + " rewindSkips=" + mPerfRewindSkips
                                         + " <<<异常");
                     } else if (!skip && mPerfSampleCount % 10 == 0) {
-                        LogBridge.i("TVPlayerPerf",
+                        // 【2026-10-29 刷屏降级】正常心跳本来每 ~20s 一条，正式版（i 级）会持续刷屏；
+                        //   降为 d 级后正式版被 IS_DEBUG 丢弃，仅调试版可见。异常行（<<<异常）仍为 i 级保留。
+                        LogBridge.d("TVPlayerPerf",
                                 "【播放诊断】sample#" + mPerfSampleCount
                                         + " pos=" + pos + "ms"
                                         + " bufBehind=" + bufferedBehind + "ms"
@@ -1165,6 +1173,55 @@ public class TVPlayerManager {
                 .setTrackSelector(trackSelector)
                 .build();
 
+        // 【2026-10-29 黑屏差异诊断·临时】记录两件事，用来解释"为什么有的频道切台不黑、有的黑"：
+        //   ① onVideoInputFormatChanged 的 DecoderReuseEvaluation：能不能复用上一个频道的解码器。
+        //      REUSE_RESULT_YES → 解码器不重建、Surface 不释放 → 理论上不黑；
+        //      REUSE_RESULT_NO / NO_FEATURE → 必须重建解码器 → Surface 被放弃 → 黑到首帧。
+        //   ② onRenderedFirstFrame 到达时刻 - 切台起始时刻 = 黑屏窗口（旧画面已经没了）。
+        try {
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onRenderedFirstFrame() {
+                    if (zapStartMs > 0) {
+                        LogBridge.i("ZapDiag", "首帧到达 切台耗时=" + (System.currentTimeMillis() - zapStartMs)
+                                + "ms channel=" + (currentChannel == null ? "?" : currentChannel.getName()));
+                    }
+                }
+            });
+            player.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onVideoInputFormatChanged(EventTime eventTime, Format format,
+                                                      DecoderReuseEvaluation reuse) {
+                    try {
+                        String reuseName = "null";
+                        try {
+                            if (reuse != null) {
+                                int r = reuse.result;
+                                if (r == DecoderReuseEvaluation.REUSE_RESULT_YES_WITHOUT_RECONFIGURATION) {
+                                    reuseName = "YES_WITHOUT_RECONFIG";
+                                } else if (r == DecoderReuseEvaluation.REUSE_RESULT_YES_WITH_RECONFIGURATION) {
+                                    reuseName = "YES_WITH_RECONFIG";
+                                } else if (r == DecoderReuseEvaluation.REUSE_RESULT_NO) {
+                                    reuseName = "NO";
+                                } else {
+                                    reuseName = "0x" + Integer.toHexString(r);
+                                }
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                        LogBridge.i("ZapDiag", "视频入参 " + format.sampleMimeType + " "
+                                + format.width + "x" + format.height
+                                + " codecs=" + format.codecs
+                                + " color=" + format.colorInfo
+                                + " | 解码器复用=" + reuseName
+                                + " | 距切台=" + (zapStartMs > 0 ? (System.currentTimeMillis() - zapStartMs) + "ms" : "-"));
+                    } catch (Throwable ignored) {
+                    }
+                }
+            });
+        } catch (Throwable ignored) {
+        }
+
         // 【临时诊断 2026-10-27】分片装载对账：确认「下到的分片被放到时间轴哪个位置」，
         //   用于定位「切台后 40s 内每片都卡、缓冲只有 2s、下载却只用 4.3s」的矛盾。
         //   输出：分片序号 / 时间轴槽位(mediaStart~mediaEnd) / 字节数 / 当时窗口总长与播放位置。
@@ -1386,7 +1443,15 @@ public class TVPlayerManager {
                     logWarn("【虎牙 CDN 临时错误(503/504)】快速重试当前线路（不清缓存，签名仍有效）");
                     retryHuya5xxImmediately(error);
                 } else {
-                    autoRetry(isNetworkError ? "网络异常" : "播放异常", error);
+                    // 【2026-10-29 日志归因修正】surface detach 超时（"Detaching surface timed out"）本质是
+                    //   切台时 MediaCodec/Surface 被快速 detach 导致的解码器超时，不是网络故障。先前被
+                    //   isNetworkError 的 "timed out" 子串误判为「网络异常」，误导排查。此处按真实成因细分
+                    //   原因：网络错误 → "网络异常"，surface 分离超时 → "解码器Surface分离超时(切台detach)"，
+                    //   其余 → "播放异常"，确保自动重试日志归因准确。
+                    String retryReason = isNetworkError ? "网络异常"
+                            : (isSurfaceDetachTimeoutError(error)
+                                    ? "解码器Surface分离超时(切台detach)" : "播放异常");
+                    autoRetry(retryReason, error);
                 }
 
                 if (listener != null) {
@@ -1599,6 +1664,9 @@ public class TVPlayerManager {
         List<String> backups = currentChannel.getBackupUrls();
         if (backupRetryIndex >= backups.size()) {
             backupRetryIndex = -1;
+            // 【2026-10-28 多线路】全部备用已试尽 → 线路记忆回落到主线路，
+            //   避免下次进入该频道时先从已判死的备用线开撞。
+            rememberChannelLine(0);
             return false;
         }
         String backupUrl = backups.get(backupRetryIndex);
@@ -1609,8 +1677,35 @@ public class TVPlayerManager {
         }
 
         dLog("尝试切换到备用源：" + backupUrl);
+        // 【2026-10-28 多线路】主线路失效自动切备用时，持久化当前频道的线路选择
+        //   （SP channel_line_index_<channelKey>，与设置页「频道线路选择」同一键），
+        //   让下次起播 / 冷启动直接恢复到这条可用备用线，而不是又从主线路撞一次。
+        rememberChannelLine(backupRetryIndex + 1);
         playUrlInternal(backupUrl);
         return true;
+    }
+
+    /**
+     * 【2026-10-28 多线路】记住「当前频道当前的线路」。
+     *
+     * <p>键与设置页「频道线路选择」完全一致（{@code channel_line_index_<channelIdOrName>}，
+     * 见 {@code SettingsDialog#showChannelLineDialog} 与 {@code doPlay} 的线路恢复段），
+     * 0 = 主线路，N = 第 N 条备用源（对应 {@link Channel#getBackupUrls()} 的下标 N-1）。
+     *
+     * @param lineIndex 0 主线路；N>0 第 N 条备用
+     */
+    private void rememberChannelLine(int lineIndex) {
+        Channel ch = currentChannel;
+        if (ch == null) return;
+        try {
+            ch.setCurrentLineIndex(Math.max(0, lineIndex));
+            String key = ch.getChannelId();
+            if (TextUtils.isEmpty(key)) key = ch.getName();
+            if (TextUtils.isEmpty(key) || context == null) return;
+            context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                    .edit().putInt("channel_line_index_" + key, Math.max(0, lineIndex)).apply();
+        } catch (Throwable ignored) {
+        }
     }
 
     /**
@@ -4053,8 +4148,11 @@ public class TVPlayerManager {
                     || className.contains("ConnectException")
                     || className.contains("UnknownHostException")
                     || className.contains("NetworkOnMainThreadException")
-                    || msg.contains("timeout")
-                    || msg.contains("timed out")
+                    // 【2026-10-29 日志归因修正】"Detaching surface timed out" 是解码器/Surface 分离超时，
+                    //   不是网络超时；若此处直接命中 "timed out" 会被误判为网络异常。必须用
+                    //   isSurfaceRelatedTimeout 排除 surface 相关超时，否则重试原因归因错误、误导排查。
+                    || (msg.contains("timeout") && !isSurfaceRelatedTimeout(msg))
+                    || (msg.contains("timed out") && !isSurfaceRelatedTimeout(msg))
                     || msg.contains("Connection")
                     || msg.contains("connection")
                     || msg.contains("unreachable")
@@ -4078,6 +4176,50 @@ public class TVPlayerManager {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * 【2026-10-29 日志归因修正】判断消息是否为「Surface 相关超时」。
+     * 典型如 ExoPlayer MediaCodec 抛出的 {@code "Detaching surface timed out"}：这是切台时
+     * 视频 Surface 被快速 detach 导致的解码器渲染管线超时，属于播放器/Surface 问题，不是网络超时。
+     * isNetworkError 中 "timed out"/"timeout" 子串匹配会误将其判为网络错误，必须在此类场景排除。
+     */
+    private static boolean isSurfaceRelatedTimeout(String msg) {
+        if (msg == null) return false;
+        String lower = msg.toLowerCase(Locale.ROOT);
+        return lower.contains("surface") && (lower.contains("timeout") || lower.contains("timed out"));
+    }
+
+    /**
+     * 【2026-10-29 日志归因修正】判断是否「解码器 Surface 分离超时」。
+     * 切台瞬间 MediaCodec/Surface 被快速 detach 会抛出
+     * {@code IllegalStateException: Detaching surface timed out}（亦见 "surface timed out"）。
+     * 该错误先前被 isNetworkError 的 "timed out" 子串误判为网络异常，导致重试日志归因错误。
+     * 此处单独识别，使自动重试的原因字段能精确标注为「解码器Surface分离超时(切台detach)」。
+     */
+    private boolean isSurfaceDetachTimeoutError(Throwable throwable) {
+        if (throwable == null) return false;
+        Throwable t = throwable;
+        int depth = 0;
+        while (t != null && depth < 20) {
+            String className = t.getClass().getName();
+            String msg = t.getMessage();
+            if (msg == null) msg = "";
+            // 直接命中 ExoPlayer MediaCodec 的 surface detach 超时消息
+            if (msg.contains("Detaching surface") || msg.contains("surface timed out")) {
+                return true;
+            }
+            // IllegalStateException/RuntimeException 且消息同时带 surface 与超时关键字
+            if ((className.contains("IllegalStateException") || className.contains("RuntimeException"))
+                    && msg.toLowerCase(Locale.ROOT).contains("surface")
+                    && (msg.toLowerCase(Locale.ROOT).contains("timeout")
+                        || msg.toLowerCase(Locale.ROOT).contains("timed out"))) {
+                return true;
+            }
+            t = t.getCause();
+            depth++;
+        }
+        return false;
     }
 
     public void setDecoderMode(int mode) {
@@ -4361,7 +4503,15 @@ public class TVPlayerManager {
         }
         newPlayerView.setResizeMode(resizeMode);
 
-        newPlayerView.setPlayer(player);
+        // 【2026-10-29 花屏修复】原实现在 addView 之前就 setPlayer(player)：此刻新视图
+        //   尚未 attach，TextureView.isAvailable()==false、SurfaceView 的 Surface 也还没
+        //   valid → ExoPlayer 走 setVideoTextureView() 只能 setVideoOutputInternal(null)，
+        //   先把视频输出清空；等 attach 完成再由 onSurfaceTextureAvailable 重建一个 Surface。
+        //   这一轮「清空 → 重建」正好落在解码器出帧过程中，部分芯片（Amlogic/MTK 方案尤甚）
+        //   在 pending output buffer 存在时替换输出面就会输出花屏/绿屏/斜切。
+        //   mytv 的做法是：视图先 attach 稳定、Surface 真正可用，再调用一次
+        //   setVideoTextureView()，之后完全交给 ExoPlayer 的 SurfaceTextureListener 管理。
+        //   这里对齐该时序：先 addView，等 Surface 就绪后再一次性绑定（见 bindWhenSurfaceReady）。
         parent.addView(newPlayerView, index + 1, layoutParams);
 
         if (!useTexture) {
@@ -4377,34 +4527,126 @@ public class TVPlayerManager {
         playerView = newPlayerView;
         playerView.requestFocus();
 
-        mHandler.postDelayed(() -> {
-            // 【2026-09-29 黑屏根因修复·第二轮】埋点：旧视图移除
-            LogBridge.d(TAG, "移除旧 PlayerView, identityHashCode=" + System.identityHashCode(oldPlayerView));
-            oldPlayerView.setPlayer(null);
-            parent.removeView(oldPlayerView);
-            // 【2026-09-29 黑屏根因修复·第二轮】旧视图内部 SurfaceView 在移除时会触发 surfaceDestroyed，
-            //   ExoPlayer 会因此清空「共享的」player 的视频输出 Surface；而此时 playerView 已是新视图，
-            //   且 getPlayer()==player（Java 层引用相等，不代表 ExoPlayer 内部 surface 仍有效），
-            //   旧的「相等即跳过」判断无法察觉，导致新视图再也拿不到 Surface → 永久黑屏。
-            //   此处旧视图已彻底移除（确定性时序），对新视图强制 setPlayer(null)→setPlayer(player)，
-            //   让 ExoPlayer 重新走 setVideoSurface 流程拿回可用 Surface。
-            try {
-                if (playerView != null && player != null) {
-                    playerView.setPlayer(null);
-                    playerView.setPlayer(player);
-                    LogBridge.i(TAG, "旧视图移除后强制重绑新视图, newView="
-                            + System.identityHashCode(playerView));
-                }
-            } catch (Exception e) {
-                LogBridge.w(TAG, "旧视图移除后强制重绑失败: " + e.getMessage());
-            }
-            if (wasPlaying && player != null && !player.isPlaying()) {
-                player.play();
-            }
-        }, 300);
+        // 【2026-10-29 花屏修复】原实现用固定 300ms 延迟去「移除旧视图 + 强制
+        //   setPlayer(null) → setPlayer(player)」，依据是旧注释里那条推断：旧视图移除时
+        //   surfaceDestroyed 会清空「共享的」player 输出面。核对 media3 1.7.1 源码后确认该
+        //   推断不成立：
+        //     · PlayerView.setPlayer(null) 调的是 clearVideoSurfaceView(旧 SurfaceView) →
+        //       clearVideoSurfaceHolder(holder)，内部只在 holder == 当前绑定的 holder 时才
+        //       真正清空；此时 player 已指向新视图，引用不匹配 → 旧视图解绑不会误伤新面。
+        //     · ExoPlayer.setVideoTextureView() 一进来就 removeSurfaceCallbacks()，
+        //       旧 SurfaceView 的 surfaceDestroyed 早已不再回灌到 player。
+        //   所以那次强制重绑不但没必要，还会在解码出帧中途把视频输出面 clear → rebuild 一次，
+        //   正是花屏/绿屏的直接来源（切到 TextureView 时最明显，因为新面是即时可用的
+        //   SurfaceTexture，会立刻被重建；SurfaceView 要等 surfaceCreated，反而侥幸躲过）。
+        //   改为：等新 Surface 真正就绪后一次性绑定，绑定完成立即解绑并移除旧视图。
+        bindWhenSurfaceReady(newPlayerView, oldPlayerView, parent, wasPlaying, 0);
 
         mCurrentUseTexture = useTexture;
         isRenderingSwitching = false;
+    }
+
+    /**
+     * 【2026-10-29 花屏修复】等新视图的 Surface 真正可用后，一次性把 player 绑上去，
+     * 绑定完成再解绑并移除旧视图。
+     *
+     * <p>对齐 mytv 的挂载时序：整个切换过程中 player 只经历一次
+     * {@code setVideoTextureView()} / {@code setVideoSurfaceView()}，且调用那一刻 Surface
+     * 必定有效。这样 ExoPlayer 直接 {@code new Surface(surfaceTexture)} 交给解码器，
+     * 不会出现「先 setVideoOutputInternal(null) 清空、再重建」的输出面替换，
+     * 从根上避免了解码出帧中途换面导致的花屏。
+     *
+     * <p>为什么必须轮询而不是固定延迟：TextureView 的 SurfaceTexture 要等 attach +
+     * 首帧绘制后才 available，SurfaceView 的 Surface 要等 surfaceCreated，
+     * 两者时序都不可预测，固定延迟只能靠猜（原实现猜 300ms），猜早了就等于没修。
+     *
+     * @param attempt 已重试次数，约 16ms 一次，最多 60 次（≈1s）后兜底强制绑定，避免永久卡住
+     */
+    private void bindWhenSurfaceReady(final PlayerView newView, final PlayerView oldView,
+                                      final ViewGroup parent, final boolean wasPlaying,
+                                      final int attempt) {
+        if (newView == null) return;
+
+        // 期间又发生了一次切换：本次作废，把自己从容器里摘掉
+        if (playerView != newView) {
+            try {
+                if (newView.getParent() != null) parent.removeView(newView);
+            } catch (Exception ignore) {
+            }
+            return;
+        }
+        if (player == null) return;
+
+        boolean ready = isVideoSurfaceUsable(newView.getVideoSurfaceView());
+        if (!ready && attempt < 180) {
+            // 约 16ms 一轮，最多 ≈3s。正常情况 1~2 帧内就会就绪；给足余量是因为
+            // 部分电视盒子在切分辨率/刷新率时会推迟 Surface 创建。
+            newView.postDelayed(() -> bindWhenSurfaceReady(newView, oldView, parent, wasPlaying, attempt + 1), 16);
+            return;
+        }
+        if (!ready) {
+            // 3s 仍拿不到可用 Surface：宁可维持旧视图继续显示，也不做一次会清空输出的
+            // 无效绑定（绑了也出不了画，反而把当前画面打断）。这里把现场回滚干净：
+            // 移除新视图、playerView 指回旧视图（旧视图还绑着 player，画面不中断），
+            // 并把 mCurrentUseTexture 复位，让下次 applyRendererModeIfMismatch 重新尝试。
+            LogBridge.w(TAG, "Surface 3s 未就绪，放弃本次渲染方式切换，保留旧视图");
+            try {
+                if (newView.getParent() != null) parent.removeView(newView);
+            } catch (Exception ignore) {
+            }
+            if (oldView != null && oldView.getParent() == parent) {
+                playerView = oldView;
+                mCurrentUseTexture = oldView.getVideoSurfaceView() instanceof android.view.TextureView;
+            }
+            return;
+        }
+
+        try {
+            // 一次性绑定。此刻 Surface 有效；若 SurfaceView 路径下 surfaceCreated 已抢先绑过，
+            // PlayerView.setPlayer 同实例早退，这里不会产生第二次 setVideoSurface。
+            if (newView.getPlayer() != player) {
+                newView.setPlayer(player);
+            }
+            LogBridge.i(TAG, "Surface就绪后绑定完成: view=" + System.identityHashCode(newView)
+                    + ", attempt=" + attempt + ", surfaceUsable=" + ready);
+        } catch (Exception e) {
+            LogBridge.w(TAG, "绑定新视图失败: " + e.getMessage());
+        }
+
+        // 解绑并移除旧视图。clearVideoXxxView(旧view) 因引用不匹配不会波及新 Surface。
+        if (oldView != null && oldView != newView) {
+            try {
+                oldView.setPlayer(null);
+            } catch (Exception ignore) {
+            }
+            try {
+                if (oldView.getParent() == parent) parent.removeView(oldView);
+                LogBridge.d(TAG, "移除旧 PlayerView, identityHashCode=" + System.identityHashCode(oldView));
+            } catch (Exception e) {
+                LogBridge.w(TAG, "移除旧视图失败: " + e.getMessage());
+            }
+        }
+
+        if (wasPlaying && player != null && !player.isPlaying()) {
+            player.play();
+        }
+    }
+
+    /** 视频输出面是否已真正可用：TextureView 看 isAvailable，SurfaceView 看 Surface.isValid */
+    private boolean isVideoSurfaceUsable(View videoSurfaceView) {
+        if (videoSurfaceView instanceof android.view.TextureView) {
+            return ((android.view.TextureView) videoSurfaceView).isAvailable();
+        }
+        if (videoSurfaceView instanceof android.view.SurfaceView) {
+            try {
+                android.view.Surface s = ((android.view.SurfaceView) videoSurfaceView).getHolder().getSurface();
+                return s != null && s.isValid();
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        // 类型未知（surface_type=none 等）：直接放行，交回原行为
+        return videoSurfaceView != null;
     }
 
     public void registerRendererModeReceiver() {
@@ -4492,13 +4734,32 @@ public class TVPlayerManager {
                 if (surfaceActuallyReady) {
                     surfaceReady = true;
                     pendingBindPlayer = false;
-                    // 【2026-09-29 黑屏根因修复·第二轮】引用相等不代表 ExoPlayer 内部 surface 仍有效，
-                    //   回前台就绪分支同样无条件强制「先摘再挂」，确保 ExoPlayer 重新走 setVideoSurface 流程。
+                    // 【2026-10-29 花屏修复】原实现无条件「先摘再挂」：
+                    //   playerView.setPlayer(null) 会走 clearVideoTextureView/View(当前视图)
+                    //   → clearVideoSurface() 把视频输出面置空，紧接着 setPlayer(player) 再
+                    //   重建一次。对 TextureView 就是 new Surface(SurfaceTexture)，
+                    //   等于在解码器出帧过程中替换输出面，部分芯片直接花屏/绿屏。
+                    //   这与 mytv 的做法相反：mytv 挂上 TextureView 后全程不再碰输出面。
+                    //   现在改为按需补绑——只有当视图确实没绑 player，或引用虽相等但输出
+                    //   已被后台 surfaceDestroyed 清空时，才做一次重绑。
                     try {
-                        playerView.setPlayer(null);
-                        playerView.setPlayer(player);
+                        if (playerView.getPlayer() != player) {
+                            playerView.setPlayer(player);
+                            LogBridge.i(TAG, "onForeground: 视图未绑定，补绑 player");
+                        } else if (!(playerView.getVideoSurfaceView() instanceof android.view.TextureView)) {
+                            // SurfaceView：退后台时系统会销毁其 Surface，ExoPlayer 内部输出已被
+                            // surfaceDestroyed 清空，而 getPlayer() 引用仍相等 → 必须重绑，
+                            // 否则回前台黑屏。此时 surfaceActuallyReady 已确认 Surface 有效，
+                            // 重绑拿到的是新 Surface，不存在「换掉有效面」的花屏风险。
+                            playerView.setPlayer(null);
+                            playerView.setPlayer(player);
+                            LogBridge.i(TAG, "onForeground: SurfaceView 输出已失效，重绑");
+                        }
+                        // TextureView：SurfaceTexture 只在 View detach 时销毁，退后台仍有效。
+                        // 此时绝不能重复 setVideoTextureView —— 它每次都 new Surface(ST)
+                        // 替换解码器输出面，正是花屏来源。直接跳过。
                     } catch (Exception e) {
-                        LogBridge.w(TAG, "onForeground 强制重绑 Surface 失败: " + e.getMessage());
+                        LogBridge.w(TAG, "onForeground 补绑 Surface 失败: " + e.getMessage());
                     }
                     player.play();
                 } else {
@@ -4989,6 +5250,12 @@ public class TVPlayerManager {
         awaitPlayerReady(5000);
         if (!TextUtils.isEmpty(channelName)) this.currentChannelName = channelName;
         this.currentChannel = channel;
+        // 【2026-10-28 多线路】起播前按「记录过的频道线路」修正地址：
+        //   冷启动 / 从列表切台时调用方通常传 mainPlayUrl，若不在此恢复记录，用户手动选过的
+        //   备用线（或上次自动切换到的备用线）每次都会被重置回主线路。
+        if (channel != null) {
+            url = applyRememberedLine(channel, url);
+        }
         // 【2026-09-14 冷启动优化】记录「上次播放流地址」——
         // 供下次启动时 MyApplication.prewarmLastPlayUrl() 做 DNS+TCP+TLS 预热。
         // 注意：此前 CacheManager.saveLastPlay() 只有定义、全项目无调用点，
@@ -5030,6 +5297,52 @@ public class TVPlayerManager {
         initialPlayStartTime = 0;
         resetPerformanceStats();
         playUrlInternal(url, 0);
+    }
+
+    /**
+     * 【2026-10-28 多线路】把「记住的频道线路」应用到 Channel，返回实际起播地址。
+     *
+     * <p>规则（保守，只在确定的线路地址上生效）：
+     * <ul>
+     *   <li>传入的 url 是某条<b>备用线</b> → 以传入为准（调用方明确指定），仅同步 currentLineIndex；</li>
+     *   <li>传入的 url 是<b>主线路</b>且 SP 记录了备用线 → 恢复该备用线；</li>
+     *   <li>传入的是其它地址（EPG 回看 / 10481 代理 / 待解析协议 / 虎牙直链…）或单线路频道 → 原样返回。</li>
+     * </ul>
+     */
+    private String applyRememberedLine(Channel ch, String url) {
+        try {
+            if (TextUtils.isEmpty(url)) return url;
+            List<String> backups = ch.getBackupUrls();
+            boolean multi = backups != null && !backups.isEmpty();
+            // ① 传入的就是某条备用线 → 以传入为准，顺带同步下标
+            if (multi) {
+                int bi = backups.indexOf(url);
+                if (bi >= 0) {
+                    ch.setCurrentLineIndex(bi + 1);
+                    return url;
+                }
+            }
+            // ② 只处理「传入 = 主线路」的情形；其它特殊地址原样放行
+            if (!url.equals(ch.getMainPlayUrl())) return url;
+            if (!multi) return url;
+            String key = ch.getChannelId();
+            if (TextUtils.isEmpty(key)) key = ch.getName();
+            if (TextUtils.isEmpty(key) || context == null) return url;
+            int idx = context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
+                    .getInt("channel_line_index_" + key, 0);
+            if (idx <= 0 || idx > backups.size()) {
+                ch.setCurrentLineIndex(0);
+                return url;
+            }
+            ch.setCurrentLineIndex(idx);
+            String target = ch.getPlayUrl();
+            if (!TextUtils.isEmpty(target) && !target.equals(url)) {
+                return target;
+            }
+            return url;
+        } catch (Throwable t) {
+            return url;
+        }
     }
 
     public Channel getCurrentChannel() {
@@ -5109,6 +5422,9 @@ public class TVPlayerManager {
     }
 
     private void playUrlInternal(String url, long initialSeekPosition) {
+
+        // 【2026-10-29 黑屏差异诊断·临时】标记切台起始时刻
+        zapStartMs = System.currentTimeMillis();
 
         // 【2026-10-27 软解自动回退】每次主动起播重新武装软解回退（新一轮播放，旧回退计数作废）。
         mSoftFallbackArmed = true;
@@ -6964,9 +7280,13 @@ public class TVPlayerManager {
 
         lines.add("主源");
         List<String> backups = ch.getBackupUrls();
+        // 【2026-10-28 多线路归并】源1 的备用源带线路标签（"备用1"/"备用2"…，与 backupUrls 严格同序）。
+        //   有标签就用真名，没有（其它源）仍回落「源N」，口径不变。
+        List<String> backupLabels = ch.getHuyaLineLabels();
         if (backups != null) {
             for (int i = 0; i < backups.size(); i++) {
-                lines.add("源" + (i + 1));
+                String lb = (backupLabels != null && i < backupLabels.size()) ? backupLabels.get(i) : "";
+                lines.add(TextUtils.isEmpty(lb) ? ("源" + (i + 1)) : lb);
             }
         }
         return lines;

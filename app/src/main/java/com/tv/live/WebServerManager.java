@@ -477,7 +477,8 @@ public class WebServerManager {
                             String stripped = stripBlocking(finalContent, finalBaseUrl, finalTargetUrl);
                             int afterSegments = countSegmentsInM3u8(stripped);
                             // 【2026-10-28 只留一条结果】正常流程只记这一行（频道 + 剥离前后 + 剔除数）
-                            LogBridge.d("WebServer", "剥离" + (fChannelName.isEmpty() ? "" : "[" + fChannelName + "]")
+                            // 【2026-10-29 升为 i 级】原 d 级会被 IS_DEBUG 在正式版丢弃，现升 i 级使其正式版也可见。
+                            LogBridge.i("WebServer", "剥离" + (fChannelName.isEmpty() ? "" : "[" + fChannelName + "]")
                                     + ": " + beforeSegments + " → " + afterSegments
                                     + " 片（剔除 " + (beforeSegments - afterSegments) + "）"
                                     + " 算法=" + M3u8AdStripper.getLastAlgoName()
@@ -1019,7 +1020,7 @@ public class WebServerManager {
                 boolean live = content != null && !content.contains(TAG_HLS_ENDLIST);
                 long ttl = live ? M3U8_LIVE_CACHE_TTL_MS : M3U8_CACHE_TTL_MS;
                 if (System.currentTimeMillis() - timestamp < ttl) {
-                    LogBridge.d("WebServer", "[缓存命中]" + (live ? "(直播短缓存)" : "") + " "
+                    LogBridge.i("WebServer", "[缓存命中]" + (live ? "(直播短缓存)" : "") + " "
                             + url.substring(0, Math.min(60, url.length())));
                     return content;
                 } else {
@@ -1382,7 +1383,7 @@ public class WebServerManager {
             @Override
             public String call() throws Exception {
                 try {
-                    LogBridge.d("WebServer", "[预剥离] 开始: " + finalUrl.substring(0, Math.min(60, finalUrl.length())));
+                    LogBridge.i("WebServer", "[预剥离] 开始: " + finalUrl.substring(0, Math.min(60, finalUrl.length())));
                     String m3u8Content = downloadM3u8(finalUrl);
                     if (m3u8Content.isEmpty()) return null;
                     String finalContent = m3u8Content;
@@ -1413,7 +1414,7 @@ public class WebServerManager {
                         }
                     }
                     String cachedContent = putM3u8Cache(finalUrl, stripped);
-                    LogBridge.d("WebServer", "[预剥离] 完成，存入缓存");
+                    LogBridge.i("WebServer", "[预剥离] 完成，存入缓存");
                     return cachedContent;
                 } finally {
                     pendingStripRequests.remove(finalUrl);

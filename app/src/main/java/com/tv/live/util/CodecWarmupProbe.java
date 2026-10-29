@@ -49,9 +49,17 @@ public final class CodecWarmupProbe {
     public static final int MODE = MODE_FULL;
 
     /** 预热码流参数（仅用于 configure，不需要真实数据） */
-    private static final String MIME = "video/avc";
     private static final int WIDTH = 1920;
     private static final int HEIGHT = 1080;
+
+    /**
+     * 【2026-10-29 HEVC 补齐】原先只预热 {@code video/avc}，导致：
+     *   AVC↔HEVC 互切时 ExoPlayer 判定「解码器不可复用」→ releaseCodec() → 新建 HEVC 解码器，
+     *   而 HEVC 的 OMX/HAL 组件此前从未被加载过，首次 create+configure+start 要付冷加载代价
+     *   （各厂商 SoC 差异大，实测可达数百毫秒），这段时间 Surface 已被放弃 → 黑屏更久。
+     *   现在两种编码都在后台各预热一次，代价只在进程启动后的一次子线程里。
+     */
+    private static final String[] MIMES = { "video/avc", "video/hevc" };
 
     /** 软解特征（预创建软解无意义，跳过） */
     private static final String[] SOFTWARE_PREFIX = {
@@ -93,7 +101,18 @@ public final class CodecWarmupProbe {
     }
 
     private static Result doWarmup(Context context) {
+        Result last = null;
+        for (String mime : MIMES) {
+            last = warmOne(context, mime);
+        }
+        sLastResult = last;
+        return last;
+    }
+
+    /** 预热单个编码：create → configure → start，触发 HAL/OMX 组件常驻加载 */
+    private static Result warmOne(Context context, String mime) {
         Result r = new Result();
+        r.mime = mime;
         long t0 = System.currentTimeMillis();
         r.startUptimeMs = android.os.SystemClock.uptimeMillis();
         MediaCodec codec = null;
@@ -101,10 +120,10 @@ public final class CodecWarmupProbe {
         Surface surface = null;
 
         try {
-            String codecName = pickHardwareDecoderName();
+            String codecName = pickHardwareDecoderName(mime);
             r.codecName = codecName;
             if (codecName == null) {
-                r.error = "no hardware decoder for " + MIME;
+                r.error = "no hardware decoder for " + mime;
                 log(context, "warmup ABORT: " + r.error);
                 return r;
             }
@@ -119,7 +138,7 @@ public final class CodecWarmupProbe {
                 //    （对应 media3 源码中的 video/PlaceholderSurface 思路）
                 st = new SurfaceTexture(0);
                 surface = new Surface(st);
-                MediaFormat fmt = MediaFormat.createVideoFormat(MIME, WIDTH, HEIGHT);
+                MediaFormat fmt = MediaFormat.createVideoFormat(mime, WIDTH, HEIGHT);
                 fmt.setInteger(MediaFormat.KEY_WIDTH, WIDTH);
                 fmt.setInteger(MediaFormat.KEY_HEIGHT, HEIGHT);
 
@@ -137,7 +156,7 @@ public final class CodecWarmupProbe {
 
             r.success = true;
             r.totalMs = System.currentTimeMillis() - t0;
-            log(context, "warmup OK codec=" + codecName
+            log(context, "warmup OK mime=" + mime + " codec=" + codecName
                     + " create=" + r.createMs + "ms"
                     + " configure=" + r.configureMs + "ms"
                     + " start=" + r.startMs + "ms"
@@ -147,7 +166,7 @@ public final class CodecWarmupProbe {
         } catch (Throwable e) {
             r.error = e.getClass().getSimpleName() + ": " + e.getMessage();
             r.totalMs = System.currentTimeMillis() - t0;
-            log(context, "warmup FAILED after " + r.totalMs + "ms -> " + r.error);
+            log(context, "warmup FAILED mime=" + mime + " after " + r.totalMs + "ms -> " + r.error);
         } finally {
             // 立即释放：预创建只为触发 HAL 常驻加载，不持有实例
             try {
@@ -173,7 +192,6 @@ public final class CodecWarmupProbe {
         }
 
         r.endUptimeMs = android.os.SystemClock.uptimeMillis();
-        sLastResult = r;
         return r;
     }
 
@@ -181,7 +199,7 @@ public final class CodecWarmupProbe {
      * 挑选硬解码器名称（公开 API，等价于 media3 内部 getDecoderInfos 的枚举逻辑，
      * 但不依赖 @UnstableApi）。
      */
-    private static String pickHardwareDecoderName() {
+    private static String pickHardwareDecoderName(String mime) {
         try {
             MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
             MediaCodecInfo best = null;
@@ -191,7 +209,7 @@ public final class CodecWarmupProbe {
                 }
                 boolean match = false;
                 for (String type : info.getSupportedTypes()) {
-                    if (MIME.equalsIgnoreCase(type)) {
+                    if (mime.equalsIgnoreCase(type)) {
                         match = true;
                         break;
                     }
@@ -241,6 +259,7 @@ public final class CodecWarmupProbe {
 
     public static final class Result {
         public boolean success;
+        public String mime;
         public String codecName;
         public long createMs;
         public long configureMs;
@@ -254,6 +273,7 @@ public final class CodecWarmupProbe {
         @Override
         public String toString() {
             return "CodecWarmupProbe.Result{success=" + success
+                    + ", mime=" + mime
                     + ", codec=" + codecName
                     + ", create=" + createMs + "ms"
                     + ", configure=" + configureMs + "ms"

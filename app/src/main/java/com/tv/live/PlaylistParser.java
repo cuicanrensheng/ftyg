@@ -10,10 +10,54 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import okhttp3.Response;
 
 public class PlaylistParser {
+
+    /**
+     * 【2026-10-28 源1 多线路归并】备用源名字后缀，形如 {@code CCTV-2 财经·备用1}。
+     *
+     * <p>内置源1 新版 M3U 把同一频道的多条线路拆成多行，用「·备用N」后缀区分，且只带
+     * {@code tvg-name}（无 {@code tvg-id}）。旧解析器只用 name 作归并键 → 每个备用源都被当成
+     * 独立频道，频道列表里同一台铺 2~5 条（用户反馈「显示多重备用源」）。
+     *
+     * <p>现按「剥掉后缀的完整频道名」归并：{@code CCTV-2 财经} 与 {@code CCTV-2 财经·备用1/2/3}
+     * 合成 1 个频道（主 url + backupUrls），后缀转成线路标签供「频道线路选择」使用。
+     *
+     * <p>为什么不用 {@code tvg-name} 归并：实测源1 里 {@code tvg-name="CCTV4"} 同时对应
+     * 「CCTV-4 中文国际」与「CCTV-4 欧洲」，{@code CCTV5} 同时对应「CCTV-5 体育」与
+     * 「CCTV-5+ 体育赛事」——按 tvg-name 归并会把不同频道错误合并。base name 无此问题。
+     */
+    private static final Pattern BACKUP_SUFFIX = Pattern.compile("^(.*?)·备用(\\d+)$");
+
+    /**
+     * 【2026-10-28 多线路归并】剥掉频道名末尾的「·备用N」后缀，返回归并/显示用的 base 名。
+     *
+     * <p>供两处解析入口共用：{@link #parse(String)}（网络路径）与
+     * {@code AppCoreManager.parseLiveSource}（缓存快显路径）。两处若各写一份正则，极易只改一处
+     * 导致「网络刷新已归并、冷启动缓存仍重复」的假修复。
+     */
+    public static String baseChannelName(String name) {
+        if (name == null || name.isEmpty()) return "";
+        Matcher m = BACKUP_SUFFIX.matcher(name.trim());
+        if (m.matches()) {
+            String base = m.group(1).trim();
+            return base.isEmpty() ? name.trim() : base;
+        }
+        return name.trim();
+    }
+
+    /**
+     * 【2026-10-28 多线路归并】取频道名里的线路标签：备用条目返回 {@code "备用N"}，主条目返回空串。
+     */
+    public static String backupLineLabel(String name) {
+        if (name == null || name.isEmpty()) return "";
+        Matcher m = BACKUP_SUFFIX.matcher(name.trim());
+        return m.matches() ? "备用" + m.group(2) : "";
+    }
 
     public static List<Channel> parse(String url) throws Exception {
         Map<String, Channel> channelMap = new LinkedHashMap<>();
@@ -80,6 +124,8 @@ public class PlaylistParser {
         String currentGroup = "未分类";
 
         String m3uName = "";
+        String m3uBaseName = "";  // 【2026-10-28 多线路归并】剥掉「·备用N」后的频道名（归并键/显示名）
+        String m3uLineLabel = ""; // 【2026-10-28 多线路归并】该条对应的线路标签（"备用N"；主线路为空）
         String m3uTvgId = "";
         String m3uGroup = "";
         String m3uLogo = "";   // 【2026-09-29 频道台标】当前 #EXTINF 的 tvg-logo
@@ -111,7 +157,7 @@ public class PlaylistParser {
                 String diypName = line.substring(0, diypComma).trim();
                 String diypUri = line.substring(diypComma + 1).trim();
                 if (!diypName.isEmpty() && diypUri.startsWith("http")) {
-                    addOrMergeChannel(channelMap, diypName, diypUri, currentGroup, "", "");
+                    addOrMergeChannel(channelMap, diypName, diypUri, currentGroup, "", "", "");
                     pendingM3uUri = false;
                     m3uName = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
                     continue;
@@ -148,6 +194,19 @@ public class PlaylistParser {
                 if (line.contains(",")) {
                     m3uName = line.substring(line.indexOf(",") + 1).trim();
                 }
+                // 【2026-10-28 多线路归并】拆出「·备用N」：归并键/显示名用 base 名，后缀转线路标签。
+                //   主条目（无后缀）→ label 为空，成为 Channel 的 mainPlayUrl；
+                //   备用条目 → label="备用N"，进 backupUrls 且标签与其严格同序。
+                m3uBaseName = m3uName;
+                m3uLineLabel = "";
+                Matcher bm = BACKUP_SUFFIX.matcher(m3uName);
+                if (bm.matches()) {
+                    String base = bm.group(1).trim();
+                    if (!base.isEmpty()) {
+                        m3uBaseName = base;
+                        m3uLineLabel = "备用" + bm.group(2);
+                    }
+                }
                 pendingM3uUri = true;
                 continue;
             }
@@ -155,18 +214,18 @@ public class PlaylistParser {
             if (!line.startsWith("#") && pendingM3uUri) {
                 String uri = line;
                 if (isSupportedUri(uri)) {
-                    String key = !m3uTvgId.isEmpty() ? m3uTvgId : m3uName;
+                    String key = !m3uTvgId.isEmpty() ? m3uTvgId : m3uBaseName;
                     if (!key.isEmpty()) {
-                        addOrMergeChannel(channelMap, m3uName, uri, m3uGroup, m3uTvgId, m3uLogo);
+                        addOrMergeChannel(channelMap, m3uBaseName, uri, m3uGroup, m3uTvgId, m3uLogo, m3uLineLabel);
                     }
                 }
                 pendingM3uUri = false;
-                m3uName = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
+                m3uName = ""; m3uBaseName = ""; m3uLineLabel = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
                 continue;
             }
 
             if (!line.startsWith("#") && isSupportedUri(line)) {
-                addOrMergeChannel(channelMap, line, line, currentGroup, "", "");
+                addOrMergeChannel(channelMap, line, line, currentGroup, "", "", "");
             }
         }
         br.close();
@@ -275,14 +334,17 @@ public class PlaylistParser {
 
     private static void addOrMergeChannel(Map<String, Channel> channelMap,
                                           String name, String uri,
-                                          String group, String tvgId, String logo) {
+                                          String group, String tvgId, String logo,
+                                          String lineLabel) {
         if (name == null || name.isEmpty() || !isSupportedUri(uri)) return;
         String key = (tvgId != null && !tvgId.isEmpty()) ? tvgId : name;
         if (key.isEmpty()) return;
 
         Channel existing = channelMap.get(key);
         if (existing != null) {
-            existing.addBackupUrl(uri);
+            // 【2026-10-28 多线路归并】同一频道的后续条目统一进备用源，并带上线路标签。
+            //   一律走带 label 的重载（label 可为空串），保证 backupUrls 与 huyaLineLabels 严格等长。
+            existing.addBackupUrl(uri, lineLabel);
             if (group != null && !group.isEmpty()) {
                 existing.setGroup(group);
             }

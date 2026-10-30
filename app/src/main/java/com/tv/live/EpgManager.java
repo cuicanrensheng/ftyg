@@ -740,6 +740,15 @@ public class EpgManager {
             return new ArrayList<>();
         }
 
+        // 【2026-10-30】内置源4（影视）：频道即一部剧，EPG 面板复用为「选集列表」。
+        //   与源5/源7/源8 同构（按 channelId 前缀分流），但集数来自 assets 静态索引，
+        //   **同步返回、零联网、无闸门**（不存在对站点的批量请求风险）。
+        //   每项 customPlayUrl 即该集直链，点击由 EPG 面板直接起播。
+        String src4Id = com.tv.live.src4.Src4EpisodeIndex.vodIdOf(channel);
+        if (!TextUtils.isEmpty(src4Id)) {
+            return com.tv.live.src4.Src4EpisodeIndex.getEpisodes(context, src4Id);
+        }
+
         // 【2026-10-10】内置源7（afhgrj 影视）：频道即一部影片，EPG 面板改为「集数列表」，
         //   点击某一集即播放该集。只依赖 channelId 前缀 afhgrj: 判定，源1~6 行为零变化。
         //   只读内存缓存（不联网）；未命中则后台抓一次详情页，完成后通知面板重渲染。

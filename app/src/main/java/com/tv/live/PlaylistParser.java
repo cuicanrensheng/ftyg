@@ -157,7 +157,15 @@ public class PlaylistParser {
                 String diypName = line.substring(0, diypComma).trim();
                 String diypUri = line.substring(diypComma + 1).trim();
                 if (!diypName.isEmpty() && diypUri.startsWith("http")) {
-                    addOrMergeChannel(channelMap, diypName, diypUri, currentGroup, "", "", "");
+                    // 【2026-10-30】TVBox 惯例：一行的 URL 段可用 # 并列多条线路
+                    //   （`片名,http://a.m3u8#http://b.m3u8`）。原实现把整串当一条 URL，
+                    //   ExoPlayer 拿到的地址里带 # 必然失败 —— 内置源4 有 168 条这种写法。
+                    //   这里拆成主地址 + 备用线路，交给既有的同名合并逻辑。
+                    for (String seg : diypUri.split("#")) {
+                        String u = seg.trim();
+                        if (!u.startsWith("http")) continue;
+                        addOrMergeChannel(channelMap, diypName, u, currentGroup, "", "", "");
+                    }
                     pendingM3uUri = false;
                     m3uName = ""; m3uTvgId = ""; m3uGroup = ""; m3uLogo = "";
                     continue;

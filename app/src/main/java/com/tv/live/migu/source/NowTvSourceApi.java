@@ -95,6 +95,23 @@ public final class NowTvSourceApi {
     private static final String API_CHANNEL_CURRENT_EPG = "/channel/get_channel_current_epg";
     /** 分类下的频道列表（带 tagId 时返回该分类频道；不带则返回默认分类） */
     private static final String API_TAG_LIST = "/channel/get_tag_list";
+
+    /**
+     * 地方频道：省份列表（原版 {@code ContiesProvince}）。
+     *
+     * <p>实测（2026-10-30）返回加密体，decodeEPG 后是<b>纯字符串数组</b>，共 30 项：
+     * {@code ["安徽","北京","重庆",…,"浙江","网络"]}。
+     */
+    private static final String API_ALL_PROVINCE = "/channel/get_all_province";
+
+    /**
+     * 地方频道：按省份取频道（原版 {@code ContiesVideoList}）。
+     *
+     * <p>原版 `CategoryViewModel.getChannelByProvince()` 里写死
+     * {@code PlayerChannelsBean(14, province, channels)} —— <b>tagId 恒为 14、分组标题 = 省名</b>。
+     * 这也是 {@code tagId=14} 直查永远是空的原因：地方频道必须按省份单独取。
+     */
+    private static final String API_DF_BY_PROVINCE = "/channel/get_df_channel_by_province";
     /** 首页分类表（对应原版 HomeTabList） */
     private static final String API_PAGE_CATE = "/v3/conf/app_page_cate";
 
@@ -708,6 +725,74 @@ public final class NowTvSourceApi {
         }
         LogBridge.i(TAG, "服务端下发频道表共 " + out.size() + " 个（"
                 + taken + " 个分类）");
+        return out;
+    }
+
+    // ------------------------------------------------------------------
+    // 地方频道（省份二级）—— 原版 ContiesProvince / ContiesVideoList
+    // ------------------------------------------------------------------
+
+    /**
+     * 取地方频道的<b>省份列表</b>（{@link #API_ALL_PROVINCE}）。
+     *
+     * <p>对应原版 {@code CategoryViewModel.getProvincesList()}。实测返回 30 项，含「网络」。
+     * 单次 GET、不重试；失败返回空列表。
+     */
+    public static List<String> fetchProvinces(Context ctx) {
+        List<String> out = new ArrayList<>();
+        if (ctx == null) return out;
+        String body = httpGet(buildUrl(host(), API_ALL_PROVINCE, publicParams(ctx)));
+        if (TextUtils.isEmpty(body)) {
+            LogBridge.w(TAG, "get_all_province 无响应");
+            return out;
+        }
+        try {
+            JSONObject root = new JSONObject(body);
+            JSONArray arr = root.optJSONArray("data");
+            if (arr == null) {
+                LogBridge.w(TAG, "get_all_province 无 data 数组：" + abbreviate(body));
+                return out;
+            }
+            for (int i = 0; i < arr.length(); i++) {
+                String p = arr.optString(i, "").trim();
+                if (!p.isEmpty()) out.add(p);
+            }
+            LogBridge.i(TAG, "省份列表 " + out.size() + " 个：" + out);
+        } catch (Throwable t) {
+            LogBridge.w(TAG, "省份列表解析失败：" + t.getMessage());
+        }
+        return out;
+    }
+
+    /**
+     * 取<b>指定省份</b>的地方频道（{@link #API_DF_BY_PROVINCE}）。
+     *
+     * <p>对应原版 {@code CategoryViewModel.getChannelByProvince(province)}。
+     * 返回的 {@code Channel.group} 统一填省份名（与原版
+     * {@code PlayerChannelsBean(14, province, …)} 一致），由调用方决定最终分组名。
+     *
+     * <p>单次 GET、不重试；失败返回空列表。
+     */
+    public static List<Channel> fetchChannelsByProvince(Context ctx, String province) {
+        List<Channel> out = new ArrayList<>();
+        if (ctx == null || TextUtils.isEmpty(province)) return out;
+
+        Map<String, String> params = publicParams(ctx);
+        params.put("province", province);
+        String body = httpGet(buildUrl(host(), API_DF_BY_PROVINCE, params));
+        if (TextUtils.isEmpty(body)) {
+            LogBridge.w(TAG, "get_df_channel_by_province 无响应 province=" + province);
+            return out;
+        }
+
+        List<Channel> raw = parseChannels(body);
+        Map<Integer, Boolean> seen = new LinkedHashMap<>();
+        for (Channel c : raw) {
+            if (seen.put(c.tvId, Boolean.TRUE) == null) {
+                out.add(new Channel(c.tvId, c.name, province));
+            }
+        }
+        LogBridge.i(TAG, "地方[" + province + "] " + out.size() + " 条");
         return out;
     }
 

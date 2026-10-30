@@ -2987,11 +2987,40 @@ public class TVPlayerManager {
         // ---- 降级：纯 Java 直连咪咕官方接口（只有 migu* 协议能拿到 pid） ----
         if (pid == null) {
             LogBridge.w(TAG, "【咪咕】JS 未取到直链且无可提取 pID，无法降级：" + source);
+            markMiguDeadChannel(context, input);
             return null;
         }
         String viaJava = com.tv.live.migu.MiguUrlResolver.resolvePid(pid);
+        if (TextUtils.isEmpty(viaJava)) markMiguDeadChannel(context, input);
         return TextUtils.isEmpty(viaJava) ? null
                 : new Resolved(resolveMiguRedirect(viaJava), carouselSeekSec);
+    }
+
+    /**
+     * 【2026-10-30】把「咪咕双路解析都失败」的频道记进 {@code MiguDeadChannelStore}，
+     * 下次组装源6 频道表时直接剔除，用户不会反复踩同一个死频道。
+     *
+     * <p>三重护栏，避免误杀：
+     * <ol>
+     *   <li>只认 {@code nowtv://<tvId>} 形式（才能拿到 tvId；{@code miguhd://<pid>} 的 pid≠tvId）；</li>
+     *   <li>只在<b>宽带出口</b>记录 —— 蜂窝/热点下服务端会主动降级、可能返回空源，
+     *       那时记录会把好频道全判死；</li>
+     *   <li>命中失效名单的只影响「地方」分组（见 {@code MiguSourceLoader.buildLocalChannels}），
+     *       央视/卫视不受牵连。</li>
+     * </ol>
+     */
+    private void markMiguDeadChannel(Context context, String input) {
+        try {
+            if (context == null || TextUtils.isEmpty(input)) return;
+            final String scheme = com.tv.live.migu.MiguSourceLoader.SCHEME_NOWTV;
+            if (!input.startsWith(scheme)) return;
+            int tvId = Integer.parseInt(input.substring(scheme.length()).trim());
+            if (tvId <= 0) return;
+            if (!com.tv.live.migu.MiguSourceLoader.isBroadbandNetwork(context)) return;
+            com.tv.live.migu.MiguDeadChannelStore.markDead(context, tvId);
+        } catch (Throwable t) {
+            LogBridge.d(TAG, "记录失效频道失败（忽略）：" + t.getMessage());
+        }
     }
 
     /**
